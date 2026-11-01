@@ -11,7 +11,7 @@ use lanping_core::Host;
 use crate::app::{LanPing, Message};
 use crate::host_filter::RowStatus;
 use crate::host_rows::Row;
-use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
+use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
 use crate::settings::Column;
 use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN, latency_color};
 
@@ -226,12 +226,20 @@ fn cell<'a>(column: Column, row_data: Row<'a>) -> Element<'a, Message> {
             if let Some(badge) = status_badge(row_data.status) {
                 address = address.push(badge);
             }
-            address.into()
+            address
+                .push(copy_button(host.ip.to_string(), "IP address"))
+                .into()
         }
         Column::Latency if row_data.status == RowStatus::Gone => text(NO_VALUE).color(MUTED).into(),
         Column::Latency => latency_pill(host),
         Column::Hostname => name_text(row_data).into(),
-        Column::Mac => mac_cell(host).into(),
+        Column::Mac => match &host.mac {
+            Some(mac) => row![mac_cell(host), copy_button(mac.clone(), "MAC address")]
+                .spacing(8)
+                .align_y(Alignment::Center)
+                .into(),
+            None => mac_cell(host).into(),
+        },
         Column::Vendor => match &host.vendor {
             Some(vendor) => text(vendor.clone()).into(),
             None => text(NO_VALUE).color(MUTED).into(),
