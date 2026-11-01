@@ -317,6 +317,15 @@ fn network_tab(app: &LanPing) -> Element<'_, Message> {
         text("Hides container bridges, VPN tunnels and VM switches from the network list. Tailscale devices stay listed.")
             .size(12)
             .color(MUTED),
+        checkbox(app.settings.scan_on_startup)
+            .label("Scan when LanPing starts")
+            .on_toggle(Message::ScanOnStartupToggled),
+        checkbox(app.settings.scan_on_network_change)
+            .label("Scan when the main network changes")
+            .on_toggle(Message::ScanOnNetworkChangeToggled),
+        text("The network list is checked every 10 seconds while the second option is on.")
+            .size(12)
+            .color(MUTED),
     ]
     .spacing(ITEM_SPACING + 4.0)
     .into()
