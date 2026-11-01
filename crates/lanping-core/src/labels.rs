@@ -1,4 +1,4 @@
-//! User-chosen names for devices, keyed by [`Host::device_key`].
+//! User-chosen names for devices, keyed by [`crate::Host::device_key`].
 
 use std::collections::BTreeMap;
 use std::fs;
