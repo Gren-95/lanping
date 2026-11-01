@@ -1,6 +1,9 @@
 //! The "Open with" menu for one host.
 
+use std::net::Ipv4Addr;
+
 use lanping_core::Host;
+use lanping_core::diagnostics::Diagnostic;
 
 use crate::opener::share_target;
 
@@ -15,6 +18,8 @@ pub enum HostAction {
     CopyMac,
     CopyHostname,
     WakeOnLan,
+    Ping,
+    Traceroute,
 }
 
 /// What the app has to do to carry out an action.
@@ -24,6 +29,8 @@ pub enum Effect {
     Copy(String),
     /// Send a Wake-on-LAN packet for this MAC address.
     Wake(String),
+    /// Run ping or traceroute against this address and show the output.
+    Diagnose(Diagnostic, Ipv4Addr),
 }
 
 impl HostAction {
@@ -39,6 +46,8 @@ impl HostAction {
             Self::CopyMac => "Copy MAC address".to_owned(),
             Self::CopyHostname => "Copy hostname".to_owned(),
             Self::WakeOnLan => "Wake on LAN".to_owned(),
+            Self::Ping => "Ping".to_owned(),
+            Self::Traceroute => "Traceroute".to_owned(),
         }
     }
 
@@ -70,6 +79,8 @@ impl HostAction {
             Self::CopyMac => host.mac.clone().map(Effect::Copy),
             Self::CopyHostname => host.hostname.clone().map(Effect::Copy),
             Self::WakeOnLan => host.mac.clone().map(Effect::Wake),
+            Self::Ping => Some(Effect::Diagnose(Diagnostic::Ping, host.ip)),
+            Self::Traceroute => Some(Effect::Diagnose(Diagnostic::Traceroute, host.ip)),
         }
     }
 }
@@ -84,6 +95,8 @@ pub fn actions_for(host: &Host) -> Vec<HostAction> {
         .collect();
     actions.push(HostAction::BrowseFiles);
     actions.push(HostAction::CopySshCommand);
+    actions.push(HostAction::Ping);
+    actions.push(HostAction::Traceroute);
     actions.push(HostAction::CopyAddress);
     if host.mac.is_some() {
         actions.push(HostAction::WakeOnLan);
@@ -116,6 +129,16 @@ mod tests {
         }));
         assert!(!actions.contains(&HostAction::CopyMac));
         assert!(!actions.contains(&HostAction::CopyHostname));
+    }
+
+    #[test]
+    fn ping_and_traceroute_target_the_host_address() {
+        let found = host();
+        assert!(actions_for(&found).contains(&HostAction::Ping));
+        assert_eq!(
+            HostAction::Traceroute.effect(&found),
+            Some(Effect::Diagnose(Diagnostic::Traceroute, found.ip))
+        );
     }
 
     #[test]
