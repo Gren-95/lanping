@@ -7,6 +7,8 @@ use iced::{Background, Border, Color, Shadow, Theme, Vector, border, color};
 pub const BACKDROP: Color = color!(0x0d1016);
 pub const PANEL: Color = color!(0x151a23);
 pub const PANEL_RAISED: Color = color!(0x1b2230);
+/// Tint of every other table row; brighter than the raised panel so it shows on dim displays.
+pub const STRIPE: Color = color!(0x232d40);
 pub const INPUT: Color = color!(0x10141c);
 pub const OUTLINE: Color = color!(0x283142);
 pub const TEXT: Color = color!(0xe7edf5);
