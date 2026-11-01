@@ -28,6 +28,8 @@ use crate::storage::{
 use crate::timestamp::format_unix_utc;
 
 const FALLBACK_TARGET: &str = "192.168.0.0/24";
+/// Widget id of the results search box, so Ctrl+F can focus it.
+pub const SEARCH_INPUT_ID: &str = "search";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryEntry {
@@ -68,6 +70,11 @@ pub enum Message {
     HistoryPicked(HistoryEntry),
     Filter(FilterChange),
     FiltersPanelToggled,
+    FocusSearch,
+    EscapePressed,
+    EnterPressed,
+    /// Does nothing; lets a text field claim the Enter key.
+    Noop,
     PresetPicked(PresetChoice),
     ShowSavePreset,
     PresetNameChanged(String),
@@ -129,6 +136,27 @@ pub struct LanPing {
     /// Results of an automatic rescan, shown once it finishes.
     pub(crate) incoming: Vec<Host>,
     pub(crate) auto_run: bool,
+}
+
+/// Maps Ctrl+F, Enter and Esc to messages. Esc is handled even when a text field
+/// has consumed it, so it also clears the filters from inside the search box.
+fn shortcut_message(
+    event: iced::Event,
+    status: iced::event::Status,
+    _window: iced::window::Id,
+) -> Option<Message> {
+    use iced::keyboard::{Event, Key, key::Named};
+    let iced::Event::Keyboard(Event::KeyPressed { key, modifiers, .. }) = event else {
+        return None;
+    };
+    match key.as_ref() {
+        Key::Named(Named::Escape) => Some(Message::EscapePressed),
+        Key::Character("f") if modifiers.command() => Some(Message::FocusSearch),
+        Key::Named(Named::Enter) if status == iced::event::Status::Ignored => {
+            Some(Message::EnterPressed)
+        }
+        _ => None,
+    }
 }
 
 /// Detected networks the picker offers, honoring the virtual adapter setting.
@@ -218,15 +246,24 @@ impl LanPing {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        match self.settings.auto_rescan_minutes {
+        let rescan = match self.settings.auto_rescan_minutes {
             0 => Subscription::none(),
             minutes => iced::time::every(Duration::from_secs(u64::from(minutes) * 60))
                 .map(|_| Message::AutoRescanTick),
-        }
+        };
+        Subscription::batch([rescan, iced::event::listen_with(shortcut_message)])
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::FocusSearch => return iced::widget::operation::focus(SEARCH_INPUT_ID),
+            Message::EscapePressed => self.escape(),
+            Message::EnterPressed => {
+                if self.modal.is_none() && !self.scanning {
+                    return self.start(false);
+                }
+            }
+            Message::Noop => {}
             Message::TargetChanged(text) => self.target = text,
             Message::NetworkPicked(network) => {
                 if !self.scanning {
@@ -360,6 +397,15 @@ impl LanPing {
         } else {
             self.sort_key = key;
             self.sort_ascending = true;
+        }
+    }
+
+    /// Esc closes the open dialog, or else clears the filters.
+    fn escape(&mut self) {
+        if self.modal.is_some() {
+            self.modal = None;
+        } else if self.filter.active_count() > 0 {
+            self.filter = HostFilter::default();
         }
     }
 
@@ -620,6 +666,41 @@ mod tests {
             names(listed_networks(&detected, &settings)),
             ["eth0", "docker0", "Tailscale"]
         );
+    }
+
+    fn press(key: iced::keyboard::Key, modifiers: iced::keyboard::Modifiers) -> iced::Event {
+        use iced::keyboard::{Event, Location, key::Physical};
+        iced::Event::Keyboard(Event::KeyPressed {
+            key: key.clone(),
+            modified_key: key,
+            physical_key: Physical::Unidentified(iced::keyboard::key::NativeCode::Unidentified),
+            location: Location::Standard,
+            modifiers,
+            text: None,
+            repeat: false,
+        })
+    }
+
+    #[test]
+    fn shortcuts_map_to_messages() {
+        use iced::event::Status::{Captured, Ignored};
+        use iced::keyboard::{Key, Modifiers, key::Named};
+        let id = iced::window::Id::unique();
+        let map = |key, modifiers, status| shortcut_message(press(key, modifiers), status, id);
+        assert!(matches!(
+            map(Key::Named(Named::Escape), Modifiers::empty(), Captured),
+            Some(Message::EscapePressed)
+        ));
+        assert!(matches!(
+            map(Key::Character("f".into()), Modifiers::CTRL, Ignored),
+            Some(Message::FocusSearch)
+        ));
+        assert!(map(Key::Character("f".into()), Modifiers::empty(), Ignored).is_none());
+        assert!(matches!(
+            map(Key::Named(Named::Enter), Modifiers::empty(), Ignored),
+            Some(Message::EnterPressed)
+        ));
+        assert!(map(Key::Named(Named::Enter), Modifiers::empty(), Captured).is_none());
     }
 
     #[test]
