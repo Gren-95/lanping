@@ -3,7 +3,17 @@ name = "lanping-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+# Not published until the name is checked on crates.io.
+publish = false
 description = "UI-free LAN scanning engine: host discovery, ports, names, vendors."
+
+[lints]
+workspace = true
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "sync", "macros", "fs", "process", "io-util"] }

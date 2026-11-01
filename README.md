@@ -20,6 +20,8 @@ Cross-platform LAN scanner written in Rust with an [Iced](https://iced.rs) GUI.
 
 ## Build and run
 
+Needs Rust 1.90 or newer.
+
 ```bash
 cargo run --release -p lanping                                   # GUI
 cargo run --release -p lanping-core --example scan_cli -- 192.168.0.0/24 22,80   # CLI
@@ -45,3 +47,7 @@ scripts/build-appimage.sh                                          # needs appim
 - Common port numbers and names follow Wikipedia's
   [List of TCP and UDP port numbers](https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers) (CC BY-SA).
 - Icons come from [Lucide](https://lucide.dev) (ISC license) through the `iced_fonts` crate.
+
+## License
+
+Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT), at your option.
