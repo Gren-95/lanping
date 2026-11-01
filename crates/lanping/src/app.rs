@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use iced::task::Handle;
 use iced::{Subscription, Task, Theme};
+use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::history::{SavedScan, list_scans, load_scan, save_scan};
 use lanping_core::labels::DeviceLabels;
@@ -53,6 +54,11 @@ pub enum Modal {
     /// Menu for one device, identified by [`Host::device_key`].
     HostActions(String),
     SavePreset,
+    /// Output of a ping or traceroute; `output` is empty while it runs.
+    Diagnostic {
+        title: String,
+        output: Option<String>,
+    },
     /// Move or hide one table column.
     ColumnMenu(Column),
 }
@@ -74,6 +80,7 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    DiagnosticFinished(String, Result<String, String>),
     ScanOnStartupToggled(bool),
     ScanOnNetworkChangeToggled(bool),
     CheckNetworks,
@@ -324,6 +331,7 @@ impl LanPing {
                 );
             }
             Message::NetworksDetected(detected) => return self.apply_detected_networks(detected),
+            Message::DiagnosticFinished(title, result) => self.finish_diagnostic(&title, result),
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
                 if self.modal.is_none() && !self.scanning {
@@ -574,6 +582,16 @@ impl LanPing {
                 self.set_notice(Notice::Info, format!("Copied {text}"));
                 iced::clipboard::write(text)
             }
+            Effect::Diagnose(diagnostic, ip) => {
+                let title = format!("{diagnostic} {ip}");
+                self.modal = Some(Modal::Diagnostic {
+                    title: title.clone(),
+                    output: None,
+                });
+                Task::perform(run_diagnostic(diagnostic, ip), move |result| {
+                    Message::DiagnosticFinished(title.clone(), result)
+                })
+            }
             Effect::Wake(mac) => {
                 match send_wake_packet(&mac) {
                     Ok(()) => {
@@ -586,6 +604,15 @@ impl LanPing {
                 }
                 Task::none()
             }
+        }
+    }
+
+    /// Shows the output in the dialog that is waiting for it, if it is still open.
+    fn finish_diagnostic(&mut self, finished_title: &str, result: Result<String, String>) {
+        if let Some(Modal::Diagnostic { title, output }) = &mut self.modal
+            && title == finished_title
+        {
+            *output = Some(result.unwrap_or_else(|error| error));
         }
     }
 

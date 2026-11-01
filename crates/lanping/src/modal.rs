@@ -16,6 +16,7 @@ use crate::theme::{self, ACCENT, MUTED};
 
 const DIALOG_MAX_WIDTH: f32 = 600.0;
 const DIALOG_MAX_HEIGHT: f32 = 620.0;
+const DIAGNOSTIC_HEIGHT: f32 = 320.0;
 const DIALOG_PADDING: f32 = 20.0;
 const DIALOG_MARGIN: f32 = 16.0;
 const ITEM_SPACING: f32 = 10.0;
@@ -32,6 +33,7 @@ pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {
             Some(host) => (host_actions_dialog(app, host), false),
             None => return space::vertical().height(0).into(),
         },
+        Modal::Diagnostic { title, output } => (diagnostic_dialog(title, output.as_deref()), false),
         Modal::SavePreset => (save_preset_dialog(app), false),
         Modal::ColumnMenu(column) => (column_menu_dialog(app, *column), false),
     };
@@ -139,6 +141,33 @@ fn services_list(host: &Host) -> Element<'_, Message> {
     column![text("Services").size(13).color(MUTED), rows]
         .spacing(6)
         .into()
+}
+
+/// Output of a ping or traceroute, with a copy button once it has finished.
+fn diagnostic_dialog<'a>(title: &'a str, output: Option<&'a str>) -> Element<'a, Message> {
+    let body: Element<'a, Message> = match output {
+        None => text("Running...").size(13).color(MUTED).into(),
+        Some(output) => scrollable(text(output).font(Font::MONOSPACE).size(13))
+            .height(Length::Fixed(DIAGNOSTIC_HEIGHT))
+            .width(Length::Fill)
+            .into(),
+    };
+    let copy = small_button(
+        "Copy output",
+        output.map(|output| Message::CopyText(output.to_owned(), "output")),
+    );
+    column![
+        text(title).size(22).font(BOLD),
+        body,
+        row![
+            space::horizontal(),
+            copy,
+            small_button("Close", Some(Message::CloseModal))
+        ]
+        .spacing(ITEM_SPACING),
+    ]
+    .spacing(ITEM_SPACING + 4.0)
+    .into()
 }
 
 /// Right-click menu of a table column: the column list, with the clicked one marked.
