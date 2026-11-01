@@ -28,6 +28,8 @@ use crate::storage::{
 };
 use crate::timestamp::format_unix_utc;
 
+/// How often the interface list is read while "scan when the network changes" is on.
+const NETWORK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
 const FALLBACK_TARGET: &str = "192.168.0.0/24";
 /// Widget id of the results search box, so Ctrl+F can focus it.
 pub const SEARCH_INPUT_ID: &str = "search";
@@ -72,6 +74,10 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    ScanOnStartupToggled(bool),
+    ScanOnNetworkChangeToggled(bool),
+    CheckNetworks,
+    NetworksDetected(Vec<LocalNetwork>),
     WindowResized(iced::Size),
     CloseRequested,
     /// Put text on the clipboard; the label names it in the status line.
@@ -166,6 +172,12 @@ fn shortcut_message(
     }
 }
 
+/// The target of the first listed network in `new` when it differs from the first in `old`.
+fn changed_primary_target(old: &[LocalNetwork], new: &[LocalNetwork]) -> Option<String> {
+    let primary = new.first()?;
+    (old.first() != Some(primary)).then(|| primary.target.clone())
+}
+
 /// Detected networks the picker offers, honoring the virtual adapter setting.
 fn listed_networks(networks: &[LocalNetwork], settings: &Settings) -> Vec<LocalNetwork> {
     networks
@@ -247,7 +259,12 @@ impl LanPing {
             auto_run: false,
         };
         app.refresh_history();
-        (app, Task::none())
+        let first_scan = if app.settings.scan_on_startup {
+            Task::done(Message::StartScan)
+        } else {
+            Task::none()
+        };
+        (app, first_scan)
     }
 
     pub fn theme(&self) -> Theme {
@@ -260,8 +277,14 @@ impl LanPing {
             minutes => iced::time::every(Duration::from_secs(u64::from(minutes) * 60))
                 .map(|_| Message::AutoRescanTick),
         };
+        let network_watch = if self.settings.scan_on_network_change {
+            iced::time::every(NETWORK_CHECK_INTERVAL).map(|_| Message::CheckNetworks)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             rescan,
+            network_watch,
             iced::event::listen_with(shortcut_message),
             iced::window::resize_events().map(|(_, size)| Message::WindowResized(size)),
             iced::window::close_requests().map(|_| Message::CloseRequested),
@@ -290,6 +313,17 @@ impl LanPing {
                 self.save_settings();
                 return iced::exit();
             }
+            Message::CheckNetworks => {
+                return Task::perform(
+                    async {
+                        tokio::task::spawn_blocking(detect_local_networks)
+                            .await
+                            .unwrap_or_default()
+                    },
+                    Message::NetworksDetected,
+                );
+            }
+            Message::NetworksDetected(detected) => return self.apply_detected_networks(detected),
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
                 if self.modal.is_none() && !self.scanning {
@@ -370,6 +404,10 @@ impl LanPing {
             Message::AutoRescanPicked(interval) => self.settings.auto_rescan_minutes = interval.0,
             Message::NotifyToggled(enabled) => self.settings.notify_new_devices = enabled,
             Message::CardViewToggled => self.settings.card_view = !self.settings.card_view,
+            Message::ScanOnStartupToggled(enabled) => self.settings.scan_on_startup = enabled,
+            Message::ScanOnNetworkChangeToggled(enabled) => {
+                self.settings.scan_on_network_change = enabled;
+            }
             Message::IgnoreVirtualToggled(ignore) => self.settings.ignore_virtual_networks = ignore,
             Message::DeletePreset(index) => {
                 if index < self.settings.filter_presets.len() {
@@ -430,6 +468,23 @@ impl LanPing {
         } else {
             self.sort_key = key;
             self.sort_ascending = true;
+        }
+    }
+
+    /// Remembers the detected networks. When the main one changed and the
+    /// setting is on, points the target at it and scans.
+    fn apply_detected_networks(&mut self, detected: Vec<LocalNetwork>) -> Task<Message> {
+        let new_target = changed_primary_target(
+            &listed_networks(&self.networks, &self.settings),
+            &listed_networks(&detected, &self.settings),
+        );
+        self.networks = detected;
+        match new_target {
+            Some(target) if self.settings.scan_on_network_change && !self.scanning => {
+                self.target = target;
+                self.start(false)
+            }
+            _ => Task::none(),
         }
     }
 
@@ -734,6 +789,23 @@ mod tests {
             Some(Message::EnterPressed)
         ));
         assert!(map(Key::Named(Named::Enter), Modifiers::empty(), Captured).is_none());
+    }
+
+    #[test]
+    fn a_new_main_network_is_reported_once() {
+        let home = network("eth0", NetworkKind::Physical);
+        let cafe = network("wlan0", NetworkKind::Physical);
+        let at_home = std::slice::from_ref(&home);
+        assert_eq!(changed_primary_target(at_home, at_home), None);
+        assert_eq!(
+            changed_primary_target(at_home, &[cafe.clone(), home.clone()]),
+            Some(cafe.target.clone())
+        );
+        assert_eq!(
+            changed_primary_target(&[], at_home),
+            Some(home.target.clone())
+        );
+        assert_eq!(changed_primary_target(&[cafe], &[]), None);
     }
 
     #[test]
