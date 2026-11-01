@@ -5,7 +5,18 @@ members = ["crates/lanping-core", "crates/lanping"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.90"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/Gren-95/lanping"
+readme = "README.md"
+keywords = ["network", "scanner", "lan", "gui"]
+categories = ["network-programming", "gui"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
 
 [profile.release]
 lto = "thin"
