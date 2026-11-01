@@ -3,7 +3,7 @@
 use iced::widget::{Row, button, column, container, pick_list, row, text, text_input};
 use iced::{Alignment, Element, Length};
 
-use crate::app::{LanPing, Message};
+use crate::app::{LanPing, Message, SEARCH_INPUT_ID};
 use crate::host_filter::{
     Choice, FilterChange, LatencyBand, NameFilter, RowStatus, port_choices, vendor_choices,
 };
@@ -31,7 +31,9 @@ fn controls_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
         "Search address, name, MAC, vendor or port",
         &app.filter.text,
     )
+    .id(SEARCH_INPUT_ID)
     .on_input(|text| Message::Filter(FilterChange::Text(text)))
+    .on_submit(Message::Noop)
     .padding(theme::CONTROL_PADDING)
     .size(TEXT_SIZE)
     .width(Length::Fill)
