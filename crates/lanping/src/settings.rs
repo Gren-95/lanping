@@ -254,7 +254,10 @@ mod tests {
 
     #[test]
     fn resolve_reports_bad_custom_ports() {
-        let settings = Settings { custom_ports: "http".into(), ..Settings::default() };
+        let settings = Settings {
+            custom_ports: "http".into(),
+            ..Settings::default()
+        };
         assert!(settings.resolve_ports().is_err());
     }
 
