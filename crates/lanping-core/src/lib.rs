@@ -16,4 +16,4 @@ pub mod vendor;
 pub mod wol;
 
 pub use host::{Host, ServiceBanner};
-pub use scan::{ScanConfig, ScanEvent, ScanHandle, start_scan};
+pub use scan::{ScanConfig, ScanEvent, ScanHandle, ScanStage, start_scan};
