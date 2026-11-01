@@ -5,9 +5,12 @@
 //! the cache after a sweep therefore finds hosts that ignore ping and TCP.
 
 use std::collections::HashMap;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 pub type NeighborTable = HashMap<Ipv4Addr, String>;
+
+/// IPv6 addresses the OS has resolved, grouped by the MAC address that answered.
+pub type Ipv6Table = HashMap<String, Vec<Ipv6Addr>>;
 
 /// Returns IP to MAC (`AA:BB:CC:DD:EE:FF`) for every resolved neighbor.
 pub async fn read_neighbor_table() -> NeighborTable {
@@ -31,6 +34,55 @@ async fn run_arp_command() -> NeighborTable {
         return NeighborTable::new();
     };
     parse_arp_command(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Reads the IPv6 neighbor cache. Empty on Windows and when the tool is missing.
+pub async fn read_ipv6_neighbors() -> Ipv6Table {
+    use tokio::process::Command;
+    #[cfg(target_os = "linux")]
+    let output = Command::new("ip")
+        .args(["-6", "neigh", "show"])
+        .output()
+        .await;
+    #[cfg(target_os = "macos")]
+    let output = Command::new("ndp").arg("-an").output().await;
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let output: std::io::Result<std::process::Output> = Err(std::io::ErrorKind::Unsupported.into());
+    match output {
+        Ok(output) => parse_ipv6_neighbors(&String::from_utf8_lossy(&output.stdout)),
+        Err(_) => Ipv6Table::new(),
+    }
+}
+
+/// Parses `ip -6 neigh show` (`fe80::1 dev wlan0 lladdr aa:bb:.. router REACHABLE`) and
+/// `ndp -an` (`fe80::1%en0  aa:bb:cc:dd:ee:ff  en0  23h59m  R`). Skips entries without a MAC.
+pub fn parse_ipv6_neighbors(text: &str) -> Ipv6Table {
+    let mut table = Ipv6Table::new();
+    for line in text.lines() {
+        let tokens: Vec<&str> = line.split_whitespace().collect();
+        let Some(address) = tokens.first().and_then(|raw| parse_ipv6(raw)) else {
+            continue;
+        };
+        let mac = match tokens.iter().position(|token| *token == "lladdr") {
+            Some(index) => tokens.get(index + 1).and_then(|raw| normalize_mac(raw)),
+            None => tokens.get(1).and_then(|raw| normalize_mac(raw)),
+        };
+        if let Some(mac) = mac {
+            let addresses = table.entry(mac).or_default();
+            if !addresses.contains(&address) {
+                addresses.push(address);
+            }
+        }
+    }
+    for addresses in table.values_mut() {
+        addresses.sort();
+    }
+    table
+}
+
+/// Parses an address that may carry a zone, as in `fe80::1%en0`.
+fn parse_ipv6(raw: &str) -> Option<Ipv6Addr> {
+    raw.split('%').next()?.parse().ok()
 }
 
 /// Normalizes `aa-bb-cc-dd-ee-ff`, `a:b:c:d:e:f` and similar into
@@ -122,6 +174,32 @@ mod tests {
         assert_eq!(normalize_mac("(incomplete)"), None);
         assert_eq!(normalize_mac("aa:bb:cc"), None);
         assert_eq!(normalize_mac("zz:bb:cc:dd:ee:ff"), None);
+    }
+
+    #[test]
+    fn parses_linux_and_macos_ipv6_neighbors() {
+        let linux = "\
+fe80::1 dev wlan0 lladdr aa:bb:cc:dd:ee:01 router REACHABLE
+2001:db8::5 dev wlan0 lladdr aa:bb:cc:dd:ee:01 STALE
+fe80::9 dev wlan0  FAILED
+";
+        let table = parse_ipv6_neighbors(linux);
+        assert_eq!(table.len(), 1);
+        let addresses = &table["AA:BB:CC:DD:EE:01"];
+        assert_eq!(addresses.len(), 2);
+        assert!(addresses.contains(&"fe80::1".parse().unwrap()));
+
+        let macos = "\
+Neighbor                        Linklayer Address  Netif Expire    St Flgs Prbs
+fe80::1%en0                     a:b:c:d:e:f        en0 23h59m59s  R
+fe80::2%en0                     (incomplete)       en0 expired    N
+";
+        let table = parse_ipv6_neighbors(macos);
+        assert_eq!(table.len(), 1);
+        assert_eq!(
+            table["0A:0B:0C:0D:0E:0F"],
+            ["fe80::1".parse::<Ipv6Addr>().unwrap()]
+        );
     }
 
     #[test]

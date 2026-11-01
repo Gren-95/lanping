@@ -248,6 +248,12 @@ fn text_matches(host: &Host, label: Option<&str>, needle: &str) -> bool {
         return true;
     }
     let ports = format_ports(&host.open_ports);
+    let ipv6 = host
+        .ipv6
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(" ");
     [
         Some(host.ip.to_string()),
         label.map(str::to_owned),
@@ -255,6 +261,7 @@ fn text_matches(host: &Host, label: Option<&str>, needle: &str) -> bool {
         host.mac.clone(),
         host.vendor.clone(),
         Some(ports),
+        Some(ipv6),
     ]
     .into_iter()
     .flatten()
@@ -320,6 +327,8 @@ mod tests {
         assert!(text("HEWLETT").matches(&printer, None, RowStatus::Unchanged));
         assert!(text("9100").matches(&printer, None, RowStatus::Unchanged));
         assert!(text("10.0.0.5").matches(&printer, None, RowStatus::Unchanged));
+        printer.ipv6 = vec!["fe80::5".parse().unwrap()];
+        assert!(text("FE80::5").matches(&printer, None, RowStatus::Unchanged));
         assert!(!text("cisco").matches(&printer, None, RowStatus::Unchanged));
     }
 

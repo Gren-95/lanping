@@ -13,7 +13,7 @@ use tokio::time::timeout;
 
 use crate::banner::grab_banner;
 use crate::host::{Host, ServiceBanner};
-use crate::neighbors::read_neighbor_table;
+use crate::neighbors::{read_ipv6_neighbors, read_neighbor_table};
 use crate::ports::scan_ports;
 use crate::probe::{create_icmp_client, ping, tcp_liveness};
 use crate::vendor::lookup_vendor;
@@ -158,10 +158,12 @@ async fn merge_neighbors(
     events: &mpsc::Sender<ScanEvent>,
 ) {
     let table = read_neighbor_table().await;
+    let ipv6 = read_ipv6_neighbors().await;
     for &ip in &config.targets {
         let Some(mac) = table.get(&ip) else { continue };
         let host = known.entry(ip).or_insert_with(|| Host::new(ip));
         host.vendor = lookup_vendor(mac).map(str::to_owned);
+        host.ipv6 = ipv6.get(mac).cloned().unwrap_or_default();
         host.mac = Some(mac.clone());
         if events.send(ScanEvent::Host(host.clone())).await.is_err() {
             return;
