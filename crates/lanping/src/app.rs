@@ -14,6 +14,7 @@ use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent};
 
 use crate::actions::{Effect, HostAction};
+use crate::copy_text::rows_as_text;
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
 use crate::host_order::{SortKey, compare_hosts};
@@ -71,6 +72,9 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    /// Put text on the clipboard; the label names it in the status line.
+    CopyText(String, &'static str),
+    CopyVisibleRows,
     EscapePressed,
     EnterPressed,
     /// Does nothing; lets a text field claim the Enter key.
@@ -257,6 +261,17 @@ impl LanPing {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FocusSearch => return iced::widget::operation::focus(SEARCH_INPUT_ID),
+            Message::CopyText(text, label) => {
+                self.set_notice(Notice::Info, format!("Copied {label}"));
+                return iced::clipboard::write(text);
+            }
+            Message::CopyVisibleRows => {
+                let rows = self.visible_rows();
+                let text = rows_as_text(&rows, &self.settings.visible_columns());
+                let count = rows.len();
+                self.set_notice(Notice::Info, format!("Copied {count} rows"));
+                return iced::clipboard::write(text);
+            }
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
                 if self.modal.is_none() && !self.scanning {

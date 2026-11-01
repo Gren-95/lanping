@@ -40,3 +40,14 @@ pub fn with_tooltip<'a>(
     .gap(4)
     .into()
 }
+
+/// A borderless copy button for a table cell.
+pub fn copy_button<'a>(value: String, label: &'static str) -> Element<'a, Message> {
+    with_tooltip(
+        button(lucide::copy().size(ICON_SIZE - 3.0).color(theme::MUTED))
+            .on_press(Message::CopyText(value, label))
+            .padding(4)
+            .style(theme::header_button),
+        "Copy",
+    )
+}
