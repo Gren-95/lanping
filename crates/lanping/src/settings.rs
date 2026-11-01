@@ -93,6 +93,10 @@ pub struct Settings {
     pub ignore_virtual_networks: bool,
     /// Show hosts as stacked cards instead of a table.
     pub card_view: bool,
+    /// Start a scan as soon as the app opens.
+    pub scan_on_startup: bool,
+    /// Scan again when the main network changes, for example on a new Wi-Fi.
+    pub scan_on_network_change: bool,
     pub filter_presets: Vec<FilterPreset>,
     /// Window size at the last close, in logical pixels.
     pub window_size: Option<(u32, u32)>,
@@ -110,6 +114,8 @@ impl Default for Settings {
             notify_new_devices: true,
             ignore_virtual_networks: true,
             card_view: false,
+            scan_on_startup: false,
+            scan_on_network_change: false,
             filter_presets: Vec::new(),
             window_size: None,
             last_filter: HostFilter::default(),
@@ -239,6 +245,7 @@ mod tests {
         let older: Settings = serde_json::from_str(r#"{"grab_banners":true}"#).unwrap();
         assert!(older.ignore_virtual_networks);
         assert!(!older.card_view);
+        assert!(!older.scan_on_startup && !older.scan_on_network_change);
     }
 
     #[test]
