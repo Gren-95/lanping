@@ -1,7 +1,7 @@
 //! Colors and widget styles shared by every view.
 
-use iced::widget::{button, container, progress_bar, text_input};
 use crate::host_filter::{FAST_LATENCY_MS, SLOW_LATENCY_MS};
+use iced::widget::{button, container, progress_bar, text_input};
 use iced::{Background, Border, Color, Shadow, Theme, Vector, border, color};
 
 pub const BACKDROP: Color = color!(0x0d1016);
@@ -15,7 +15,6 @@ pub const ACCENT: Color = color!(0x6c8cff);
 pub const GOOD: Color = color!(0x3fd29a);
 pub const WARN: Color = color!(0xf2b84b);
 pub const BAD: Color = color!(0xf26d6d);
-
 
 pub const PANEL_RADIUS: f32 = 14.0;
 pub const CONTROL_RADIUS: f32 = 10.0;
@@ -72,7 +71,10 @@ pub fn panel(_theme: &Theme) -> container::Style {
 /// Background of one table line; every other line is tinted.
 pub fn stripe(tinted: bool) -> impl Fn(&Theme) -> container::Style {
     move |_theme| container::Style {
-        background: tinted.then_some(Background::Color(Color { a: 0.55, ..PANEL_RAISED })),
+        background: tinted.then_some(Background::Color(Color {
+            a: 0.55,
+            ..PANEL_RAISED
+        })),
         border: border::rounded(8),
         ..container::Style::default()
     }
@@ -93,7 +95,10 @@ pub fn card(_theme: &Theme) -> container::Style {
 /// A card marked as the one being moved or looked at.
 pub fn selected_card(theme: &Theme) -> container::Style {
     container::Style {
-        border: Border { color: ACCENT, ..card(theme).border },
+        border: Border {
+            color: ACCENT,
+            ..card(theme).border
+        },
         ..card(theme)
     }
 }
@@ -183,7 +188,9 @@ pub fn input_at(edge: Edge) -> impl Fn(&Theme, text_input::Status) -> text_input
     }
 }
 
-pub fn pick_at(edge: Edge) -> impl Fn(&Theme, iced::widget::pick_list::Status) -> iced::widget::pick_list::Style {
+pub fn pick_at(
+    edge: Edge,
+) -> impl Fn(&Theme, iced::widget::pick_list::Status) -> iced::widget::pick_list::Style {
     move |theme, status| {
         let mut style = pick(theme, status);
         style.border.radius = edge.radius();
@@ -233,7 +240,10 @@ pub fn progress(_theme: &Theme) -> progress_bar::Style {
     }
 }
 
-pub fn pick(theme: &Theme, status: iced::widget::pick_list::Status) -> iced::widget::pick_list::Style {
+pub fn pick(
+    theme: &Theme,
+    status: iced::widget::pick_list::Status,
+) -> iced::widget::pick_list::Style {
     let base = iced::widget::pick_list::default(theme, status);
     iced::widget::pick_list::Style {
         background: Background::Color(INPUT),

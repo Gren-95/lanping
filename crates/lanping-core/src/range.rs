@@ -136,7 +136,11 @@ pub fn detect_local_networks() -> Vec<LocalNetwork> {
     if !peers.is_empty() {
         networks.push(LocalNetwork {
             interface: "Tailscale".to_owned(),
-            target: peers.iter().map(Ipv4Addr::to_string).collect::<Vec<_>>().join(", "),
+            target: peers
+                .iter()
+                .map(Ipv4Addr::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
             kind: NetworkKind::Tailnet,
             host_count: peers.len() as u32,
         });
@@ -166,7 +170,7 @@ fn interface_networks() -> Vec<LocalNetwork> {
             let prefix = u32::from(v4.netmask).count_ones() as u8;
             let net = Ipv4Net::new(v4.ip, prefix).ok()?.trunc();
             let host_count = net.hosts().count();
-            if host_count < 2 || host_count > MAX_TARGETS {
+            if !(2..=MAX_TARGETS).contains(&host_count) {
                 return None;
             }
             let kind = if is_virtual_interface(&interface.name) {
@@ -187,9 +191,19 @@ fn interface_networks() -> Vec<LocalNetwork> {
 /// Container bridges, VPN tunnels and VM switches.
 fn is_virtual_interface(name: &str) -> bool {
     const VIRTUAL_PREFIXES: [&str; 9] = [
-        "docker", "br-", "veth", "virbr", "tailscale", "tun", "tap", "zt", "vEthernet",
+        "docker",
+        "br-",
+        "veth",
+        "virbr",
+        "tailscale",
+        "tun",
+        "tap",
+        "zt",
+        "vEthernet",
     ];
-    VIRTUAL_PREFIXES.iter().any(|prefix| name.starts_with(prefix))
+    VIRTUAL_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
 }
 
 #[cfg(test)]
@@ -205,7 +219,10 @@ mod tests {
             host_count: 254,
         };
         assert_eq!(lan.to_string(), "eth0  -  192.168.1.0/24  (254 hosts)");
-        let bridge = LocalNetwork { kind: NetworkKind::Virtual, ..lan.clone() };
+        let bridge = LocalNetwork {
+            kind: NetworkKind::Virtual,
+            ..lan.clone()
+        };
         assert!(bridge.to_string().ends_with("virtual)"));
         let tailnet = LocalNetwork {
             interface: "Tailscale".into(),
@@ -213,7 +230,10 @@ mod tests {
             kind: NetworkKind::Tailnet,
             host_count: 2,
         };
-        assert_eq!(tailnet.to_string(), "Tailscale  -  Tailscale devices  (2 online)");
+        assert_eq!(
+            tailnet.to_string(),
+            "Tailscale  -  Tailscale devices  (2 online)"
+        );
         assert_eq!(parse_targets(&tailnet.target).unwrap().len(), 2);
     }
 

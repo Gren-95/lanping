@@ -133,7 +133,9 @@ pub struct LanPing {
 fn listed_networks(networks: &[LocalNetwork], settings: &Settings) -> Vec<LocalNetwork> {
     networks
         .iter()
-        .filter(|network| !(settings.ignore_virtual_networks && network.kind == NetworkKind::Virtual))
+        .filter(|network| {
+            !(settings.ignore_virtual_networks && network.kind == NetworkKind::Virtual)
+        })
         .cloned()
         .collect()
 }
@@ -142,7 +144,10 @@ fn listed_networks(networks: &[LocalNetwork], settings: &Settings) -> Vec<LocalN
 /// none once the field holds exactly one of their targets.
 fn matching_networks(networks: Vec<LocalNetwork>, typed: &str) -> Vec<LocalNetwork> {
     let typed = typed.trim().to_lowercase();
-    if networks.iter().any(|network| network.target.to_lowercase() == typed) {
+    if networks
+        .iter()
+        .any(|network| network.target.to_lowercase() == typed)
+    {
         return Vec::new();
     }
     networks
@@ -158,9 +163,10 @@ impl LanPing {
     pub fn new() -> (Self, Task<Message>) {
         let networks = detect_local_networks();
         let (settings, settings_error) = load_settings();
-        let target = listed_networks(&networks, &settings)
-            .first()
-            .map_or_else(|| FALLBACK_TARGET.to_owned(), |network| network.target.clone());
+        let target = listed_networks(&networks, &settings).first().map_or_else(
+            || FALLBACK_TARGET.to_owned(),
+            |network| network.target.clone(),
+        );
         let (labels, labels_error) = load_labels();
         let startup_error = settings_error.or(labels_error);
         let mut app = Self {
@@ -300,7 +306,10 @@ impl LanPing {
             Ok(()) => {
                 self.modal = None;
                 self.save_settings();
-                self.set_notice(Notice::Info, format!("Saved preset {}", self.preset_name_draft.trim()));
+                self.set_notice(
+                    Notice::Info,
+                    format!("Saved preset {}", self.preset_name_draft.trim()),
+                );
             }
             Err(error) => self.set_notice(Notice::Error, error),
         }
@@ -323,7 +332,10 @@ impl LanPing {
         let Some(path) = labels_path() else { return };
         match self.labels.save(&path) {
             Ok(()) => self.set_notice(Notice::Info, "Device name saved".to_owned()),
-            Err(error) => self.set_notice(Notice::Error, format!("Could not save device name: {error}")),
+            Err(error) => self.set_notice(
+                Notice::Error,
+                format!("Could not save device name: {error}"),
+            ),
         }
     }
 
@@ -341,7 +353,10 @@ impl LanPing {
         if self.scanning {
             return Vec::new();
         }
-        matching_networks(listed_networks(&self.networks, &self.settings), &self.target)
+        matching_networks(
+            listed_networks(&self.networks, &self.settings),
+            &self.target,
+        )
     }
 
     /// A device from the live list or, failing that, the gone list.
@@ -354,7 +369,10 @@ impl LanPing {
 
     /// Live hosts followed by gone ones, filtered and ordered for display.
     pub fn visible_rows(&self) -> Vec<Row<'_>> {
-        let live = self.hosts.iter().map(|host| (host, self.diff.status(host.ip).into()));
+        let live = self
+            .hosts
+            .iter()
+            .map(|host| (host, self.diff.status(host.ip).into()));
         let gone = self.diff.gone.iter().map(|host| (host, RowStatus::Gone));
         let mut rows: Vec<Row<'_>> = live
             .chain(gone)
@@ -368,7 +386,11 @@ impl LanPing {
         rows.sort_by(|a, b| {
             let gone_last = (a.status == RowStatus::Gone).cmp(&(b.status == RowStatus::Gone));
             let order = compare_hosts(a.host, b.host, self.sort_key);
-            let order = if self.sort_ascending { order } else { order.reverse() };
+            let order = if self.sort_ascending {
+                order
+            } else {
+                order.reverse()
+            };
             gone_last.then(order)
         });
         rows
@@ -383,7 +405,10 @@ impl LanPing {
     fn run_host_action(&mut self, key: &str, action: &HostAction) -> Task<Message> {
         self.modal = None;
         let Some(effect) = self.find_host(key).and_then(|host| action.effect(host)) else {
-            self.set_notice(Notice::Error, "That detail is not known for this host".to_owned());
+            self.set_notice(
+                Notice::Error,
+                "That detail is not known for this host".to_owned(),
+            );
             return Task::none();
         };
         match effect {
@@ -402,8 +427,13 @@ impl LanPing {
             }
             Effect::Wake(mac) => {
                 match send_wake_packet(&mac) {
-                    Ok(()) => self.set_notice(Notice::Info, format!("Sent wake-up packet to {mac}")),
-                    Err(error) => self.set_notice(Notice::Error, format!("Could not send wake-up packet: {error}")),
+                    Ok(()) => {
+                        self.set_notice(Notice::Info, format!("Sent wake-up packet to {mac}"))
+                    }
+                    Err(error) => self.set_notice(
+                        Notice::Error,
+                        format!("Could not send wake-up packet: {error}"),
+                    ),
                 }
                 Task::none()
             }
@@ -416,9 +446,10 @@ impl LanPing {
             return Task::none();
         }
         let file_name = format!("lanping-{}.{}", unix_now(), format.extension());
-        Task::perform(ask_save_path(format, file_name, export_directory()), move |path| {
-            Message::ExportPathChosen(format, path)
-        })
+        Task::perform(
+            ask_save_path(format, file_name, export_directory()),
+            move |path| Message::ExportPathChosen(format, path),
+        )
     }
 
     fn export(&mut self, format: ExportFormat, path: &Path) {
@@ -437,7 +468,10 @@ impl LanPing {
         };
         let scan = SavedScan::new(self.scanned_target.clone(), self.hosts.clone());
         if let Err(error) = save_scan(&directory, &scan) {
-            self.set_notice(Notice::Error, format!("Could not save scan history: {error}"));
+            self.set_notice(
+                Notice::Error,
+                format!("Could not save scan history: {error}"),
+            );
             return;
         }
         self.refresh_history();
@@ -557,11 +591,20 @@ mod tests {
         ];
         let mut settings = Settings::default();
         let names = |networks: Vec<LocalNetwork>| -> Vec<String> {
-            networks.into_iter().map(|network| network.interface).collect()
+            networks
+                .into_iter()
+                .map(|network| network.interface)
+                .collect()
         };
-        assert_eq!(names(listed_networks(&detected, &settings)), ["eth0", "Tailscale"]);
+        assert_eq!(
+            names(listed_networks(&detected, &settings)),
+            ["eth0", "Tailscale"]
+        );
         settings.ignore_virtual_networks = false;
-        assert_eq!(names(listed_networks(&detected, &settings)), ["eth0", "docker0", "Tailscale"]);
+        assert_eq!(
+            names(listed_networks(&detected, &settings)),
+            ["eth0", "docker0", "Tailscale"]
+        );
     }
 
     #[test]
@@ -571,7 +614,10 @@ mod tests {
             network("wlan", NetworkKind::Physical),
         ];
         let names = |typed: &str| -> Vec<String> {
-            matching_networks(detected.clone(), typed).into_iter().map(|n| n.interface).collect()
+            matching_networks(detected.clone(), typed)
+                .into_iter()
+                .map(|n| n.interface)
+                .collect()
         };
         assert_eq!(names(""), ["eth0", "wlan"]);
         assert_eq!(names("10.0"), ["eth0", "wlan"]);

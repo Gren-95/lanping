@@ -2,7 +2,8 @@
 
 use iced::font::Weight;
 use iced::widget::{
-    Row, button, checkbox, column, container, mouse_area, pick_list, row, scrollable, space, text, text_input,
+    Row, button, checkbox, column, container, mouse_area, pick_list, row, scrollable, space, text,
+    text_input,
 };
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::ports::{COMMON_SERVICES, PORT_LIST_SOURCE_URL, PortGroup, Service};
@@ -80,20 +81,24 @@ fn common_ports_tab(app: &LanPing) -> Element<'_, Message> {
     let bulk = Row::with_children(vec![
         small_button("Select all", Some(Message::SelectAllPorts)),
         small_button("Select none", Some(Message::SelectNoPorts)),
-        text(format!("{selected_count} of {} selected", COMMON_SERVICES.len()))
-            .size(13)
-            .color(MUTED)
-            .into(),
+        text(format!(
+            "{selected_count} of {} selected",
+            COMMON_SERVICES.len()
+        ))
+        .size(13)
+        .color(MUTED)
+        .into(),
     ])
     .spacing(ITEM_SPACING)
     .align_y(Alignment::Center)
     .wrap()
     .vertical_spacing(8);
 
-    let groups = PortGroup::ALL.into_iter().fold(
-        column![].spacing(ITEM_SPACING + 6.0),
-        |list, group| list.push(port_group(app, group)),
-    );
+    let groups = PortGroup::ALL
+        .into_iter()
+        .fold(column![].spacing(ITEM_SPACING + 6.0), |list, group| {
+            list.push(port_group(app, group))
+        });
 
     column![
         text("Hosts that answer are checked for the ticked ports. Untick all ports and clear the custom list to skip port scanning.")
@@ -190,27 +195,37 @@ fn columns_tab(app: &LanPing) -> Element<'_, Message> {
 
 /// Every column as a row you can drag up or down; `highlight` marks one row.
 pub fn column_list(app: &LanPing, highlight: Option<Column>) -> Element<'_, Message> {
-    let rows = app.settings.columns.iter().fold(column![].spacing(ITEM_SPACING), |list, setting| {
-        let column = setting.column;
-        let can_hide = column != Column::Address;
-        let toggle = checkbox(setting.visible)
-            .label(column.title())
-            .on_toggle_maybe(can_hide.then_some(move |visible| Message::ColumnToggled(column, visible)));
-        let entry = row![lucide::grip_vertical().size(16).color(MUTED), toggle]
-            .spacing(10)
-            .align_y(Alignment::Center);
-        let emphasized = app.column_drag == Some(column) || highlight == Some(column);
-        let card = container(entry)
-            .padding(10)
-            .width(Length::Fill)
-            .style(if emphasized { theme::selected_card } else { theme::card });
-        list.push(
-            mouse_area(card)
-                .on_press(Message::ColumnDragStarted(column))
-                .on_enter(Message::ColumnDraggedOver(column))
-                .interaction(iced::mouse::Interaction::Grab),
-        )
-    });
+    let rows =
+        app.settings
+            .columns
+            .iter()
+            .fold(column![].spacing(ITEM_SPACING), |list, setting| {
+                let column = setting.column;
+                let can_hide = column != Column::Address;
+                let toggle = checkbox(setting.visible)
+                    .label(column.title())
+                    .on_toggle_maybe(
+                        can_hide.then_some(move |visible| Message::ColumnToggled(column, visible)),
+                    );
+                let entry = row![lucide::grip_vertical().size(16).color(MUTED), toggle]
+                    .spacing(10)
+                    .align_y(Alignment::Center);
+                let emphasized = app.column_drag == Some(column) || highlight == Some(column);
+                let card = container(entry)
+                    .padding(10)
+                    .width(Length::Fill)
+                    .style(if emphasized {
+                        theme::selected_card
+                    } else {
+                        theme::card
+                    });
+                list.push(
+                    mouse_area(card)
+                        .on_press(Message::ColumnDragStarted(column))
+                        .on_enter(Message::ColumnDraggedOver(column))
+                        .interaction(iced::mouse::Interaction::Grab),
+                )
+            });
     mouse_area(rows)
         .on_release(Message::ColumnDragEnded)
         .on_exit(Message::ColumnDragEnded)
@@ -224,7 +239,6 @@ pub fn small_button(label: &'static str, message: Option<Message>) -> Element<'s
         .style(theme::quiet_button)
         .into()
 }
-
 
 fn monitoring_tab(app: &LanPing) -> Element<'_, Message> {
     let settings = &app.settings;
@@ -282,13 +296,20 @@ fn presets_tab(app: &LanPing) -> Element<'_, Message> {
     for (index, preset) in saved.iter().enumerate() {
         let entry = row![
             text(preset.name.as_str()).size(14).font(BOLD),
-            text(format!("{} filters", preset.filter.active_count())).size(12).color(MUTED),
+            text(format!("{} filters", preset.filter.active_count()))
+                .size(12)
+                .color(MUTED),
             space::horizontal(),
             small_button("Delete", Some(Message::DeletePreset(index))),
         ]
         .spacing(ITEM_SPACING)
         .align_y(Alignment::Center);
-        content = content.push(container(entry).padding(10).width(Length::Fill).style(theme::card));
+        content = content.push(
+            container(entry)
+                .padding(10)
+                .width(Length::Fill)
+                .style(theme::card),
+        );
     }
     content.into()
 }

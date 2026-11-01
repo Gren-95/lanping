@@ -23,16 +23,25 @@ pub struct ScanDiff {
 
 impl ScanDiff {
     pub fn status(&self, ip: Ipv4Addr) -> HostStatus {
-        self.statuses.get(&ip).copied().unwrap_or(HostStatus::Unchanged)
+        self.statuses
+            .get(&ip)
+            .copied()
+            .unwrap_or(HostStatus::Unchanged)
     }
 
     pub fn count(&self, wanted: HostStatus) -> usize {
-        self.statuses.values().filter(|status| **status == wanted).count()
+        self.statuses
+            .values()
+            .filter(|status| **status == wanted)
+            .count()
     }
 }
 
 pub fn diff_scans(previous: &[Host], current: &[Host]) -> ScanDiff {
-    let before: HashMap<String, &Host> = previous.iter().map(|host| (host.device_key(), host)).collect();
+    let before: HashMap<String, &Host> = previous
+        .iter()
+        .map(|host| (host.device_key(), host))
+        .collect();
     let mut seen = HashSet::new();
     let mut statuses = HashMap::new();
 
@@ -72,8 +81,14 @@ mod tests {
 
     #[test]
     fn detects_new_gone_and_unchanged() {
-        let previous = [host(1, Some("AA:00:00:00:00:01")), host(2, Some("AA:00:00:00:00:02"))];
-        let current = [host(1, Some("AA:00:00:00:00:01")), host(3, Some("AA:00:00:00:00:03"))];
+        let previous = [
+            host(1, Some("AA:00:00:00:00:01")),
+            host(2, Some("AA:00:00:00:00:02")),
+        ];
+        let current = [
+            host(1, Some("AA:00:00:00:00:01")),
+            host(3, Some("AA:00:00:00:00:03")),
+        ];
         let diff = diff_scans(&previous, &current);
         assert_eq!(diff.status(current[0].ip), HostStatus::Unchanged);
         assert_eq!(diff.status(current[1].ip), HostStatus::New);
@@ -95,22 +110,34 @@ mod tests {
         let previous = [host(1, None)];
         let mut renamed = host(1, None);
         renamed.hostname = Some("printer".into());
-        assert_eq!(diff_scans(&previous, &[renamed]).status("10.0.0.1".parse().unwrap()), HostStatus::Changed);
+        assert_eq!(
+            diff_scans(&previous, &[renamed]).status("10.0.0.1".parse().unwrap()),
+            HostStatus::Changed
+        );
         let mut opened = host(1, None);
         opened.open_ports = vec![80];
-        assert_eq!(diff_scans(&previous, &[opened]).status("10.0.0.1".parse().unwrap()), HostStatus::Changed);
+        assert_eq!(
+            diff_scans(&previous, &[opened]).status("10.0.0.1".parse().unwrap()),
+            HostStatus::Changed
+        );
     }
 
     #[test]
     fn hosts_without_mac_match_by_address() {
         let previous = [host(7, None)];
         let current = [host(7, None)];
-        assert_eq!(diff_scans(&previous, &current).status(current[0].ip), HostStatus::Unchanged);
+        assert_eq!(
+            diff_scans(&previous, &current).status(current[0].ip),
+            HostStatus::Unchanged
+        );
     }
 
     #[test]
     fn empty_previous_scan_marks_everything_new() {
         let current = [host(1, None)];
-        assert_eq!(diff_scans(&[], &current).status(current[0].ip), HostStatus::New);
+        assert_eq!(
+            diff_scans(&[], &current).status(current[0].ip),
+            HostStatus::New
+        );
     }
 }

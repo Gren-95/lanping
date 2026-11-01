@@ -234,7 +234,10 @@ impl HostFilter {
         self.latency.contains(host.latency)
             && self.status.is_none_or(|wanted| wanted == status)
             && self.name.contains(host, label)
-            && self.vendor.as_ref().is_none_or(|vendor| host.vendor.as_ref() == Some(vendor))
+            && self
+                .vendor
+                .as_ref()
+                .is_none_or(|vendor| host.vendor.as_ref() == Some(vendor))
             && self.port.is_none_or(|port| host.open_ports.contains(&port))
             && text_matches(host, label, &self.text.trim().to_lowercase())
     }
@@ -260,7 +263,10 @@ fn text_matches(host: &Host, label: Option<&str>, needle: &str) -> bool {
 
 /// Distinct vendors in `hosts`, sorted, for the vendor dropdown.
 pub fn vendor_choices(hosts: &[Host]) -> Vec<Choice<String>> {
-    let mut vendors: Vec<&String> = hosts.iter().filter_map(|host| host.vendor.as_ref()).collect();
+    let mut vendors: Vec<&String> = hosts
+        .iter()
+        .filter_map(|host| host.vendor.as_ref())
+        .collect();
     vendors.sort_by_key(|vendor| vendor.to_lowercase());
     vendors.dedup();
     std::iter::once(Choice::Any)
@@ -270,7 +276,10 @@ pub fn vendor_choices(hosts: &[Host]) -> Vec<Choice<String>> {
 
 /// Distinct open ports in `hosts`, ascending, for the port dropdown.
 pub fn port_choices(hosts: &[Host]) -> Vec<Choice<u16>> {
-    let mut ports: Vec<u16> = hosts.iter().flat_map(|host| host.open_ports.iter().copied()).collect();
+    let mut ports: Vec<u16> = hosts
+        .iter()
+        .flat_map(|host| host.open_ports.iter().copied())
+        .collect();
     ports.sort_unstable();
     ports.dedup();
     std::iter::once(Choice::Any)
@@ -304,7 +313,10 @@ mod tests {
         let mut printer = host(5);
         printer.vendor = Some("Hewlett Packard".into());
         printer.open_ports = vec![9100];
-        let text = |query: &str| HostFilter { text: query.into(), ..HostFilter::default() };
+        let text = |query: &str| HostFilter {
+            text: query.into(),
+            ..HostFilter::default()
+        };
         assert!(text("HEWLETT").matches(&printer, None, RowStatus::Unchanged));
         assert!(text("9100").matches(&printer, None, RowStatus::Unchanged));
         assert!(text("10.0.0.5").matches(&printer, None, RowStatus::Unchanged));
@@ -313,14 +325,29 @@ mod tests {
 
     #[test]
     fn latency_bands_split_at_thresholds() {
-        let band = |band| HostFilter { latency: band, ..HostFilter::default() };
+        let band = |band| HostFilter {
+            latency: band,
+            ..HostFilter::default()
+        };
         assert!(band(LatencyBand::Fast).matches(&with_latency(1, 39), None, RowStatus::Unchanged));
         assert!(!band(LatencyBand::Fast).matches(&with_latency(1, 40), None, RowStatus::Unchanged));
-        assert!(band(LatencyBand::Medium).matches(&with_latency(1, 40), None, RowStatus::Unchanged));
-        assert!(band(LatencyBand::Medium).matches(&with_latency(1, 149), None, RowStatus::Unchanged));
+        assert!(band(LatencyBand::Medium).matches(
+            &with_latency(1, 40),
+            None,
+            RowStatus::Unchanged
+        ));
+        assert!(band(LatencyBand::Medium).matches(
+            &with_latency(1, 149),
+            None,
+            RowStatus::Unchanged
+        ));
         assert!(band(LatencyBand::Slow).matches(&with_latency(1, 150), None, RowStatus::Unchanged));
         assert!(band(LatencyBand::NoReply).matches(&host(1), None, RowStatus::Unchanged));
-        assert!(!band(LatencyBand::NoReply).matches(&with_latency(1, 5), None, RowStatus::Unchanged));
+        assert!(!band(LatencyBand::NoReply).matches(
+            &with_latency(1, 5),
+            None,
+            RowStatus::Unchanged
+        ));
         assert!(!band(LatencyBand::Fast).matches(&host(1), None, RowStatus::Unchanged));
     }
 
@@ -340,22 +367,40 @@ mod tests {
         assert!(filter.matches(&nas, None, RowStatus::Unchanged));
         nas.hostname = None;
         assert!(!filter.matches(&nas, None, RowStatus::Unchanged));
-        assert!(!HostFilter { port: Some(80), ..HostFilter::default() }.matches(&nas, None, RowStatus::Unchanged));
+        assert!(
+            !HostFilter {
+                port: Some(80),
+                ..HostFilter::default()
+            }
+            .matches(&nas, None, RowStatus::Unchanged)
+        );
     }
 
     #[test]
     fn status_label_and_unlabeled_conditions() {
         let device = host(4);
-        let new_only = HostFilter { status: Some(RowStatus::New), ..HostFilter::default() };
+        let new_only = HostFilter {
+            status: Some(RowStatus::New),
+            ..HostFilter::default()
+        };
         assert!(new_only.matches(&device, None, RowStatus::New));
         assert!(!new_only.matches(&device, None, RowStatus::Unchanged));
-        let unlabeled = HostFilter { name: NameFilter::NoLabel, ..HostFilter::default() };
+        let unlabeled = HostFilter {
+            name: NameFilter::NoLabel,
+            ..HostFilter::default()
+        };
         assert!(unlabeled.matches(&device, None, RowStatus::Unchanged));
         assert!(!unlabeled.matches(&device, Some("TV"), RowStatus::Unchanged));
-        let labeled = HostFilter { name: NameFilter::HasLabel, ..HostFilter::default() };
+        let labeled = HostFilter {
+            name: NameFilter::HasLabel,
+            ..HostFilter::default()
+        };
         assert!(labeled.matches(&device, Some("TV"), RowStatus::Unchanged));
         assert!(!labeled.matches(&device, None, RowStatus::Unchanged));
-        let by_label = HostFilter { text: "tv".into(), ..HostFilter::default() };
+        let by_label = HostFilter {
+            text: "tv".into(),
+            ..HostFilter::default()
+        };
         assert!(by_label.matches(&device, Some("Living room TV"), RowStatus::Unchanged));
     }
 
@@ -391,9 +436,15 @@ mod tests {
         let mut c = host(3);
         c.vendor = Some("intel".into());
         let hosts = [a, b, c];
-        let vendors: Vec<String> = vendor_choices(&hosts).iter().map(ToString::to_string).collect();
+        let vendors: Vec<String> = vendor_choices(&hosts)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         assert_eq!(vendors, ["Any vendor", "Apple", "intel"]);
-        let ports: Vec<String> = port_choices(&hosts).iter().map(ToString::to_string).collect();
+        let ports: Vec<String> = port_choices(&hosts)
+            .iter()
+            .map(ToString::to_string)
+            .collect();
         assert_eq!(ports, ["Any open port", "Port 22 open", "Port 443 open"]);
     }
 }

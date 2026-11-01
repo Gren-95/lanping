@@ -67,8 +67,18 @@ mod tests {
     #[test]
     fn renders_each_format_with_its_extension() {
         let hosts = [Host::new(std::net::Ipv4Addr::new(10, 0, 0, 1))];
-        assert!(ExportFormat::Csv.render(&hosts).unwrap().contains("10.0.0.1"));
-        assert!(ExportFormat::Json.render(&hosts).unwrap().contains("10.0.0.1"));
+        assert!(
+            ExportFormat::Csv
+                .render(&hosts)
+                .unwrap()
+                .contains("10.0.0.1")
+        );
+        assert!(
+            ExportFormat::Json
+                .render(&hosts)
+                .unwrap()
+                .contains("10.0.0.1")
+        );
         assert_eq!(ExportFormat::Csv.extension(), "csv");
         assert_eq!(ExportFormat::Json.extension(), "json");
     }

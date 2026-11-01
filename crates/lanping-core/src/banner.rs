@@ -18,10 +18,16 @@ pub async fn grab_banner(ip: Ipv4Addr, port: u16, wait: Duration) -> Option<Stri
     if TLS_PORTS.contains(&port) {
         return None;
     }
-    let mut stream = timeout(wait, TcpStream::connect((ip, port))).await.ok()?.ok()?;
+    let mut stream = timeout(wait, TcpStream::connect((ip, port)))
+        .await
+        .ok()?
+        .ok()?;
     if HTTP_PORTS.contains(&port) {
         let request = format!("HEAD / HTTP/1.0\r\nHost: {ip}\r\nUser-Agent: lanping\r\n\r\n");
-        timeout(wait, stream.write_all(request.as_bytes())).await.ok()?.ok()?;
+        timeout(wait, stream.write_all(request.as_bytes()))
+            .await
+            .ok()?
+            .ok()?;
     }
     let mut buffer = [0u8; READ_LIMIT];
     let received = timeout(wait, stream.read(&mut buffer)).await.ok()?.ok()?;
@@ -49,7 +55,8 @@ pub fn summarize(bytes: &[u8]) -> Option<String> {
 fn http_summary(response: &str) -> String {
     let server = response.lines().find_map(|line| {
         let (name, value) = line.split_once(':')?;
-        name.eq_ignore_ascii_case("server").then(|| value.trim().to_owned())
+        name.eq_ignore_ascii_case("server")
+            .then(|| value.trim().to_owned())
     });
     server.unwrap_or_else(|| response.lines().next().unwrap_or_default().to_owned())
 }
@@ -75,7 +82,10 @@ mod tests {
 
     #[test]
     fn falls_back_to_http_status_line() {
-        assert_eq!(summarize(b"HTTP/1.0 403 Forbidden\r\n\r\n").as_deref(), Some("HTTP/1.0 403 Forbidden"));
+        assert_eq!(
+            summarize(b"HTTP/1.0 403 Forbidden\r\n\r\n").as_deref(),
+            Some("HTTP/1.0 403 Forbidden")
+        );
     }
 
     #[test]
@@ -101,11 +111,17 @@ mod tests {
 
     #[tokio::test]
     async fn skips_tls_ports_and_closed_ports() {
-        assert_eq!(grab_banner(Ipv4Addr::LOCALHOST, 443, Duration::from_millis(200)).await, None);
+        assert_eq!(
+            grab_banner(Ipv4Addr::LOCALHOST, 443, Duration::from_millis(200)).await,
+            None
+        );
         let closed = {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             listener.local_addr().unwrap().port()
         };
-        assert_eq!(grab_banner(Ipv4Addr::LOCALHOST, closed, Duration::from_millis(200)).await, None);
+        assert_eq!(
+            grab_banner(Ipv4Addr::LOCALHOST, closed, Duration::from_millis(200)).await,
+            None
+        );
     }
 }

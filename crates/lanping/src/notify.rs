@@ -11,7 +11,9 @@ const APP_NAME: &str = "LanPing";
 /// not be able to inject extra lines or terminal escapes.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn sanitize(text: &str) -> String {
-    text.chars().filter(|character| !character.is_control()).collect()
+    text.chars()
+        .filter(|character| !character.is_control())
+        .collect()
 }
 
 #[cfg(target_os = "macos")]

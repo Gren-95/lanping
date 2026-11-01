@@ -68,7 +68,10 @@ mod tests {
         host.hostname = Some("nas, main".into());
         host.mac = Some("AA:BB:CC:DD:EE:FF".into());
         host.open_ports = vec![22, 80];
-        host.banners = vec![crate::host::ServiceBanner { port: 22, text: "SSH-2.0-test".into() }];
+        host.banners = vec![crate::host::ServiceBanner {
+            port: 22,
+            text: "SSH-2.0-test".into(),
+        }];
         host
     }
 
