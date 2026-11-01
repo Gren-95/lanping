@@ -1,6 +1,7 @@
 //! UI-free LAN scanning engine.
 
 pub mod banner;
+pub mod diagnostics;
 pub mod diff;
 pub mod export;
 pub mod history;
