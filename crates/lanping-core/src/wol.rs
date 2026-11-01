@@ -19,8 +19,9 @@ pub fn parse_mac(text: &str) -> Option<[u8; 6]> {
 /// Six `0xFF` bytes followed by the MAC repeated sixteen times.
 pub fn magic_packet(mac: [u8; 6]) -> [u8; PACKET_LENGTH] {
     let mut packet = [0xFF; PACKET_LENGTH];
-    for repeat in packet[6..].chunks_exact_mut(6) {
-        repeat.copy_from_slice(&mac);
+    let (repeats, _) = packet[6..].as_chunks_mut::<6>();
+    for repeat in repeats {
+        *repeat = mac;
     }
     packet
 }
@@ -41,8 +42,14 @@ mod tests {
 
     #[test]
     fn parses_valid_and_invalid_macs() {
-        assert_eq!(parse_mac("AA:bb:CC:dd:EE:01"), Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01]));
-        assert_eq!(parse_mac("aa-bb-cc-dd-ee-01"), Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01]));
+        assert_eq!(
+            parse_mac("AA:bb:CC:dd:EE:01"),
+            Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01])
+        );
+        assert_eq!(
+            parse_mac("aa-bb-cc-dd-ee-01"),
+            Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01])
+        );
         assert_eq!(parse_mac("aa:bb:cc"), None);
         assert_eq!(parse_mac("aa:bb:cc:dd:ee:ff:00"), None);
         assert_eq!(parse_mac("zz:bb:cc:dd:ee:ff"), None);

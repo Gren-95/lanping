@@ -30,7 +30,10 @@ mod tests {
 
     #[test]
     fn finds_known_vendor() {
-        assert_eq!(lookup_vendor("00:00:00:11:22:33"), Some("XEROX CORPORATION"));
+        assert_eq!(
+            lookup_vendor("00:00:00:11:22:33"),
+            Some("XEROX CORPORATION")
+        );
     }
 
     #[test]

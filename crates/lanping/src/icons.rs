@@ -27,9 +27,16 @@ pub fn icon_button<'a>(
 }
 
 /// Shows `label` when the pointer rests on `target`.
-pub fn with_tooltip<'a>(target: impl Into<Element<'a, Message>>, label: &'static str) -> Element<'a, Message> {
-    tooltip(target, container(text(label).size(12)).padding([4.0, 8.0]), tooltip::Position::Bottom)
-        .style(container::rounded_box)
-        .gap(4)
-        .into()
+pub fn with_tooltip<'a>(
+    target: impl Into<Element<'a, Message>>,
+    label: &'static str,
+) -> Element<'a, Message> {
+    tooltip(
+        target,
+        container(text(label).size(12)).padding([4.0, 8.0]),
+        tooltip::Position::Bottom,
+    )
+    .style(container::rounded_box)
+    .gap(4)
+    .into()
 }

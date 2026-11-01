@@ -30,8 +30,10 @@ async fn main() {
         println!(
             "{:<16} {:>9} {:<24} {:<18} {:<28} {:?}",
             host.ip,
-            host.latency
-                .map_or("-".to_owned(), |l| format!("{:.1} ms", l.as_secs_f64() * 1000.0)),
+            host.latency.map_or("-".to_owned(), |l| format!(
+                "{:.1} ms",
+                l.as_secs_f64() * 1000.0
+            )),
             host.hostname.as_deref().unwrap_or("-"),
             host.mac.as_deref().unwrap_or("-"),
             host.vendor.as_deref().unwrap_or("-"),

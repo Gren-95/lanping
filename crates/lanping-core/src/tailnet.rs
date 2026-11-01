@@ -14,7 +14,9 @@ const STATUS_TIMEOUT: Duration = Duration::from_secs(2);
 pub fn online_peers() -> Vec<Ipv4Addr> {
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
-        let output = Command::new("tailscale").args(["status", "--json"]).output();
+        let output = Command::new("tailscale")
+            .args(["status", "--json"])
+            .output();
         let _ = sender.send(output);
     });
     match receiver.recv_timeout(STATUS_TIMEOUT) {
@@ -64,7 +66,10 @@ mod tests {
         let peers = parse_online_peers(STATUS);
         assert_eq!(
             peers,
-            vec!["100.92.89.63".parse::<Ipv4Addr>().unwrap(), "100.93.72.103".parse().unwrap()]
+            vec![
+                "100.92.89.63".parse::<Ipv4Addr>().unwrap(),
+                "100.93.72.103".parse().unwrap()
+            ]
         );
     }
 

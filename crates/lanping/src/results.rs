@@ -1,16 +1,19 @@
 //! The host list: a scrolling table, or stacked cards when the card view is on.
 
 use iced::font::Weight;
-use iced::widget::{Row as LayoutRow, button, column, container, responsive, mouse_area, row, scrollable, space, text, tooltip};
+use iced::widget::{
+    Row as LayoutRow, button, column, container, mouse_area, responsive, row, scrollable, space,
+    text, tooltip,
+};
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
 
 use crate::app::{LanPing, Message};
 use crate::host_filter::RowStatus;
 use crate::host_rows::Row;
-use crate::settings::Column;
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
-use crate::theme::{self, Edge, ACCENT, BAD, GOOD, MUTED, WARN, latency_color};
+use crate::settings::Column;
+use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN, latency_color};
 
 const NO_VALUE: &str = "-";
 const CARD_SPACING: f32 = 10.0;
@@ -46,7 +49,10 @@ fn empty_state(app: &LanPing) -> Element<'_, Message> {
             "Enter a network or range above and press Scan to see what is connected.",
         )
     } else {
-        ("Nothing matches", "Adjust or clear the filters to see every host again.")
+        (
+            "Nothing matches",
+            "Adjust or clear the filters to see every host again.",
+        )
     };
     container(
         column![
@@ -126,31 +132,43 @@ fn host_table<'a>(app: &'a LanPing, rows: Vec<Row<'a>>, shown: &[Column]) -> Ele
     let shown = shown.to_vec();
     responsive(move |size| {
         let widths = column_widths(&shown, size.width);
-        let header = LayoutRow::with_children(shown.iter().zip(&widths).map(|(&column, &width)| {
-            let cell = container(column_title(app, column))
-                .width(Length::Fixed(width))
-                .padding([CELL_PADDING, CELL_SIDE_PADDING]);
-            mouse_area(cell).on_right_press(Message::ShowColumnMenu(column)).into()
-        }))
-        .align_y(Alignment::Center);
+        let header =
+            LayoutRow::with_children(shown.iter().zip(&widths).map(|(&column, &width)| {
+                let cell = container(column_title(app, column))
+                    .width(Length::Fixed(width))
+                    .padding([CELL_PADDING, CELL_SIDE_PADDING]);
+                mouse_area(cell)
+                    .on_right_press(Message::ShowColumnMenu(column))
+                    .into()
+            }))
+            .align_y(Alignment::Center);
 
-        let lines = rows.iter().enumerate().fold(column![], |list, (index, &row_data)| {
-            let cells: Vec<(f32, Element<'a, Message>)> = shown
-                .iter()
-                .zip(&widths)
-                .map(|(&column, &width)| (width, cell(column, row_data)))
-                .collect();
-            list.push(container(grid_line(cells)).style(theme::stripe(index % 2 == 1)))
-        });
+        let lines = rows
+            .iter()
+            .enumerate()
+            .fold(column![], |list, (index, &row_data)| {
+                let cells: Vec<(f32, Element<'a, Message>)> = shown
+                    .iter()
+                    .zip(&widths)
+                    .map(|(&column, &width)| (width, cell(column, row_data)))
+                    .collect();
+                list.push(container(grid_line(cells)).style(theme::stripe(index % 2 == 1)))
+            });
 
-        scrollable(container(column![header, lines]).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP).bottom(SCROLLBAR_GAP)))
-            .direction(scrollable::Direction::Both {
-                vertical: scrollable::Scrollbar::default(),
-                horizontal: scrollable::Scrollbar::default(),
-            })
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+        scrollable(
+            container(column![header, lines]).padding(
+                iced::Padding::ZERO
+                    .right(SCROLLBAR_GAP)
+                    .bottom(SCROLLBAR_GAP),
+            ),
+        )
+        .direction(scrollable::Direction::Both {
+            vertical: scrollable::Scrollbar::default(),
+            horizontal: scrollable::Scrollbar::default(),
+        })
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .into()
     })
     .into()
 }
@@ -177,7 +195,11 @@ fn column_widths(shown: &[Column], available: f32) -> Vec<f32> {
     let base_total: f32 = shown.iter().map(|&column| base_width(column)).sum();
     let growing = shown.iter().filter(|&&column| grows(column)).count();
     let spare = (available - SCROLLBAR_GAP - base_total).max(0.0);
-    let share = if growing == 0 { 0.0 } else { spare / growing as f32 };
+    let share = if growing == 0 {
+        0.0
+    } else {
+        spare / growing as f32
+    };
     shown
         .iter()
         .map(|&column| base_width(column) + if grows(column) { share } else { 0.0 })
@@ -185,16 +207,12 @@ fn column_widths(shown: &[Column], available: f32) -> Vec<f32> {
 }
 
 fn grid_line<'a>(cells: Vec<(f32, Element<'a, Message>)>) -> LayoutRow<'a, Message> {
-    LayoutRow::with_children(
-        cells
-            .into_iter()
-            .map(|(width, cell)| {
-                container(cell)
-                    .width(Length::Fixed(width))
-                    .padding([CELL_PADDING, CELL_SIDE_PADDING])
-                    .into()
-            }),
-    )
+    LayoutRow::with_children(cells.into_iter().map(|(width, cell)| {
+        container(cell)
+            .width(Length::Fixed(width))
+            .padding([CELL_PADDING, CELL_SIDE_PADDING])
+            .into()
+    }))
     .align_y(Alignment::Center)
 }
 
@@ -268,7 +286,11 @@ fn column_title<'a>(app: &LanPing, column: Column) -> Element<'a, Message> {
     }
 }
 
-fn sort_header<'a>(app: &LanPing, label: &str, key: crate::host_order::SortKey) -> Element<'a, Message> {
+fn sort_header<'a>(
+    app: &LanPing,
+    label: &str,
+    key: crate::host_order::SortKey,
+) -> Element<'a, Message> {
     let marker = match (app.sort_key == key, app.sort_ascending) {
         (false, _) => "",
         (true, true) => "  ^",
@@ -281,7 +303,10 @@ fn sort_header<'a>(app: &LanPing, label: &str, key: crate::host_order::SortKey) 
         .into()
 }
 
-pub fn pill<'a>(label: impl iced::widget::text::IntoFragment<'a>, tint: iced::Color) -> Element<'a, Message> {
+pub fn pill<'a>(
+    label: impl iced::widget::text::IntoFragment<'a>,
+    tint: iced::Color,
+) -> Element<'a, Message> {
     container(text(label).size(12))
         .padding([2.0, 10.0])
         .style(theme::chip(tint))
@@ -308,7 +333,9 @@ fn port_pills<'a>(host: &Host) -> Element<'a, Message> {
         match host.banner(port) {
             Some(banner) => tooltip(
                 port_pill,
-                container(text(banner.to_owned()).size(12)).padding(8).style(theme::card),
+                container(text(banner.to_owned()).size(12))
+                    .padding(8)
+                    .style(theme::card),
                 tooltip::Position::Top,
             )
             .into(),

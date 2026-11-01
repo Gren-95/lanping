@@ -26,10 +26,8 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
-  # Formatting and lints have not been run locally yet, so they report without blocking.
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Format

@@ -108,7 +108,10 @@ impl Default for Settings {
             filter_presets: Vec::new(),
             columns: Column::ALL
                 .iter()
-                .map(|&column| ColumnSetting { column, visible: true })
+                .map(|&column| ColumnSetting {
+                    column,
+                    visible: true,
+                })
                 .collect(),
         }
     }
@@ -158,7 +161,11 @@ impl Settings {
 
     /// Moves `column` to where `target` sits; the columns in between shift over.
     pub fn move_column_to(&mut self, column: Column, target: Column) {
-        let position = |wanted: Column| self.columns.iter().position(|setting| setting.column == wanted);
+        let position = |wanted: Column| {
+            self.columns
+                .iter()
+                .position(|setting| setting.column == wanted)
+        };
         let (Some(from), Some(to)) = (position(column), position(target)) else {
             return;
         };
@@ -176,10 +183,17 @@ impl Settings {
         });
         for column in Column::ALL {
             if !seen.contains(&column) {
-                self.columns.push(ColumnSetting { column, visible: true });
+                self.columns.push(ColumnSetting {
+                    column,
+                    visible: true,
+                });
             }
         }
-        if let Some(address) = self.columns.iter_mut().find(|s| s.column == Column::Address) {
+        if let Some(address) = self
+            .columns
+            .iter_mut()
+            .find(|s| s.column == Column::Address)
+        {
             address.visible = true;
         }
         self
@@ -240,8 +254,7 @@ mod tests {
 
     #[test]
     fn resolve_reports_bad_custom_ports() {
-        let mut settings = Settings::default();
-        settings.custom_ports = "http".into();
+        let settings = Settings { custom_ports: "http".into(), ..Settings::default() };
         assert!(settings.resolve_ports().is_err());
     }
 
@@ -264,18 +277,33 @@ mod tests {
             &[Column::Address, Column::Vendor, Column::Latency]
         );
         settings.move_column_to(Column::Address, Column::Actions);
-        assert_eq!(settings.columns.last().map(|s| s.column), Some(Column::Address));
+        assert_eq!(
+            settings.columns.last().map(|s| s.column),
+            Some(Column::Address)
+        );
         settings.move_column_to(Column::Address, Column::Address);
-        assert_eq!(settings.columns.last().map(|s| s.column), Some(Column::Address));
+        assert_eq!(
+            settings.columns.last().map(|s| s.column),
+            Some(Column::Address)
+        );
     }
 
     #[test]
     fn load_repairs_missing_and_duplicate_columns() {
         let broken = Settings {
             columns: vec![
-                ColumnSetting { column: Column::Vendor, visible: true },
-                ColumnSetting { column: Column::Vendor, visible: false },
-                ColumnSetting { column: Column::Address, visible: false },
+                ColumnSetting {
+                    column: Column::Vendor,
+                    visible: true,
+                },
+                ColumnSetting {
+                    column: Column::Vendor,
+                    visible: false,
+                },
+                ColumnSetting {
+                    column: Column::Address,
+                    visible: false,
+                },
             ],
             ..Settings::default()
         };
@@ -296,11 +324,14 @@ mod tests {
 
     #[test]
     fn saves_and_loads() {
-        let directory = std::env::temp_dir().join(format!("lanping-settings-{}", std::process::id()));
+        let directory =
+            std::env::temp_dir().join(format!("lanping-settings-{}", std::process::id()));
         let path = directory.join("settings.json");
-        let mut settings = Settings::default();
-        settings.grab_banners = true;
-        settings.custom_ports = "9000".into();
+        let settings = Settings {
+            grab_banners: true,
+            custom_ports: "9000".into(),
+            ..Settings::default()
+        };
         settings.save(&path).unwrap();
         assert_eq!(Settings::load(&path).unwrap(), settings);
         let _ = fs::remove_dir_all(&directory);

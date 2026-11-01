@@ -82,10 +82,11 @@ fn host_actions_dialog<'a>(app: &'a LanPing, host: &'a Host) -> Element<'a, Mess
         body = body.push(services_list(host));
     }
     body = body.push(text("Open with").size(13).color(MUTED));
-    let entries = actions_for(host).into_iter().fold(
-        column![].spacing(8),
-        |list, action| list.push(action_button(host, action)),
-    );
+    let entries = actions_for(host)
+        .into_iter()
+        .fold(column![].spacing(8), |list, action| {
+            list.push(action_button(host, action))
+        });
     body = body.push(entries);
 
     column![
@@ -97,16 +98,22 @@ fn host_actions_dialog<'a>(app: &'a LanPing, host: &'a Host) -> Element<'a, Mess
 }
 
 fn label_editor<'a>(app: &'a LanPing, key: &str) -> Element<'a, Message> {
-    let input = text_input("Name this device, for example Living room TV", &app.label_draft)
-        .on_input(Message::LabelDraftChanged)
-        .on_submit(Message::SaveLabel(key.to_owned()))
-        .padding(10)
-        .style(theme::input);
+    let input = text_input(
+        "Name this device, for example Living room TV",
+        &app.label_draft,
+    )
+    .on_input(Message::LabelDraftChanged)
+    .on_submit(Message::SaveLabel(key.to_owned()))
+    .padding(10)
+    .style(theme::input);
     column![
         text("Device name").size(13).color(MUTED),
-        row![input, small_button("Save", Some(Message::SaveLabel(key.to_owned())))]
-            .spacing(ITEM_SPACING)
-            .align_y(Alignment::Center),
+        row![
+            input,
+            small_button("Save", Some(Message::SaveLabel(key.to_owned())))
+        ]
+        .spacing(ITEM_SPACING)
+        .align_y(Alignment::Center),
         text("Names are stored by MAC address, so they follow the device between scans.")
             .size(12)
             .color(MUTED),
@@ -116,17 +123,22 @@ fn label_editor<'a>(app: &'a LanPing, key: &str) -> Element<'a, Message> {
 }
 
 fn services_list(host: &Host) -> Element<'_, Message> {
-    let rows = host.banners.iter().fold(column![].spacing(6), |list, banner| {
-        list.push(
-            row![
-                pill(banner.port.to_string(), ACCENT),
-                text(banner.text.as_str()).size(13).font(Font::MONOSPACE),
-            ]
-            .spacing(ITEM_SPACING)
-            .align_y(Alignment::Center),
-        )
-    });
-    column![text("Services").size(13).color(MUTED), rows].spacing(6).into()
+    let rows = host
+        .banners
+        .iter()
+        .fold(column![].spacing(6), |list, banner| {
+            list.push(
+                row![
+                    pill(banner.port.to_string(), ACCENT),
+                    text(banner.text.as_str()).size(13).font(Font::MONOSPACE),
+                ]
+                .spacing(ITEM_SPACING)
+                .align_y(Alignment::Center),
+            )
+        });
+    column![text("Services").size(13).color(MUTED), rows]
+        .spacing(6)
+        .into()
 }
 
 /// Right-click menu of a table column: the column list, with the clicked one marked.
@@ -140,7 +152,10 @@ fn column_menu_dialog(app: &LanPing, column: Column) -> Element<'_, Message> {
         .size(13)
         .color(MUTED),
         column_list(app, Some(column)),
-        row![space::horizontal(), small_button("Done", Some(Message::CloseModal))],
+        row![
+            space::horizontal(),
+            small_button("Done", Some(Message::CloseModal))
+        ],
     ]
     .spacing(ITEM_SPACING + 4.0)
     .into()
