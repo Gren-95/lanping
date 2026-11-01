@@ -1,6 +1,6 @@
 use crate::host::Host;
 
-const CSV_HEADER: &str = "ip,latency_ms,hostname,mac,vendor,open_ports,banners";
+const CSV_HEADER: &str = "ip,latency_ms,hostname,mac,vendor,open_ports,banners,ipv6";
 
 pub fn to_csv(hosts: &[Host]) -> String {
     let mut output = String::from(CSV_HEADER);
@@ -22,6 +22,12 @@ pub fn to_csv(hosts: &[Host]) -> String {
             .map(|banner| format!("{}: {}", banner.port, banner.text))
             .collect::<Vec<_>>()
             .join("; ");
+        let ipv6 = host
+            .ipv6
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" ");
         let fields = [
             host.ip.to_string(),
             latency,
@@ -30,6 +36,7 @@ pub fn to_csv(hosts: &[Host]) -> String {
             host.vendor.clone().unwrap_or_default(),
             ports,
             banners,
+            ipv6,
         ];
         let row: Vec<String> = fields.iter().map(|field| escape_csv_field(field)).collect();
         output.push_str(&row.join(","));
@@ -82,7 +89,7 @@ mod tests {
         assert_eq!(lines.next(), Some(CSV_HEADER));
         assert_eq!(
             lines.next(),
-            Some("192.168.0.2,1.5,\"nas, main\",AA:BB:CC:DD:EE:FF,,22 80,22: SSH-2.0-test")
+            Some("192.168.0.2,1.5,\"nas, main\",AA:BB:CC:DD:EE:FF,,22 80,22: SSH-2.0-test,")
         );
     }
 

@@ -36,7 +36,7 @@ scripts/build-appimage.sh                                          # needs appim
 
 ## Notes
 
-- IPv4 only for now.
+- Scanning is IPv4 only. Found devices also show the IPv6 addresses in the OS neighbor cache (Linux and macOS), matched by MAC address.
 - Settings, device names and saved scans live in the platform config and data folders (`lanping`). Data from the earlier `lansweep` folders is moved there on first start.
 - Notifications use `notify-send` (Linux) and `osascript` (macOS); Windows shows results in the app only.
 - Windows and macOS builds type-check for Windows; they have not been run there.
