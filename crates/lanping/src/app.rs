@@ -22,7 +22,9 @@ use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
-use crate::storage::{export_directory, history_directory, labels_path, settings_path};
+use crate::storage::{
+    export_directory, history_directory, labels_path, migrate_legacy_data, settings_path,
+};
 use crate::timestamp::format_unix_utc;
 
 const FALLBACK_TARGET: &str = "192.168.0.0/24";
@@ -161,6 +163,7 @@ fn matching_networks(networks: Vec<LocalNetwork>, typed: &str) -> Vec<LocalNetwo
 
 impl LanPing {
     pub fn new() -> (Self, Task<Message>) {
+        let migration = migrate_legacy_data();
         let networks = detect_local_networks();
         let (settings, settings_error) = load_settings();
         let target = listed_networks(&networks, &settings).first().map_or_else(
@@ -169,6 +172,18 @@ impl LanPing {
         );
         let (labels, labels_error) = load_labels();
         let startup_error = settings_error.or(labels_error);
+        let startup_notice = match (startup_error, migration) {
+            (Some(error), _) => Some((Notice::Error, error)),
+            (None, Err(error)) => Some((
+                Notice::Error,
+                format!("Could not move saved data from the old lansweep folders: {error}"),
+            )),
+            (None, Ok(0)) => None,
+            (None, Ok(_)) => Some((
+                Notice::Info,
+                "Moved your settings and saved scans from the old lansweep folders".to_owned(),
+            )),
+        };
         let mut app = Self {
             target,
             networks,
@@ -186,7 +201,7 @@ impl LanPing {
             sort_ascending: true,
             scanning: false,
             progress: (0, 0),
-            notice: startup_error.map(|error| (Notice::Error, error)),
+            notice: startup_notice,
             history: Vec::new(),
             scan_handle: None,
             scanned_target: String::new(),
