@@ -795,17 +795,15 @@ mod tests {
     fn a_new_main_network_is_reported_once() {
         let home = network("eth0", NetworkKind::Physical);
         let cafe = network("wlan0", NetworkKind::Physical);
+        let at_home = std::slice::from_ref(&home);
+        assert_eq!(changed_primary_target(at_home, at_home), None);
         assert_eq!(
-            changed_primary_target(&[home.clone()], &[home.clone()]),
-            None
-        );
-        assert_eq!(
-            changed_primary_target(&[home.clone()], &[cafe.clone(), home.clone()]),
+            changed_primary_target(at_home, &[cafe.clone(), home.clone()]),
             Some(cafe.target.clone())
         );
         assert_eq!(
-            changed_primary_target(&[], &[home.clone()]),
-            Some(home.target)
+            changed_primary_target(&[], at_home),
+            Some(home.target.clone())
         );
         assert_eq!(changed_primary_target(&[cafe], &[]), None);
     }
