@@ -1,0 +1,15 @@
+[package]
+name = "lanping-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UI-free LAN scanning engine: host discovery, ports, names, vendors."
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "net", "time", "sync", "macros", "fs", "process", "io-util"] }
+surge-ping = "0.9"
+dns-lookup = "4"
+ipnet = "2"
+if-addrs = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
