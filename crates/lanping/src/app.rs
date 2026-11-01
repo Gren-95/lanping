@@ -11,7 +11,7 @@ use lanping_core::history::{SavedScan, list_scans, load_scan, save_scan};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::wol::send_wake_packet;
-use lanping_core::{Host, ScanEvent};
+use lanping_core::{Host, ScanEvent, ScanStage};
 
 use crate::actions::{Effect, HostAction};
 use crate::copy_text::rows_as_text;
@@ -133,6 +133,7 @@ pub struct LanPing {
     pub sort_ascending: bool,
     pub scanning: bool,
     pub progress: (usize, usize),
+    pub progress_stage: ScanStage,
     pub notice: Option<(Notice, String)>,
     pub history: Vec<HistoryEntry>,
     pub(crate) scan_handle: Option<Handle>,
@@ -236,6 +237,7 @@ impl LanPing {
             sort_ascending: true,
             scanning: false,
             progress: (0, 0),
+            progress_stage: ScanStage::Sweep,
             notice: startup_notice,
             history: Vec::new(),
             scan_handle: None,
