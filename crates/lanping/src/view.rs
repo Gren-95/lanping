@@ -304,7 +304,18 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
     if wide {
         items.push(space::horizontal().into());
     }
-    items.push(input_group(vec![history.into(), export.into()]));
+    items.push(input_group(vec![
+        history.into(),
+        with_tooltip(
+            icon_button(
+                lucide::clipboard_copy().size(ICON_SIZE),
+                has_hosts.then_some(Message::CopyVisibleRows),
+                Edge::Middle,
+            ),
+            "Copy visible rows",
+        ),
+        export.into(),
+    ]));
     toolbar_row(items, wide)
 }
 

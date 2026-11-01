@@ -1,5 +1,6 @@
 mod actions;
 mod app;
+mod copy_text;
 mod export_format;
 mod filter_bar;
 mod host_filter;
