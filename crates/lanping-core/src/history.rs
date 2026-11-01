@@ -29,6 +29,32 @@ impl SavedScan {
     }
 }
 
+/// One appearance of a device in a saved scan.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Sighting {
+    pub finished_at_unix: u64,
+    pub target: String,
+    pub host: Host,
+}
+
+/// Every scan in `scans` that contains the device `device_key`, in the order given.
+pub fn sightings(scans: &[SavedScan], device_key: &str) -> Vec<Sighting> {
+    scans
+        .iter()
+        .filter_map(|scan| {
+            let host = scan
+                .hosts
+                .iter()
+                .find(|host| host.device_key() == device_key)?;
+            Some(Sighting {
+                finished_at_unix: scan.finished_at_unix,
+                target: scan.target.clone(),
+                host: host.clone(),
+            })
+        })
+        .collect()
+}
+
 /// Writes the scan into `directory` and returns the file path.
 pub fn save_scan(directory: &Path, scan: &SavedScan) -> io::Result<PathBuf> {
     fs::create_dir_all(directory)?;
@@ -61,6 +87,42 @@ pub fn list_scans(directory: &Path) -> Vec<(PathBuf, SavedScan)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finds_a_device_across_scans_by_mac_or_ip() {
+        let mut printer = Host::new("10.0.0.5".parse().unwrap());
+        printer.mac = Some("AA:BB:CC:DD:EE:FF".into());
+        let mut moved = printer.clone();
+        moved.ip = "10.0.0.9".parse().unwrap();
+        let other = Host::new("10.0.0.7".parse().unwrap());
+        let scans = [
+            SavedScan {
+                target: "10.0.0.0/24".into(),
+                finished_at_unix: 300,
+                hosts: vec![moved, other.clone()],
+            },
+            SavedScan {
+                target: "10.0.0.0/24".into(),
+                finished_at_unix: 200,
+                hosts: vec![other],
+            },
+            SavedScan {
+                target: "10.0.0.0/24".into(),
+                finished_at_unix: 100,
+                hosts: vec![printer],
+            },
+        ];
+        let by_mac = sightings(&scans, "AA:BB:CC:DD:EE:FF");
+        assert_eq!(
+            by_mac
+                .iter()
+                .map(|s| s.finished_at_unix)
+                .collect::<Vec<_>>(),
+            [300, 100]
+        );
+        assert_eq!(sightings(&scans, "10.0.0.7").len(), 2);
+        assert!(sightings(&scans, "10.0.0.99").is_empty());
+    }
 
     fn temp_directory(label: &str) -> PathBuf {
         let directory =

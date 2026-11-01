@@ -1,0 +1,232 @@
+//! The device detail dialog: what is known about one host and how it showed up in past scans.
+
+use iced::font::Weight;
+use iced::widget::{Row, column, row, scrollable, space, text};
+use iced::{Alignment, Element, Font, Length};
+use lanping_core::Host;
+use lanping_core::history::Sighting;
+use lanping_core::ports::format_ports;
+
+use crate::app::{LanPing, Message};
+use crate::host_filter::RowStatus;
+use crate::results::pill;
+use crate::settings_modal::small_button;
+use crate::theme::{ACCENT, BAD, GOOD, MUTED, WARN};
+use crate::timestamp::format_unix_utc;
+
+const ITEM_SPACING: f32 = 10.0;
+const LABEL_WIDTH: f32 = 90.0;
+const RECENT_SCANS_SHOWN: usize = 8;
+const NO_VALUE: &str = "-";
+const BOLD: Font = Font {
+    weight: Weight::Bold,
+    ..Font::DEFAULT
+};
+
+/// When a device was first and last seen in the saved scans, and how often.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Activity {
+    pub first_seen: u64,
+    pub last_seen: u64,
+    pub seen_in: usize,
+}
+
+/// Summary of `sightings`, or `None` when the device is in no saved scan.
+pub fn activity(sightings: &[Sighting]) -> Option<Activity> {
+    let first_seen = sightings.iter().map(|s| s.finished_at_unix).min()?;
+    let last_seen = sightings.iter().map(|s| s.finished_at_unix).max()?;
+    Some(Activity {
+        first_seen,
+        last_seen,
+        seen_in: sightings.len(),
+    })
+}
+
+pub fn host_details_dialog<'a>(app: &'a LanPing, key: &'a str) -> Element<'a, Message> {
+    let Some(host) = app.find_host(key) else {
+        return text("This device is no longer in the list.")
+            .size(14)
+            .into();
+    };
+    let status = app.row_status(host);
+    let label = app.labels.get(key);
+
+    let title = label.map_or_else(|| host.ip.to_string(), str::to_owned);
+    let mut heading = row![text(title).size(22).font(BOLD)]
+        .spacing(ITEM_SPACING)
+        .align_y(Alignment::Center);
+    if let Some(badge) = status_pill(status) {
+        heading = heading.push(badge);
+    }
+
+    let content = column![
+        heading,
+        facts(host, label.is_some()),
+        ports_section(host),
+        history_section(app),
+    ]
+    .spacing(ITEM_SPACING + 6.0);
+    let buttons = row![
+        space::horizontal(),
+        small_button("Open with", Some(Message::ShowHostActions(key.to_owned()))),
+        small_button("Close", Some(Message::CloseModal)),
+    ]
+    .spacing(ITEM_SPACING);
+
+    column![scrollable(content).height(Length::Fill), buttons]
+        .spacing(ITEM_SPACING + 4.0)
+        .into()
+}
+
+fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
+    let latency = host.latency.map_or_else(
+        || "No reply (ARP only)".to_owned(),
+        |latency| format!("{:.1} ms", latency.as_secs_f64() * 1000.0),
+    );
+    let mut lines = column![].spacing(6);
+    if has_label {
+        lines = lines.push(fact("Address", host.ip.to_string()));
+    }
+    lines
+        .push(fact(
+            "Hostname",
+            host.hostname.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
+        ))
+        .push(fact(
+            "MAC",
+            host.mac.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
+        ))
+        .push(fact(
+            "Vendor",
+            host.vendor.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
+        ))
+        .push(fact("Latency", latency))
+        .into()
+}
+
+fn fact<'a>(label: &'static str, value: String) -> Element<'a, Message> {
+    row![
+        text(label).size(13).color(MUTED).width(LABEL_WIDTH),
+        text(value).size(14)
+    ]
+    .spacing(ITEM_SPACING)
+    .into()
+}
+
+fn ports_section(host: &Host) -> Element<'_, Message> {
+    let heading = text("Open ports").size(13).color(MUTED);
+    if host.open_ports.is_empty() {
+        return column![heading, text("None found").size(14)]
+            .spacing(6)
+            .into();
+    }
+    let lines = host
+        .open_ports
+        .iter()
+        .fold(column![].spacing(4), |list, &port| {
+            let banner = host.banner(port).unwrap_or_default();
+            list.push(
+                Row::with_children(vec![
+                    pill(port.to_string(), ACCENT),
+                    text(banner.to_owned())
+                        .font(Font::MONOSPACE)
+                        .size(12)
+                        .color(MUTED)
+                        .into(),
+                ])
+                .spacing(ITEM_SPACING)
+                .align_y(Alignment::Center),
+            )
+        });
+    column![heading, lines].spacing(6).into()
+}
+
+fn history_section(app: &LanPing) -> Element<'_, Message> {
+    let heading = text("History").size(13).color(MUTED);
+    let Some(summary) = activity(&app.detail_sightings) else {
+        return column![heading, text("Not in any saved scan yet").size(14)]
+            .spacing(6)
+            .into();
+    };
+    let summary_lines = column![
+        fact("First seen", format_unix_utc(summary.first_seen)),
+        fact("Last seen", format_unix_utc(summary.last_seen)),
+        fact(
+            "Seen in",
+            format!(
+                "{} of {} saved scans",
+                summary.seen_in, app.detail_scan_count
+            )
+        ),
+    ]
+    .spacing(6);
+    let recent = app.detail_sightings.iter().take(RECENT_SCANS_SHOWN).fold(
+        column![].spacing(4),
+        |list, sighting| {
+            let ports = if sighting.host.open_ports.is_empty() {
+                NO_VALUE.to_owned()
+            } else {
+                format_ports(&sighting.host.open_ports)
+            };
+            let latency = sighting.host.latency.map_or_else(
+                || NO_VALUE.to_owned(),
+                |l| format!("{:.1} ms", l.as_secs_f64() * 1000.0),
+            );
+            list.push(
+                text(format!(
+                    "{}   {}   {}   ports: {ports}",
+                    format_unix_utc(sighting.finished_at_unix),
+                    sighting.target,
+                    latency
+                ))
+                .size(12)
+                .font(Font::MONOSPACE),
+            )
+        },
+    );
+    column![
+        heading,
+        summary_lines,
+        text("Recent scans").size(13).color(MUTED),
+        recent
+    ]
+    .spacing(6)
+    .into()
+}
+
+fn status_pill<'a>(status: RowStatus) -> Option<Element<'a, Message>> {
+    let (label, tint) = match status {
+        RowStatus::Unchanged => return None,
+        RowStatus::New => ("new", GOOD),
+        RowStatus::Changed => ("changed", WARN),
+        RowStatus::Gone => ("gone", BAD),
+    };
+    Some(pill(label, tint))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sighting(finished_at_unix: u64) -> Sighting {
+        Sighting {
+            finished_at_unix,
+            target: "10.0.0.0/24".into(),
+            host: Host::new("10.0.0.5".parse().unwrap()),
+        }
+    }
+
+    #[test]
+    fn summarizes_first_and_last_sighting() {
+        assert_eq!(activity(&[]), None);
+        let summary = activity(&[sighting(300), sighting(100), sighting(200)]).unwrap();
+        assert_eq!(
+            summary,
+            Activity {
+                first_seen: 100,
+                last_seen: 300,
+                seen_in: 3
+            }
+        );
+    }
+}
