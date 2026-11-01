@@ -24,6 +24,9 @@ use iced::{Size, window};
 
 const DEFAULT_WINDOW: Size = Size::new(1040.0, 700.0);
 const MIN_WINDOW: Size = Size::new(360.0, 480.0);
+/// Matches the .desktop file name so launchers show the right icon and group windows.
+#[cfg(target_os = "linux")]
+const APPLICATION_ID: &str = "lanping";
 
 fn main() -> iced::Result {
     iced::application(app::LanPing::new, app::LanPing::update, view::view)
@@ -34,6 +37,11 @@ fn main() -> iced::Result {
         .window(window::Settings {
             size: DEFAULT_WINDOW,
             min_size: Some(MIN_WINDOW),
+            #[cfg(target_os = "linux")]
+            platform_specific: window::settings::PlatformSpecific {
+                application_id: APPLICATION_ID.to_owned(),
+                ..window::settings::PlatformSpecific::default()
+            },
             ..window::Settings::default()
         })
         .run()
