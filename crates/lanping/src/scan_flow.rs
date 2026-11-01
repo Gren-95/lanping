@@ -4,7 +4,7 @@ use iced::Task;
 use iced::futures::SinkExt;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::range::parse_targets;
-use lanping_core::{Host, ScanConfig, ScanEvent, start_scan};
+use lanping_core::{Host, ScanConfig, ScanEvent, ScanStage, start_scan};
 
 use crate::app::{LanPing, Message, Notice};
 use crate::monitor::new_device_alert;
@@ -42,6 +42,7 @@ impl LanPing {
             self.notice = None;
         }
         self.progress = (0, targets.len());
+        self.progress_stage = ScanStage::Sweep;
         self.scanning = true;
 
         let mut config = ScanConfig::new(targets);
@@ -86,7 +87,14 @@ impl LanPing {
             return;
         }
         match event {
-            ScanEvent::Progress { scanned, total } => self.progress = (scanned, total),
+            ScanEvent::Progress {
+                stage,
+                scanned,
+                total,
+            } => {
+                self.progress_stage = stage;
+                self.progress = (scanned, total);
+            }
             ScanEvent::Host(host) => self.upsert_host(host),
             ScanEvent::Finished => self.finish_scan(),
         }

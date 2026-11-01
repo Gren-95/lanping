@@ -16,6 +16,7 @@ use crate::results::{pill, results};
 use crate::settings::SettingsTab;
 use crate::theme::Edge;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
+use lanping_core::ScanStage;
 use lanping_core::diff::HostStatus;
 use lanping_core::range::LocalNetwork;
 
@@ -182,7 +183,12 @@ fn network_suggestions<'a>(networks: Vec<LocalNetwork>) -> Element<'a, Message> 
 fn progress_row(app: &LanPing) -> Element<'_, Message> {
     let (scanned, total) = app.progress;
     let percent = scanned * 100 / total;
+    let stage = match app.progress_stage {
+        ScanStage::Sweep => "Finding hosts",
+        ScanStage::Details => "Names and ports",
+    };
     row![
+        text(stage).size(12).color(MUTED),
         progress_bar(0.0..=total as f32, scanned as f32)
             .girth(6)
             .style(theme::progress),

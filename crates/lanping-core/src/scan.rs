@@ -46,9 +46,19 @@ impl ScanConfig {
     }
 }
 
+/// The part of a scan a progress report describes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanStage {
+    /// Probing every target address to find live hosts.
+    Sweep,
+    /// Looking up names and checking ports on the hosts that were found.
+    Details,
+}
+
 #[derive(Debug, Clone)]
 pub enum ScanEvent {
     Progress {
+        stage: ScanStage,
         scanned: usize,
         total: usize,
     },
@@ -114,7 +124,11 @@ async fn sweep(config: &ScanConfig, events: &mpsc::Sender<ScanEvent>) -> HashMap
             }
         }
         if scanned % PROGRESS_STEP == 0 || scanned == total {
-            let progress = ScanEvent::Progress { scanned, total };
+            let progress = ScanEvent::Progress {
+                stage: ScanStage::Sweep,
+                scanned,
+                total,
+            };
             if events.send(progress).await.is_err() {
                 return known;
             }
@@ -160,6 +174,15 @@ async fn enrich(
     known: HashMap<Ipv4Addr, Host>,
     events: &mpsc::Sender<ScanEvent>,
 ) {
+    let total = known.len();
+    let report = |done| ScanEvent::Progress {
+        stage: ScanStage::Details,
+        scanned: done,
+        total,
+    };
+    if total > 0 && events.send(report(0)).await.is_err() {
+        return;
+    }
     let limit = Arc::new(Semaphore::new(MAX_PARALLEL_LOOKUPS));
     let mut lookups = JoinSet::new();
     for (_ip, mut host) in known {
@@ -178,10 +201,15 @@ async fn enrich(
         });
     }
 
+    let mut done = 0;
     while let Some(joined) = lookups.join_next().await {
+        done += 1;
         if let Ok(Some(host)) = joined
             && events.send(ScanEvent::Host(host)).await.is_err()
         {
+            return;
+        }
+        if events.send(report(done)).await.is_err() {
             return;
         }
     }
@@ -225,18 +253,28 @@ mod tests {
 
         let mut found_loopback = false;
         let mut saw_full_progress = false;
+        let mut saw_full_details = false;
         let mut finished = false;
         while let Some(event) = scan.next_event().await {
             match event {
                 ScanEvent::Host(host) => found_loopback |= host.ip == Ipv4Addr::LOCALHOST,
-                ScanEvent::Progress { scanned, total } => {
-                    saw_full_progress |= scanned == total && total == 1;
+                ScanEvent::Progress {
+                    stage,
+                    scanned,
+                    total,
+                } => {
+                    let full = scanned == total && total == 1;
+                    match stage {
+                        ScanStage::Sweep => saw_full_progress |= full,
+                        ScanStage::Details => saw_full_details |= full,
+                    }
                 }
                 ScanEvent::Finished => finished = true,
             }
         }
         assert!(found_loopback, "loopback should answer ICMP or refuse TCP");
         assert!(saw_full_progress);
+        assert!(saw_full_details);
         assert!(finished);
     }
 
