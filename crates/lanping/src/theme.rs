@@ -73,10 +73,7 @@ pub fn panel(_theme: &Theme) -> container::Style {
 /// Background of one table line; every other line is tinted.
 pub fn stripe(tinted: bool) -> impl Fn(&Theme) -> container::Style {
     move |_theme| container::Style {
-        background: tinted.then_some(Background::Color(Color {
-            a: 0.55,
-            ..PANEL_RAISED
-        })),
+        background: tinted.then_some(Background::Color(STRIPE)),
         border: border::rounded(8),
         ..container::Style::default()
     }
