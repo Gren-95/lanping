@@ -72,6 +72,8 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    WindowResized(iced::Size),
+    CloseRequested,
     /// Put text on the clipboard; the label names it in the status line.
     CopyText(String, &'static str),
     CopyVisibleRows,
@@ -216,6 +218,7 @@ impl LanPing {
                 "Moved your settings and saved scans from the old lansweep folders".to_owned(),
             )),
         };
+        let last_filter = settings.last_filter.clone();
         let mut app = Self {
             target,
             networks,
@@ -224,7 +227,7 @@ impl LanPing {
             modal: None,
             label_draft: String::new(),
             preset_name_draft: String::new(),
-            filter: HostFilter::default(),
+            filter: last_filter,
             filters_open: false,
             column_drag: None,
             hosts: Vec::new(),
@@ -255,7 +258,12 @@ impl LanPing {
             minutes => iced::time::every(Duration::from_secs(u64::from(minutes) * 60))
                 .map(|_| Message::AutoRescanTick),
         };
-        Subscription::batch([rescan, iced::event::listen_with(shortcut_message)])
+        Subscription::batch([
+            rescan,
+            iced::event::listen_with(shortcut_message),
+            iced::window::resize_events().map(|(_, size)| Message::WindowResized(size)),
+            iced::window::close_requests().map(|_| Message::CloseRequested),
+        ])
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -271,6 +279,14 @@ impl LanPing {
                 let count = rows.len();
                 self.set_notice(Notice::Info, format!("Copied {count} rows"));
                 return iced::clipboard::write(text);
+            }
+            Message::WindowResized(size) => {
+                self.settings.window_size = Some((size.width as u32, size.height as u32));
+            }
+            Message::CloseRequested => {
+                self.settings.last_filter = self.filter.clone();
+                self.save_settings();
+                return iced::exit();
             }
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
@@ -611,7 +627,7 @@ impl LanPing {
 
 /// Reads saved preferences. A missing file means first run; an unreadable
 /// one is reported so the user knows their choices were not applied.
-fn load_settings() -> (Settings, Option<String>) {
+pub(crate) fn load_settings() -> (Settings, Option<String>) {
     let Some(path) = settings_path() else {
         return (Settings::default(), None);
     };

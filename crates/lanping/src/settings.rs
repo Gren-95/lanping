@@ -8,6 +8,7 @@ use std::path::Path;
 use lanping_core::ports::{PortListError, common_ports, parse_ports};
 use serde::{Deserialize, Serialize};
 
+use crate::host_filter::HostFilter;
 use crate::host_order::SortKey;
 use crate::presets::FilterPreset;
 
@@ -93,6 +94,10 @@ pub struct Settings {
     /// Show hosts as stacked cards instead of a table.
     pub card_view: bool,
     pub filter_presets: Vec<FilterPreset>,
+    /// Window size at the last close, in logical pixels.
+    pub window_size: Option<(u32, u32)>,
+    /// Filter that was active at the last close.
+    pub last_filter: HostFilter,
 }
 
 impl Default for Settings {
@@ -106,6 +111,8 @@ impl Default for Settings {
             ignore_virtual_networks: true,
             card_view: false,
             filter_presets: Vec::new(),
+            window_size: None,
+            last_filter: HostFilter::default(),
             columns: Column::ALL
                 .iter()
                 .map(|&column| ColumnSetting {
@@ -232,6 +239,23 @@ mod tests {
         let older: Settings = serde_json::from_str(r#"{"grab_banners":true}"#).unwrap();
         assert!(older.ignore_virtual_networks);
         assert!(!older.card_view);
+    }
+
+    #[test]
+    fn window_and_filter_are_remembered_and_default_for_older_files() {
+        let older: Settings = serde_json::from_str(r#"{"grab_banners":true}"#).unwrap();
+        assert_eq!(older.window_size, None);
+        assert_eq!(older.last_filter, HostFilter::default());
+        let settings = Settings {
+            window_size: Some((1200, 800)),
+            last_filter: HostFilter {
+                text: "nas".into(),
+                ..HostFilter::default()
+            },
+            ..Settings::default()
+        };
+        let json = serde_json::to_string(&settings).unwrap();
+        assert_eq!(serde_json::from_str::<Settings>(&json).unwrap(), settings);
     }
 
     #[test]
