@@ -29,6 +29,19 @@ const MIN_WINDOW: Size = Size::new(360.0, 480.0);
 #[cfg(target_os = "linux")]
 const APPLICATION_ID: &str = "lanping";
 
+/// Saved size from the last session, kept at least as large as the minimum.
+fn starting_size() -> Size {
+    let (settings, _) = app::load_settings();
+    settings
+        .window_size
+        .map_or(DEFAULT_WINDOW, |(width, height)| {
+            Size::new(
+                (width as f32).max(MIN_WINDOW.width),
+                (height as f32).max(MIN_WINDOW.height),
+            )
+        })
+}
+
 fn main() -> iced::Result {
     iced::application(app::LanPing::new, app::LanPing::update, view::view)
         .font(iced_fonts::LUCIDE_FONT_BYTES)
@@ -36,7 +49,8 @@ fn main() -> iced::Result {
         .subscription(app::LanPing::subscription)
         .theme(app::LanPing::theme)
         .window(window::Settings {
-            size: DEFAULT_WINDOW,
+            size: starting_size(),
+            exit_on_close_request: false,
             min_size: Some(MIN_WINDOW),
             #[cfg(target_os = "linux")]
             platform_specific: window::settings::PlatformSpecific {
