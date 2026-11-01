@@ -6,6 +6,6 @@ Comment=Find every device on your network
 Exec=lanping
 Icon=lanping
 Terminal=false
-Categories=Network;Utility;
+Categories=Network;
 Keywords=network;scanner;lan;ip;ping;ports;arp;
 StartupWMClass=lanping
