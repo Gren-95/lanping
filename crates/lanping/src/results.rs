@@ -118,10 +118,20 @@ fn host_card<'a>(row_data: Row<'a>, columns: &[Column]) -> Element<'a, Message> 
         details = details.push(port_pills(host));
     }
 
-    container(details)
-        .padding(CARD_PADDING)
-        .width(Length::Fill)
-        .style(theme::card)
+    clickable_row(
+        container(details)
+            .padding(CARD_PADDING)
+            .width(Length::Fill)
+            .style(theme::card),
+        host,
+    )
+}
+
+/// Opens the device detail dialog when the row is clicked; buttons inside keep their own clicks.
+fn clickable_row<'a>(row: impl Into<Element<'a, Message>>, host: &Host) -> Element<'a, Message> {
+    mouse_area(row)
+        .on_press(Message::ShowHostDetails(host.device_key()))
+        .interaction(iced::mouse::Interaction::Pointer)
         .into()
 }
 
@@ -152,7 +162,10 @@ fn host_table<'a>(app: &'a LanPing, rows: Vec<Row<'a>>, shown: &[Column]) -> Ele
                     .zip(&widths)
                     .map(|(&column, &width)| (width, cell(column, row_data)))
                     .collect();
-                list.push(container(grid_line(cells)).style(theme::stripe(index % 2 == 1)))
+                list.push(clickable_row(
+                    container(grid_line(cells)).style(theme::stripe(index % 2 == 1)),
+                    row_data.host,
+                ))
             });
 
         scrollable(

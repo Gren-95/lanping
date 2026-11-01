@@ -3,6 +3,7 @@ mod app;
 mod copy_text;
 mod export_format;
 mod filter_bar;
+mod host_details;
 mod host_filter;
 mod host_order;
 mod host_rows;

@@ -8,7 +8,7 @@ use iced::task::Handle;
 use iced::{Subscription, Task, Theme};
 use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
-use lanping_core::history::{SavedScan, list_scans, load_scan, save_scan};
+use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::wol::send_wake_packet;
@@ -54,6 +54,8 @@ pub enum Modal {
     /// Menu for one device, identified by [`Host::device_key`].
     HostActions(String),
     SavePreset,
+    /// Everything known about one device, identified by [`Host::device_key`].
+    HostDetails(String),
     /// Output of a ping or traceroute; `output` is empty while it runs.
     Diagnostic {
         title: String,
@@ -80,6 +82,7 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    ShowHostDetails(String),
     DiagnosticFinished(String, Result<String, String>),
     ScanOnStartupToggled(bool),
     ScanOnNetworkChangeToggled(bool),
@@ -138,6 +141,10 @@ pub struct LanPing {
     pub preset_name_draft: String,
     pub filter: HostFilter,
     pub filters_open: bool,
+    /// Appearances of the device shown in the detail dialog, newest scan first.
+    pub detail_sightings: Vec<Sighting>,
+    /// How many saved scans were searched for those appearances.
+    pub detail_scan_count: usize,
     /// Column being dragged in the column list.
     pub column_drag: Option<Column>,
     pub hosts: Vec<Host>,
@@ -249,6 +256,8 @@ impl LanPing {
             preset_name_draft: String::new(),
             filter: last_filter,
             filters_open: false,
+            detail_sightings: Vec::new(),
+            detail_scan_count: 0,
             column_drag: None,
             hosts: Vec::new(),
             diff: ScanDiff::default(),
@@ -332,6 +341,7 @@ impl LanPing {
             }
             Message::NetworksDetected(detected) => return self.apply_detected_networks(detected),
             Message::DiagnosticFinished(title, result) => self.finish_diagnostic(&title, result),
+            Message::ShowHostDetails(key) => self.show_host_details(key),
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
                 if self.modal.is_none() && !self.scanning {
@@ -604,6 +614,29 @@ impl LanPing {
                 }
                 Task::none()
             }
+        }
+    }
+
+    fn show_host_details(&mut self, key: String) {
+        let scans: Vec<SavedScan> = history_directory()
+            .map(|directory| {
+                list_scans(&directory)
+                    .into_iter()
+                    .map(|(_, scan)| scan)
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.detail_scan_count = scans.len();
+        self.detail_sightings = sightings(&scans, &key);
+        self.modal = Some(Modal::HostDetails(key));
+    }
+
+    /// How a listed device compares with the previous scan.
+    pub fn row_status(&self, host: &Host) -> RowStatus {
+        if self.diff.gone.iter().any(|gone| gone.ip == host.ip) {
+            RowStatus::Gone
+        } else {
+            self.diff.status(host.ip).into()
         }
     }
 
