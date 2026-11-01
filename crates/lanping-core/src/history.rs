@@ -54,7 +54,7 @@ pub fn list_scans(directory: &Path) -> Vec<(PathBuf, SavedScan)> {
         .filter(|path| path.extension().is_some_and(|ext| ext == "json"))
         .filter_map(|path| load_scan(&path).ok().map(|scan| (path, scan)))
         .collect();
-    scans.sort_by(|a, b| b.1.finished_at_unix.cmp(&a.1.finished_at_unix));
+    scans.sort_by_key(|(_, scan)| std::cmp::Reverse(scan.finished_at_unix));
     scans
 }
 
@@ -72,7 +72,10 @@ mod tests {
     #[test]
     fn saves_lists_and_loads() {
         let directory = temp_directory("history");
-        let mut scan = SavedScan::new("10.0.0.0/24".into(), vec![Host::new("10.0.0.1".parse().unwrap())]);
+        let mut scan = SavedScan::new(
+            "10.0.0.0/24".into(),
+            vec![Host::new("10.0.0.1".parse().unwrap())],
+        );
         scan.finished_at_unix = 100;
         let mut newer = scan.clone();
         newer.finished_at_unix = 200;

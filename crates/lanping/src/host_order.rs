@@ -62,7 +62,10 @@ fn compare_optional<T: Ord>(a: &Option<T>, b: &Option<T>) -> Ordering {
 }
 
 fn compare_optional_text(a: &Option<String>, b: &Option<String>) -> Ordering {
-    compare_optional(&a.as_ref().map(|t| t.to_lowercase()), &b.as_ref().map(|t| t.to_lowercase()))
+    compare_optional(
+        &a.as_ref().map(|t| t.to_lowercase()),
+        &b.as_ref().map(|t| t.to_lowercase()),
+    )
 }
 
 #[cfg(test)]
@@ -79,7 +82,10 @@ mod tests {
         let mut fast = host(9);
         fast.latency = Some(Duration::from_millis(1));
         let silent = host(1);
-        assert_eq!(compare_hosts(&fast, &silent, SortKey::Latency), Ordering::Less);
+        assert_eq!(
+            compare_hosts(&fast, &silent, SortKey::Latency),
+            Ordering::Less
+        );
     }
 
     #[test]
@@ -89,23 +95,35 @@ mod tests {
         let mut quiet = host(1);
         quiet.open_ports = vec![22];
         assert_eq!(compare_hosts(&quiet, &busy, SortKey::Ports), Ordering::Less);
-        assert_eq!(compare_hosts(&host(1), &host(2), SortKey::Ports), Ordering::Less);
+        assert_eq!(
+            compare_hosts(&host(1), &host(2), SortKey::Ports),
+            Ordering::Less
+        );
     }
 
     #[test]
     fn sorts_by_mac_with_missing_last() {
         let mut known = host(9);
         known.mac = Some("AA:00:00:00:00:01".into());
-        assert_eq!(compare_hosts(&known, &host(1), SortKey::Mac), Ordering::Less);
+        assert_eq!(
+            compare_hosts(&known, &host(1), SortKey::Mac),
+            Ordering::Less
+        );
     }
 
     #[test]
     fn addresses_sort_numerically() {
-        assert_eq!(compare_hosts(&host(9), &host(10), SortKey::Address), Ordering::Less);
+        assert_eq!(
+            compare_hosts(&host(9), &host(10), SortKey::Address),
+            Ordering::Less
+        );
     }
 
     #[test]
     fn ties_fall_back_to_address() {
-        assert_eq!(compare_hosts(&host(1), &host(2), SortKey::Vendor), Ordering::Less);
+        assert_eq!(
+            compare_hosts(&host(1), &host(2), SortKey::Vendor),
+            Ordering::Less
+        );
     }
 }

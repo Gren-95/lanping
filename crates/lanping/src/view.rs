@@ -6,18 +6,18 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length};
 
 use crate::app::{HistoryEntry, LanPing, Message, Notice};
-use crate::host_order::SortKey;
 use crate::export_format::ExportFormat;
 use crate::filter_bar::filter_bar;
-use crate::theme::Edge;
+use crate::host_order::SortKey;
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
-use lanping_core::range::LocalNetwork;
-use crate::monitor::AutoInterval;
-use lanping_core::diff::HostStatus;
 use crate::modal::overlay;
-use crate::settings::SettingsTab;
+use crate::monitor::AutoInterval;
 use crate::results::{pill, results};
+use crate::settings::SettingsTab;
+use crate::theme::Edge;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
+use lanping_core::diff::HostStatus;
+use lanping_core::range::LocalNetwork;
 
 /// Windows at least this wide put the scan controls beside the title.
 /// Windows at least this wide lay each toolbar out as one aligned row.
@@ -59,7 +59,9 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         .spacing(SECTION_SPACING)
         .into()
     } else {
-        column![header(app), panel(scan_controls(app))].spacing(SECTION_SPACING).into()
+        column![header(app), panel(scan_controls(app))]
+            .spacing(SECTION_SPACING)
+            .into()
     };
     column![top, results_panel(app, width), status_line(app)]
         .spacing(SECTION_SPACING)
@@ -70,7 +72,9 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
 fn header(app: &LanPing) -> Element<'_, Message> {
     let title = column![
         text("LanPing").size(28).font(BOLD),
-        text("See every device on your network").size(14).color(MUTED),
+        text("See every device on your network")
+            .size(14)
+            .color(MUTED),
     ]
     .spacing(2);
 
@@ -159,9 +163,12 @@ fn target_row(app: &LanPing) -> Element<'_, Message> {
 fn network_suggestions<'a>(networks: Vec<LocalNetwork>) -> Element<'a, Message> {
     let entries = networks.into_iter().map(|network| {
         button(
-            row![lucide::network().size(ICON_SIZE - 2.0).color(MUTED), text(network.to_string()).size(13)]
-                .spacing(8)
-                .align_y(Alignment::Center),
+            row![
+                lucide::network().size(ICON_SIZE - 2.0).color(MUTED),
+                text(network.to_string()).size(13)
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
         )
         .on_press(Message::NetworkPicked(network))
         .width(Length::Fill)
@@ -179,7 +186,9 @@ fn progress_row(app: &LanPing) -> Element<'_, Message> {
         progress_bar(0.0..=total as f32, scanned as f32)
             .girth(6)
             .style(theme::progress),
-        text(format!("{percent}%  ({scanned}/{total})")).size(12).color(MUTED),
+        text(format!("{percent}%  ({scanned}/{total})"))
+            .size(12)
+            .color(MUTED),
     ]
     .spacing(ITEM_SPACING)
     .align_y(Alignment::Center)
@@ -203,7 +212,9 @@ fn results_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
 }
 
 fn toolbar(app: &LanPing, wide: bool) -> Element<'_, Message> {
-    column![filter_bar(app, wide), tools_row(app, wide)].spacing(8).into()
+    column![filter_bar(app, wide), tools_row(app, wide)]
+        .spacing(8)
+        .into()
 }
 
 /// Controls fused into one input group: no gap, so their borders meet.
@@ -216,7 +227,9 @@ pub(crate) fn input_group(items: Vec<Element<'_, Message>>) -> Element<'_, Messa
 
 /// Items of one toolbar line. Wide windows keep one line; narrow ones wrap.
 pub(crate) fn toolbar_row(items: Vec<Element<'_, Message>>, wide: bool) -> Element<'_, Message> {
-    let line = Row::with_children(items).spacing(ITEM_SPACING).align_y(Alignment::Center);
+    let line = Row::with_children(items)
+        .spacing(ITEM_SPACING)
+        .align_y(Alignment::Center);
     if wide {
         line.into()
     } else {
@@ -236,7 +249,11 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
     .padding(theme::CONTROL_PADDING)
     .width(240)
     .style(theme::pick_at(Edge::First));
-    let export_formats = if has_hosts { ExportFormat::ALL.to_vec() } else { Vec::new() };
+    let export_formats = if has_hosts {
+        ExportFormat::ALL.to_vec()
+    } else {
+        Vec::new()
+    };
     let export = pick_list(export_formats, None::<ExportFormat>, Message::ExportPicked)
         .placeholder("Export")
         .text_size(13)
@@ -244,18 +261,26 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
         .width(120)
         .style(theme::pick_at(Edge::Last));
 
-    let sort_key = pick_list(&SortKey::ALL[..], Some(app.sort_key), Message::SortKeyPicked)
-        .text_size(13)
-        .padding(theme::CONTROL_PADDING)
-        .width(150)
-        .style(theme::pick_at(Edge::First));
+    let sort_key = pick_list(
+        &SortKey::ALL[..],
+        Some(app.sort_key),
+        Message::SortKeyPicked,
+    )
+    .text_size(13)
+    .padding(theme::CONTROL_PADDING)
+    .width(150)
+    .style(theme::pick_at(Edge::First));
     let (direction_icon, direction_tip) = if app.sort_ascending {
         (lucide::arrow_up(), "Ascending")
     } else {
         (lucide::arrow_down(), "Descending")
     };
     let direction = with_tooltip(
-        icon_button(direction_icon.size(ICON_SIZE), Some(Message::SortDirectionToggled), Edge::Last),
+        icon_button(
+            direction_icon.size(ICON_SIZE),
+            Some(Message::SortDirectionToggled),
+            Edge::Last,
+        ),
         direction_tip,
     );
 
@@ -268,17 +293,18 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
         text("Sort by").size(13).color(MUTED).into(),
         input_group(vec![sort_key.into(), direction]),
         with_tooltip(
-            icon_button(view_icon.size(ICON_SIZE), Some(Message::CardViewToggled), Edge::Alone),
+            icon_button(
+                view_icon.size(ICON_SIZE),
+                Some(Message::CardViewToggled),
+                Edge::Alone,
+            ),
             view_tip,
         ),
     ];
     if wide {
         items.push(space::horizontal().into());
     }
-    items.push(input_group(vec![
-        history.into(),
-        export.into(),
-    ]));
+    items.push(input_group(vec![history.into(), export.into()]));
     toolbar_row(items, wide)
 }
 

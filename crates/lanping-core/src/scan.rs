@@ -48,7 +48,10 @@ impl ScanConfig {
 
 #[derive(Debug, Clone)]
 pub enum ScanEvent {
-    Progress { scanned: usize, total: usize },
+    Progress {
+        scanned: usize,
+        total: usize,
+    },
     /// A live host was found, or new details arrived for a known one.
     Host(Host),
     Finished,
@@ -86,10 +89,7 @@ async fn run_scan(config: ScanConfig, events: mpsc::Sender<ScanEvent>) {
     let _ = events.send(ScanEvent::Finished).await;
 }
 
-async fn sweep(
-    config: &ScanConfig,
-    events: &mpsc::Sender<ScanEvent>,
-) -> HashMap<Ipv4Addr, Host> {
+async fn sweep(config: &ScanConfig, events: &mpsc::Sender<ScanEvent>) -> HashMap<Ipv4Addr, Host> {
     let icmp: Option<Arc<Client>> = create_icmp_client().map(Arc::new);
     let limit = Arc::new(Semaphore::new(config.max_parallel_probes.max(1)));
     let total = config.targets.len();
@@ -179,10 +179,10 @@ async fn enrich(
     }
 
     while let Some(joined) = lookups.join_next().await {
-        if let Ok(Some(host)) = joined {
-            if events.send(ScanEvent::Host(host)).await.is_err() {
-                return;
-            }
+        if let Ok(Some(host)) = joined
+            && events.send(ScanEvent::Host(host)).await.is_err()
+        {
+            return;
         }
     }
 }

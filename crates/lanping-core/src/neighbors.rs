@@ -135,7 +135,9 @@ IP address       HW type     Flags       HW address            Mask     Device
         let table = parse_proc_net_arp(text);
         assert_eq!(table.len(), 2);
         assert_eq!(
-            table.get(&"192.168.0.1".parse().unwrap()).map(String::as_str),
+            table
+                .get(&"192.168.0.1".parse().unwrap())
+                .map(String::as_str),
             Some("AA:BB:CC:DD:EE:01")
         );
     }
@@ -149,7 +151,9 @@ IP address       HW type     Flags       HW address            Mask     Device
 ";
         let table = parse_arp_command(text);
         assert_eq!(
-            table.get(&"192.168.0.1".parse().unwrap()).map(String::as_str),
+            table
+                .get(&"192.168.0.1".parse().unwrap())
+                .map(String::as_str),
             Some("A0:0B:0C:0D:0E:01")
         );
         assert!(!table.contains_key(&"192.168.0.77".parse().unwrap()));
@@ -166,7 +170,9 @@ Interface: 192.168.0.5 --- 0x9
         let table = parse_arp_command(text);
         assert_eq!(table.len(), 1);
         assert_eq!(
-            table.get(&"192.168.0.1".parse().unwrap()).map(String::as_str),
+            table
+                .get(&"192.168.0.1".parse().unwrap())
+                .map(String::as_str),
             Some("AA:BB:CC:DD:EE:01")
         );
     }

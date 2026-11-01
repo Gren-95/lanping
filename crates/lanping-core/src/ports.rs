@@ -7,7 +7,8 @@ use tokio::task::JoinSet;
 use crate::probe::{TcpOutcome, tcp_probe};
 
 /// Where the common port list comes from.
-pub const PORT_LIST_SOURCE_URL: &str = "https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers";
+pub const PORT_LIST_SOURCE_URL: &str =
+    "https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortGroup {
@@ -190,7 +191,10 @@ mod tests {
 
     #[test]
     fn parses_ports_and_ranges() {
-        assert_eq!(parse_ports("80, 22,8000-8002, 80").unwrap(), vec![22, 80, 8000, 8001, 8002]);
+        assert_eq!(
+            parse_ports("80, 22,8000-8002, 80").unwrap(),
+            vec![22, 80, 8000, 8001, 8002]
+        );
     }
 
     #[test]

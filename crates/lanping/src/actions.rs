@@ -106,8 +106,14 @@ mod tests {
     #[test]
     fn offers_default_web_ports_and_copy_actions() {
         let actions = actions_for(&host());
-        assert!(actions.contains(&HostAction::OpenWeb { https: false, port: 80 }));
-        assert!(actions.contains(&HostAction::OpenWeb { https: true, port: 443 }));
+        assert!(actions.contains(&HostAction::OpenWeb {
+            https: false,
+            port: 80
+        }));
+        assert!(actions.contains(&HostAction::OpenWeb {
+            https: true,
+            port: 443
+        }));
         assert!(!actions.contains(&HostAction::CopyMac));
         assert!(!actions.contains(&HostAction::CopyHostname));
     }
@@ -116,16 +122,34 @@ mod tests {
     fn adds_alternate_web_ports_only_when_open() {
         let mut found = host();
         found.open_ports = vec![8080];
-        assert!(actions_for(&found).contains(&HostAction::OpenWeb { https: false, port: 8080 }));
-        assert!(!actions_for(&host()).contains(&HostAction::OpenWeb { https: false, port: 8080 }));
+        assert!(actions_for(&found).contains(&HostAction::OpenWeb {
+            https: false,
+            port: 8080
+        }));
+        assert!(!actions_for(&host()).contains(&HostAction::OpenWeb {
+            https: false,
+            port: 8080
+        }));
     }
 
     #[test]
     fn builds_urls_without_default_port() {
-        let web = HostAction::OpenWeb { https: true, port: 443 };
-        assert_eq!(web.effect(&host()), Some(Effect::Open("https://192.168.0.9".into())));
-        let alt = HostAction::OpenWeb { https: false, port: 8080 };
-        assert_eq!(alt.effect(&host()), Some(Effect::Open("http://192.168.0.9:8080".into())));
+        let web = HostAction::OpenWeb {
+            https: true,
+            port: 443,
+        };
+        assert_eq!(
+            web.effect(&host()),
+            Some(Effect::Open("https://192.168.0.9".into()))
+        );
+        let alt = HostAction::OpenWeb {
+            https: false,
+            port: 8080,
+        };
+        assert_eq!(
+            alt.effect(&host()),
+            Some(Effect::Open("http://192.168.0.9:8080".into()))
+        );
     }
 
     #[test]
@@ -144,8 +168,14 @@ mod tests {
     fn copy_actions_use_host_details() {
         let mut found = host();
         found.mac = Some("AA:BB:CC:DD:EE:FF".into());
-        assert_eq!(HostAction::CopySshCommand.effect(&found), Some(Effect::Copy("ssh 192.168.0.9".into())));
-        assert_eq!(HostAction::CopyMac.effect(&found), Some(Effect::Copy("AA:BB:CC:DD:EE:FF".into())));
+        assert_eq!(
+            HostAction::CopySshCommand.effect(&found),
+            Some(Effect::Copy("ssh 192.168.0.9".into()))
+        );
+        assert_eq!(
+            HostAction::CopyMac.effect(&found),
+            Some(Effect::Copy("AA:BB:CC:DD:EE:FF".into()))
+        );
         assert_eq!(HostAction::CopyHostname.effect(&found), None);
     }
 }

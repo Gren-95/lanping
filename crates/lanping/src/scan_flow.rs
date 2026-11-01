@@ -62,7 +62,9 @@ impl LanPing {
 
     /// Ports for the next scan: the ticked and custom ports. Empty means no port scan.
     fn ports_to_scan(&self) -> Result<Vec<u16>, String> {
-        self.settings.resolve_ports().map_err(|error| error.to_string())
+        self.settings
+            .resolve_ports()
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn stop(&mut self, reason: &str) {
@@ -72,7 +74,10 @@ impl LanPing {
         if self.scanning {
             self.scanning = false;
             self.incoming.clear();
-            self.set_notice(Notice::Info, format!("{reason}: {} hosts found", self.hosts.len()));
+            self.set_notice(
+                Notice::Info,
+                format!("{reason}: {} hosts found", self.hosts.len()),
+            );
         }
     }
 
@@ -88,7 +93,11 @@ impl LanPing {
     }
 
     fn upsert_host(&mut self, host: Host) {
-        let list = if self.auto_run { &mut self.incoming } else { &mut self.hosts };
+        let list = if self.auto_run {
+            &mut self.incoming
+        } else {
+            &mut self.hosts
+        };
         match list.iter_mut().find(|known| known.ip == host.ip) {
             Some(known) => *known = host,
             None => list.push(host),
@@ -109,7 +118,10 @@ impl LanPing {
 
         let gone = self.diff.gone.len();
         let summary = if gone > 0 {
-            format!("Scan finished: {} hosts found, {gone} gone", self.hosts.len())
+            format!(
+                "Scan finished: {} hosts found, {gone} gone",
+                self.hosts.len()
+            )
         } else {
             format!("Scan finished: {} hosts found", self.hosts.len())
         };
@@ -126,7 +138,10 @@ impl LanPing {
             return;
         };
         if let Err(error) = notify::send("LanPing", &text) {
-            self.set_notice(Notice::Error, format!("Could not show notification: {error}"));
+            self.set_notice(
+                Notice::Error,
+                format!("Could not show notification: {error}"),
+            );
         }
     }
 }

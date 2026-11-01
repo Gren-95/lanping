@@ -54,7 +54,11 @@ pub fn new_device_alert(hosts: &[Host], diff: &ScanDiff, labels: &DeviceLabels) 
     let mut text = format!(
         "{} new {}: {}",
         new_hosts.len(),
-        if new_hosts.len() == 1 { "device" } else { "devices" },
+        if new_hosts.len() == 1 {
+            "device"
+        } else {
+            "devices"
+        },
         names.join(", ")
     );
     if extra > 0 {
@@ -97,7 +101,10 @@ mod tests {
     fn no_alert_without_new_devices() {
         let hosts = [host(1)];
         let diff = diff_scans(&hosts, &hosts);
-        assert_eq!(new_device_alert(&hosts, &diff, &DeviceLabels::default()), None);
+        assert_eq!(
+            new_device_alert(&hosts, &diff, &DeviceLabels::default()),
+            None
+        );
     }
 
     #[test]
@@ -107,7 +114,10 @@ mod tests {
         let current: Vec<Host> = (2..=6).map(host).collect();
         let diff = diff_scans(&[host(1)], &current);
         let alert = new_device_alert(&current, &diff, &labels).unwrap();
-        assert_eq!(alert, "5 new devices: Printer (10.0.0.2), 10.0.0.3, 10.0.0.4 and 2 more");
+        assert_eq!(
+            alert,
+            "5 new devices: Printer (10.0.0.2), 10.0.0.3, 10.0.0.4 and 2 more"
+        );
     }
 
     #[test]
