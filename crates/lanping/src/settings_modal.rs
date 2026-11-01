@@ -25,7 +25,7 @@ pub fn settings_dialog<'a>(app: &'a LanPing, tab: &'a SettingsTab) -> Element<'a
     let header = row![
         text("Settings").size(22).font(BOLD),
         space::horizontal(),
-        button(text("Done").size(14))
+        button(icon_label(lucide::check(), "Done", 14))
             .on_press(Message::CloseModal)
             .padding([6.0, 16.0])
             .style(theme::primary_button),
@@ -53,16 +53,24 @@ pub fn settings_dialog<'a>(app: &'a LanPing, tab: &'a SettingsTab) -> Element<'a
 
 fn tab_strip(selected: &SettingsTab) -> Element<'_, Message> {
     let tabs = [
-        (SettingsTab::CommonPorts, "Common ports"),
-        (SettingsTab::CustomPorts, "Custom ports"),
-        (SettingsTab::Columns, "Columns"),
-        (SettingsTab::Monitoring, "Monitoring"),
-        (SettingsTab::Network, "Network"),
-        (SettingsTab::Presets, "Presets"),
+        (
+            SettingsTab::CommonPorts,
+            lucide::list_checks(),
+            "Common ports",
+        ),
+        (
+            SettingsTab::CustomPorts,
+            lucide::square_pen(),
+            "Custom ports",
+        ),
+        (SettingsTab::Columns, lucide::columns_three(), "Columns"),
+        (SettingsTab::Monitoring, lucide::refresh_cw(), "Monitoring"),
+        (SettingsTab::Network, lucide::network(), "Network"),
+        (SettingsTab::Presets, lucide::bookmark(), "Presets"),
     ];
-    Row::with_children(tabs.into_iter().map(|(tab, label)| {
+    Row::with_children(tabs.into_iter().map(|(tab, icon, label)| {
         let is_selected = tab == *selected;
-        button(text(label).size(14))
+        button(icon_label(icon, label, 14))
             .on_press(Message::ShowSettings(tab))
             .padding([7.0, 16.0])
             .style(theme::tab_button(is_selected))
@@ -79,8 +87,16 @@ fn common_ports_tab(app: &LanPing) -> Element<'_, Message> {
     let selected_count = settings.selected_ports.len();
 
     let bulk = Row::with_children(vec![
-        small_button("Select all", Some(Message::SelectAllPorts)),
-        small_button("Select none", Some(Message::SelectNoPorts)),
+        small_icon_button(
+            lucide::square_check_big(),
+            "Select all",
+            Some(Message::SelectAllPorts),
+        ),
+        small_icon_button(
+            lucide::square(),
+            "Select none",
+            Some(Message::SelectNoPorts),
+        ),
         text(format!(
             "{selected_count} of {} selected",
             COMMON_SERVICES.len()
@@ -232,6 +248,31 @@ pub fn column_list(app: &LanPing, highlight: Option<Column>) -> Element<'_, Mess
         .into()
 }
 
+/// A small button with a Lucide icon in front of its label.
+fn small_icon_button(
+    icon: iced::widget::Text<'static>,
+    label: &'static str,
+    message: Option<Message>,
+) -> Element<'static, Message> {
+    button(icon_label(icon, label, 13))
+        .on_press_maybe(message)
+        .padding([6.0, 14.0])
+        .style(theme::quiet_button)
+        .into()
+}
+
+/// An icon followed by a text label, sized to match.
+fn icon_label(
+    icon: iced::widget::Text<'static>,
+    label: &'static str,
+    size: u32,
+) -> Element<'static, Message> {
+    row![icon.size(size as f32 + 2.0), text(label).size(size)]
+        .spacing(8)
+        .align_y(Alignment::Center)
+        .into()
+}
+
 pub fn small_button(label: &'static str, message: Option<Message>) -> Element<'static, Message> {
     button(text(label).size(13))
         .on_press_maybe(message)
@@ -300,7 +341,11 @@ fn presets_tab(app: &LanPing) -> Element<'_, Message> {
                 .size(12)
                 .color(MUTED),
             space::horizontal(),
-            small_button("Delete", Some(Message::DeletePreset(index))),
+            small_icon_button(
+                lucide::trash_two(),
+                "Delete",
+                Some(Message::DeletePreset(index))
+            ),
         ]
         .spacing(ITEM_SPACING)
         .align_y(Alignment::Center);
