@@ -1,4 +1,4 @@
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,9 @@ pub struct Host {
     /// Absent in scans saved by older versions.
     #[serde(default)]
     pub banners: Vec<ServiceBanner>,
+    /// IPv6 addresses the neighbor cache lists for this device. Absent in older saved scans.
+    #[serde(default)]
+    pub ipv6: Vec<Ipv6Addr>,
 }
 
 impl Host {
@@ -33,6 +36,7 @@ impl Host {
             vendor: None,
             open_ports: Vec::new(),
             banners: Vec::new(),
+            ipv6: Vec::new(),
         }
     }
 
@@ -67,5 +71,6 @@ mod tests {
         let json = r#"{"ip":"10.0.0.5","latency":null,"hostname":null,"mac":null,"vendor":null,"open_ports":[22]}"#;
         let host: Host = serde_json::from_str(json).unwrap();
         assert!(host.banners.is_empty());
+        assert!(host.ipv6.is_empty());
     }
 }

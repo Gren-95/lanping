@@ -92,6 +92,7 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
             "Hostname",
             host.hostname.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
         ))
+        .push(fact("IPv6", ipv6_text(host)))
         .push(fact(
             "MAC",
             host.mac.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
@@ -102,6 +103,17 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
         ))
         .push(fact("Latency", latency))
         .into()
+}
+
+fn ipv6_text(host: &Host) -> String {
+    if host.ipv6.is_empty() {
+        return NO_VALUE.to_owned();
+    }
+    host.ipv6
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn fact<'a>(label: &'static str, value: String) -> Element<'a, Message> {
