@@ -242,7 +242,7 @@ mod tests {
         assert!(is_virtual_interface("docker0"));
         assert!(is_virtual_interface("br-bb602f6ce717"));
         assert!(is_virtual_interface("tailscale0"));
-        assert!(!is_virtual_interface("wlp0s20f3"));
+        assert!(!is_virtual_interface("wlan0"));
         assert!(!is_virtual_interface("eth0"));
     }
 

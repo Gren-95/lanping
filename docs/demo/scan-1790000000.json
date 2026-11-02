@@ -1,0 +1,139 @@
+{
+ "target": "192.168.1.0/24",
+ "finished_at_unix": 1790000000,
+ "hosts": [
+  {
+   "ip": "192.168.1.1",
+   "latency": {
+    "secs": 0,
+    "nanos": 2000000
+   },
+   "hostname": "router.lan",
+   "mac": "02:00:5E:10:00:01",
+   "vendor": "Ubiquiti Inc",
+   "open_ports": [
+    53,
+    80,
+    443
+   ],
+   "banners": [
+    {
+     "port": 80,
+     "text": "nginx"
+    }
+   ],
+   "ipv6": [
+    "2001:db8::1"
+   ]
+  },
+  {
+   "ip": "192.168.1.10",
+   "latency": {
+    "secs": 0,
+    "nanos": 4000000
+   },
+   "hostname": "nas.lan",
+   "mac": "02:00:5E:10:00:02",
+   "vendor": "Synology Incorporated",
+   "open_ports": [
+    22,
+    80,
+    445,
+    5000
+   ],
+   "banners": [
+    {
+     "port": 22,
+     "text": "SSH-2.0-OpenSSH_9.6"
+    }
+   ],
+   "ipv6": []
+  },
+  {
+   "ip": "192.168.1.21",
+   "latency": {
+    "secs": 0,
+    "nanos": 12000000
+   },
+   "hostname": "printer.lan",
+   "mac": "02:00:5E:10:00:03",
+   "vendor": "Hewlett Packard",
+   "open_ports": [
+    80,
+    631,
+    9100
+   ],
+   "banners": [],
+   "ipv6": []
+  },
+  {
+   "ip": "192.168.1.34",
+   "latency": {
+    "secs": 0,
+    "nanos": 48000000
+   },
+   "hostname": "living-room-tv.lan",
+   "mac": "02:00:5E:10:00:04",
+   "vendor": "LG Electronics",
+   "open_ports": [
+    8080
+   ],
+   "banners": [],
+   "ipv6": []
+  },
+  {
+   "ip": "192.168.1.42",
+   "latency": {
+    "secs": 0,
+    "nanos": 6000000
+   },
+   "hostname": "workstation.lan",
+   "mac": "02:00:5E:10:00:05",
+   "vendor": "Intel Corporate",
+   "open_ports": [
+    22,
+    3389
+   ],
+   "banners": [],
+   "ipv6": []
+  },
+  {
+   "ip": "192.168.1.57",
+   "latency": {
+    "secs": 0,
+    "nanos": 180000000
+   },
+   "hostname": "thermostat.lan",
+   "mac": "02:00:5E:10:00:06",
+   "vendor": "Espressif Inc.",
+   "open_ports": [
+    80
+   ],
+   "banners": [],
+   "ipv6": []
+  },
+  {
+   "ip": "192.168.1.88",
+   "latency": null,
+   "hostname": null,
+   "mac": "02:00:5E:10:00:08",
+   "vendor": null,
+   "open_ports": [],
+   "banners": [],
+   "ipv6": []
+  },
+  {
+   "ip": "192.168.1.99",
+   "latency": {
+    "secs": 0,
+    "nanos": 5000000
+   },
+   "hostname": "old-phone.lan",
+   "mac": "02:00:5E:10:00:09",
+   "vendor": "Samsung Electronics",
+   "open_ports": [],
+   "banners": [],
+   "ipv6": []
+  }
+ ]
+}
