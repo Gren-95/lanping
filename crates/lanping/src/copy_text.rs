@@ -44,7 +44,7 @@ fn cell_text(column: Column, row: &Row<'_>) -> String {
         Column::Hostname => row
             .label
             .map(str::to_owned)
-            .or_else(|| host.hostname.clone())
+            .or_else(|| host.display_name().map(str::to_owned))
             .unwrap_or_else(|| NO_VALUE.to_owned()),
         Column::Mac => host.mac.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
         Column::Vendor => host.vendor.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
