@@ -55,7 +55,7 @@ macOS has no prebuilt download and is untested.
 - Name your devices and note the owner, location and tags; these are stored by MAC address, so they follow a device between scans
 - Every finished scan is saved and can be reopened from "Saved scans"
 - A summary of totals by type, vendor and open port, and a map of devices grouped around the gateway
-- Export to CSV or JSON, or copy the visible rows
+- Export to CSV, JSON or a printable HTML report (a browser can save it as a PDF), or copy the visible rows
 
 **Actions**
 

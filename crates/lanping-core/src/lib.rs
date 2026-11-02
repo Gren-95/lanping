@@ -19,6 +19,7 @@ pub mod port_risk;
 pub mod ports;
 pub mod probe;
 pub mod range;
+pub mod report;
 pub mod scan;
 pub mod snmp;
 pub mod ssdp;

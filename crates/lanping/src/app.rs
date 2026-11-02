@@ -13,6 +13,7 @@ use lanping_core::gateway::default_gateway;
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
+use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::wol::send_wake_packet;
@@ -756,8 +757,16 @@ impl LanPing {
     }
 
     fn export(&mut self, format: ExportFormat, path: &Path) {
+        let generated_at = format_unix_utc(unix_now());
+        let input = ReportInput {
+            target: &self.target,
+            generated_at: &generated_at,
+            hosts: &self.hosts,
+            labels: &self.labels,
+            notes: &self.notes,
+        };
         let result = format
-            .render(&self.hosts, &self.notes)
+            .render(&input)
             .and_then(|content| fs::write(path, content).map_err(|error| error.to_string()));
         match result {
             Ok(()) => self.set_notice(Notice::Info, format!("Saved {}", path.display())),
