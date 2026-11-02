@@ -1568,7 +1568,7 @@ dependencies = [
 
 [[package]]
 name = "lanping"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "directories",
  "iced",
@@ -1583,7 +1583,7 @@ dependencies = [
 
 [[package]]
 name = "lanping-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "dns-lookup",
  "if-addrs",
