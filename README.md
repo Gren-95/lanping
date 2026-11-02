@@ -1,6 +1,15 @@
 # LanPing
 
+[![CI](https://github.com/Gren-95/lanping/actions/workflows/ci.yml/badge.svg)](https://github.com/Gren-95/lanping/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Gren-95/lanping)](https://github.com/Gren-95/lanping/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
+[![Rust 1.90+](https://img.shields.io/badge/rust-1.90%2B-orange)](https://www.rust-lang.org)
+
 Cross-platform LAN scanner written in Rust with an [Iced](https://iced.rs) GUI.
+
+![LanPing showing a made-up network](docs/screenshot.png)
+
+*The screenshot uses the made-up scans in `docs/demo`.*
 
 ## Features
 
@@ -28,6 +37,20 @@ cargo run --release -p lanping-core --example scan_cli -- 192.168.0.0/24 22,80  
 cargo test --workspace
 scripts/build-appimage.sh                                          # needs appimagetool on PATH
 ```
+
+## Demo data
+
+`docs/demo` holds two made-up scans, so the app can be shown without a real network. To open them without touching your own settings or saved scans:
+
+```bash
+demo="$(mktemp -d)"
+mkdir -p "$demo/data/lanping/scans"
+cp docs/demo/*.json "$demo/data/lanping/scans/"
+XDG_CONFIG_HOME="$demo/config" XDG_DATA_HOME="$demo/data" \
+  cargo run --release -p lanping -- "$demo/data/lanping/scans/scan-1790003600.json"
+```
+
+Any saved scan file can be opened the same way: `lanping path/to/scan.json`.
 
 ## Releases
 

@@ -275,6 +275,9 @@ impl LanPing {
             auto_run: false,
         };
         app.refresh_history();
+        if let Some(path) = std::env::args_os().nth(1) {
+            app.open_scan_file(PathBuf::from(path));
+        }
         let first_scan = if app.settings.scan_on_startup {
             Task::done(Message::StartScan)
         } else {
@@ -709,6 +712,21 @@ impl LanPing {
     pub(crate) fn previous_scan_hosts(&self, target: &str) -> Option<Vec<Host>> {
         let entry = self.history.iter().find(|entry| entry.target == target)?;
         load_scan(&entry.path).ok().map(|scan| scan.hosts)
+    }
+
+    /// Opens a saved scan named on the command line, for example a demo or one from another machine.
+    fn open_scan_file(&mut self, path: PathBuf) {
+        let entry = self
+            .history
+            .iter()
+            .find(|entry| entry.path == path)
+            .cloned()
+            .unwrap_or_else(|| HistoryEntry {
+                label: path.display().to_string(),
+                target: String::new(),
+                path,
+            });
+        self.load_history(&entry);
     }
 
     fn load_history(&mut self, entry: &HistoryEntry) {
