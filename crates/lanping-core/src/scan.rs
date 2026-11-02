@@ -145,15 +145,17 @@ async fn sweep(config: &ScanConfig, events: &mpsc::Sender<ScanEvent>) -> HashMap
 }
 
 async fn probe_host(icmp: Option<&Client>, ip: Ipv4Addr, wait: Duration) -> Option<Host> {
-    let latency = match icmp {
-        Some(client) => match ping(client, ip, wait).await {
-            Some(round_trip) => Some(round_trip),
-            None => tcp_liveness(ip, wait).await,
-        },
-        None => tcp_liveness(ip, wait).await,
-    }?;
+    let answer = match icmp {
+        Some(client) => ping(client, ip, wait).await,
+        None => None,
+    };
+    let (latency, ttl) = match answer {
+        Some(answer) => answer,
+        None => (tcp_liveness(ip, wait).await?, None),
+    };
     let mut host = Host::new(ip);
     host.latency = Some(latency);
+    host.ttl = ttl;
     Some(host)
 }
 

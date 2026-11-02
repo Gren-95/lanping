@@ -12,6 +12,7 @@ pub mod labels;
 pub mod mdns;
 pub mod neighbors;
 pub mod netbios;
+pub mod os_guess;
 pub mod ports;
 pub mod probe;
 pub mod range;

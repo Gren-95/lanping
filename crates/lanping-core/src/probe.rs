@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
-use surge_ping::{Client, Config, ICMP, PingIdentifier, PingSequence};
+use surge_ping::{Client, Config, ICMP, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
@@ -20,7 +20,8 @@ pub fn create_icmp_client() -> Option<Client> {
     Client::new(&Config::builder().kind(ICMP::V4).build()).ok()
 }
 
-pub async fn ping(client: &Client, ip: Ipv4Addr, wait: Duration) -> Option<Duration> {
+/// Pings `ip`. Returns the round trip, and the reply's TTL when the socket reports it.
+pub async fn ping(client: &Client, ip: Ipv4Addr, wait: Duration) -> Option<(Duration, Option<u8>)> {
     let identifier = PingIdentifier(rand_identifier(ip));
     let mut pinger = client.pinger(IpAddr::V4(ip), identifier).await;
     pinger.timeout(wait);
@@ -28,7 +29,13 @@ pub async fn ping(client: &Client, ip: Ipv4Addr, wait: Duration) -> Option<Durat
         .ping(PingSequence(0), &PING_PAYLOAD)
         .await
         .ok()
-        .map(|(_packet, round_trip)| round_trip)
+        .map(|(packet, round_trip)| {
+            let ttl = match packet {
+                IcmpPacket::V4(reply) => reply.get_ttl(),
+                IcmpPacket::V6(_) => None,
+            };
+            (round_trip, ttl)
+        })
 }
 
 /// Identifier derived from the target so concurrent pings do not collide.

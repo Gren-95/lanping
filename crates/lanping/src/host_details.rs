@@ -6,6 +6,7 @@ use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
 use lanping_core::device_type::guess_device_type;
 use lanping_core::history::Sighting;
+use lanping_core::os_guess::guess_os;
 use lanping_core::ports::format_ports;
 
 use crate::app::{LanPing, Message};
@@ -105,6 +106,7 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
         .push(fact("Latency", latency));
     let announced = [
         Some(("Type", format!("{} (best guess)", guess_device_type(host)))),
+        guess_os(host).map(|os| ("OS", format!("{os} (best guess)"))),
         host.discovery.name.clone().map(|name| ("Announces", name)),
         device_model(host).map(|model| ("Model", model)),
         (!host.discovery.services.is_empty())
