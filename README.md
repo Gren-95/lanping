@@ -46,6 +46,7 @@ macOS has no prebuilt download and is untested.
 **Results**
 
 - Sortable table or card view, with search, filters and saved presets
+- A best guess at each device's type, with an icon and a filter
 - Reorder and hide columns by dragging, from Settings or by right-clicking a column header
 - Click a device for its ports, banners and history across scans
 - Devices are tagged new, changed or gone against the previous scan of the same network

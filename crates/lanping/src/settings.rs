@@ -20,18 +20,20 @@ pub enum Column {
     Mac,
     Vendor,
     Ports,
+    DeviceType,
     /// The "Open with" button.
     Actions,
 }
 
 impl Column {
-    pub const ALL: [Column; 7] = [
+    pub const ALL: [Column; 8] = [
         Column::Address,
         Column::Latency,
         Column::Hostname,
         Column::Mac,
         Column::Vendor,
         Column::Ports,
+        Column::DeviceType,
         Column::Actions,
     ];
 
@@ -44,6 +46,7 @@ impl Column {
             Column::Mac => Some(SortKey::Mac),
             Column::Vendor => Some(SortKey::Vendor),
             Column::Ports => Some(SortKey::Ports),
+            Column::DeviceType => Some(SortKey::DeviceType),
             Column::Actions => None,
         }
     }
@@ -56,6 +59,7 @@ impl Column {
             Column::Mac => "MAC address",
             Column::Vendor => "Vendor",
             Column::Ports => "Open ports",
+            Column::DeviceType => "Type",
             Column::Actions => "Open with",
         }
     }

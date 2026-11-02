@@ -4,6 +4,7 @@ use std::fmt;
 use std::time::Duration;
 
 use lanping_core::Host;
+use lanping_core::device_type::{DeviceType, guess_device_type};
 use lanping_core::diff::HostStatus;
 use lanping_core::ports::format_ports;
 use serde::{Deserialize, Serialize};
@@ -128,6 +129,15 @@ impl fmt::Display for Choice<String> {
     }
 }
 
+impl fmt::Display for Choice<DeviceType> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Any => f.write_str("Any type"),
+            Self::Only(device_type) => write!(f, "{device_type}"),
+        }
+    }
+}
+
 impl fmt::Display for Choice<u16> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -188,6 +198,7 @@ pub enum FilterChange {
     Vendor(Choice<String>),
     Port(Choice<u16>),
     Name(NameFilter),
+    DeviceType(Choice<DeviceType>),
     Clear,
 }
 
@@ -200,6 +211,7 @@ pub struct HostFilter {
     pub port: Option<u16>,
     pub status: Option<RowStatus>,
     pub name: NameFilter,
+    pub device_type: Option<DeviceType>,
 }
 
 impl HostFilter {
@@ -211,6 +223,7 @@ impl HostFilter {
             FilterChange::Vendor(choice) => self.vendor = choice.value().cloned(),
             FilterChange::Port(choice) => self.port = choice.value().copied(),
             FilterChange::Name(name) => self.name = name,
+            FilterChange::DeviceType(choice) => self.device_type = choice.value().copied(),
             FilterChange::Clear => *self = Self::default(),
         }
     }
@@ -224,6 +237,7 @@ impl HostFilter {
             self.port.is_some(),
             self.status.is_some(),
             self.name != NameFilter::Any,
+            self.device_type.is_some(),
         ]
         .into_iter()
         .filter(|active| *active)
@@ -239,6 +253,9 @@ impl HostFilter {
                 .as_ref()
                 .is_none_or(|vendor| host.vendor.as_ref() == Some(vendor))
             && self.port.is_none_or(|port| host.open_ports.contains(&port))
+            && self
+                .device_type
+                .is_none_or(|wanted| guess_device_type(host) == wanted)
             && text_matches(host, label, &self.text.trim().to_lowercase())
     }
 }
@@ -334,6 +351,19 @@ mod tests {
         printer.ipv6 = vec!["fe80::5".parse().unwrap()];
         assert!(text("FE80::5").matches(&printer, None, RowStatus::Unchanged));
         assert!(!text("cisco").matches(&printer, None, RowStatus::Unchanged));
+    }
+
+    #[test]
+    fn filters_by_the_guessed_device_type() {
+        let mut printer = host(5);
+        printer.open_ports = vec![9100];
+        let wanted = HostFilter {
+            device_type: Some(DeviceType::Printer),
+            ..HostFilter::default()
+        };
+        assert_eq!(wanted.active_count(), 1);
+        assert!(wanted.matches(&printer, None, RowStatus::Unchanged));
+        assert!(!wanted.matches(&host(6), None, RowStatus::Unchanged));
     }
 
     #[test]

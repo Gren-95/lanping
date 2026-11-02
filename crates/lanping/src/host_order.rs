@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 
 use lanping_core::Host;
+use lanping_core::device_type::guess_device_type;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortKey {
@@ -13,16 +14,18 @@ pub enum SortKey {
     Vendor,
     /// Number of open ports found.
     Ports,
+    DeviceType,
 }
 
 impl SortKey {
-    pub const ALL: [SortKey; 6] = [
+    pub const ALL: [SortKey; 7] = [
         SortKey::Address,
         SortKey::Latency,
         SortKey::Hostname,
         SortKey::Mac,
         SortKey::Vendor,
         SortKey::Ports,
+        SortKey::DeviceType,
     ];
 }
 
@@ -35,6 +38,7 @@ impl std::fmt::Display for SortKey {
             Self::Mac => "MAC address",
             Self::Vendor => "Vendor",
             Self::Ports => "Open ports",
+            Self::DeviceType => "Type",
         })
     }
 }
@@ -52,6 +56,9 @@ pub fn compare_hosts(a: &Host, b: &Host, key: SortKey) -> Ordering {
         SortKey::Mac => compare_optional_text(&a.mac, &b.mac).then(by_address),
         SortKey::Vendor => compare_optional_text(&a.vendor, &b.vendor).then(by_address),
         SortKey::Ports => a.open_ports.len().cmp(&b.open_ports.len()).then(by_address),
+        SortKey::DeviceType => guess_device_type(a)
+            .cmp(&guess_device_type(b))
+            .then(by_address),
     }
 }
 
