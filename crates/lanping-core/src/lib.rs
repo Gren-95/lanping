@@ -1,6 +1,7 @@
 //! UI-free LAN scanning engine.
 
 pub mod banner;
+pub mod device_notes;
 pub mod device_type;
 pub mod diagnostics;
 pub mod diff;
