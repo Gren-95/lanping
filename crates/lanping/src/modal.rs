@@ -2,14 +2,15 @@
 
 use iced::font::Weight;
 use iced::widget::{
-    button, column, container, mouse_area, opaque, row, scrollable, space, text, text_input,
+    Text, button, column, container, mouse_area, opaque, row, scrollable, space, text, text_input,
 };
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
 
-use crate::actions::{HostAction, actions_for};
+use crate::actions::{HostAction, grouped_actions};
 use crate::app::{LanPing, Message, Modal};
 use crate::host_details::host_details_dialog;
+use crate::icons::{ICON_SIZE, lucide};
 use crate::results::pill;
 use crate::settings::Column;
 use crate::settings_modal::{column_list, settings_dialog, small_button};
@@ -85,13 +86,14 @@ fn host_actions_dialog<'a>(app: &'a LanPing, host: &'a Host) -> Element<'a, Mess
     if !host.banners.is_empty() {
         body = body.push(services_list(host));
     }
-    body = body.push(text("Open with").size(13).color(MUTED));
-    let entries = actions_for(host)
-        .into_iter()
-        .fold(column![].spacing(8), |list, action| {
-            list.push(action_button(host, action))
-        });
-    body = body.push(entries);
+    for (group, actions) in grouped_actions(host) {
+        let entries = actions
+            .into_iter()
+            .fold(column![].spacing(8), |list, action| {
+                list.push(action_button(host, action))
+            });
+        body = body.push(column![text(group.title()).size(13).color(MUTED), entries].spacing(8));
+    }
 
     column![
         header,
@@ -217,13 +219,32 @@ fn save_preset_dialog(app: &LanPing) -> Element<'_, Message> {
     .into()
 }
 
+fn action_icon(action: &HostAction) -> Text<'static> {
+    match action {
+        HostAction::OpenWeb { https: false, .. } => lucide::globe(),
+        HostAction::OpenWeb { https: true, .. } => lucide::lock(),
+        HostAction::BrowseFiles => lucide::folder_open(),
+        HostAction::Ping => lucide::activity(),
+        HostAction::Traceroute => lucide::route(),
+        HostAction::WakeOnLan => lucide::power(),
+        HostAction::CopySshCommand => lucide::terminal(),
+        HostAction::CopyAddress => lucide::hash(),
+        HostAction::CopyMac => lucide::fingerprint(),
+        HostAction::CopyHostname => lucide::tag(),
+    }
+}
+
 fn action_button(host: &Host, action: HostAction) -> Element<'_, Message> {
     let port_is_open = action
         .matching_port()
         .is_some_and(|port| host.open_ports.contains(&port));
-    let mut content = row![text(action.label()).size(14), space::horizontal()]
-        .spacing(8)
-        .align_y(Alignment::Center);
+    let mut content = row![
+        action_icon(&action).size(ICON_SIZE).color(MUTED),
+        text(action.label()).size(14),
+        space::horizontal()
+    ]
+    .spacing(8)
+    .align_y(Alignment::Center);
     if port_is_open {
         content = content.push(pill("port open", ACCENT));
     }
