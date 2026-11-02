@@ -28,7 +28,10 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - **Linux:** `LanPing-<version>-x86_64.AppImage`. Make it executable with `chmod +x`, then run it.
 - **Windows:** `LanPing-<version>-x86_64.exe`. It is unsigned, so SmartScreen warns on first launch.
 
-- **macOS:** `LanPing-<version>-macos-universal.dmg`, for Intel and Apple silicon. It is not notarized, so macOS blocks the first launch: drag it to Applications, then right-click it and choose Open, or allow it under System Settings > Privacy & Security. Allow local network access when asked, or scans find nothing.
+- **macOS:** `LanPing-<version>-macos-universal.dmg`, for Intel and Apple silicon.
+
+> [!WARNING]
+> **The macOS build is untested.** It is built automatically but has never been run on a Mac, so it may not work. It is also not notarized, so macOS blocks the first launch: drag it to Applications, then right-click it and choose Open, or allow it under System Settings > Privacy & Security. Allow local network access when asked, or scans find nothing. Please report any problems in the [issues](https://github.com/Gren-95/lanping/issues).
 
 ## Features
 

@@ -8,6 +8,7 @@ on:
   pull_request:
     paths:
       - .github/workflows/release.yml
+      - .github/release-notes.md
       - scripts/build-appimage.sh
       - scripts/build-macos-app.sh
       - packaging/**
@@ -77,6 +78,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -84,4 +86,4 @@ jobs:
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --generate-notes --notes-file .github/release-notes.md
