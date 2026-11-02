@@ -154,6 +154,7 @@ pub enum Message {
     ShowHostActions(String),
     CloseModal,
     BannersToggled(bool),
+    SnmpCommunityChanged(String),
     PortToggled(u16, bool),
     SelectAllPorts,
     SelectNoPorts,
@@ -481,6 +482,7 @@ impl LanPing {
     fn apply_settings_change(&mut self, message: Message) {
         match message {
             Message::BannersToggled(enabled) => self.settings.grab_banners = enabled,
+            Message::SnmpCommunityChanged(text) => self.settings.snmp_community = text,
             Message::PortToggled(port, selected) => self.settings.set_port_selected(port, selected),
             Message::SelectAllPorts => self.settings.select_all_ports(),
             Message::SelectNoPorts => self.settings.select_no_ports(),
