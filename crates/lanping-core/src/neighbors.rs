@@ -38,14 +38,16 @@ async fn run_arp_command() -> NeighborTable {
 
 /// Reads the IPv6 neighbor cache. Empty on Windows and when the tool is missing.
 pub async fn read_ipv6_neighbors() -> Ipv6Table {
-    use tokio::process::Command;
     #[cfg(target_os = "linux")]
-    let output = Command::new("ip")
+    let output = tokio::process::Command::new("ip")
         .args(["-6", "neigh", "show"])
         .output()
         .await;
     #[cfg(target_os = "macos")]
-    let output = Command::new("ndp").arg("-an").output().await;
+    let output = tokio::process::Command::new("ndp")
+        .arg("-an")
+        .output()
+        .await;
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let output: std::io::Result<std::process::Output> = Err(std::io::ErrorKind::Unsupported.into());
     match output {
