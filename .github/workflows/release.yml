@@ -10,6 +10,7 @@ on:
       - .github/workflows/release.yml
       - scripts/build-appimage.sh
       - packaging/**
+      - crates/lanping/build.rs
   workflow_dispatch:
 
 env:
