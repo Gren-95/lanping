@@ -161,7 +161,7 @@ impl NameFilter {
     fn contains(self, host: &Host, label: Option<&str>) -> bool {
         match self {
             Self::Any => true,
-            Self::HasHostname => host.hostname.is_some(),
+            Self::HasHostname => host.display_name().is_some(),
             Self::HasLabel => label.is_some(),
             Self::NoLabel => label.is_none(),
         }
@@ -258,6 +258,10 @@ fn text_matches(host: &Host, label: Option<&str>, needle: &str) -> bool {
         Some(host.ip.to_string()),
         label.map(str::to_owned),
         host.hostname.clone(),
+        host.discovery.name.clone(),
+        host.discovery.manufacturer.clone(),
+        host.discovery.model.clone(),
+        Some(host.discovery.services.join(" ")),
         host.mac.clone(),
         host.vendor.clone(),
         Some(ports),

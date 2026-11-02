@@ -87,7 +87,7 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
     if has_label {
         lines = lines.push(fact("Address", host.ip.to_string()));
     }
-    lines
+    lines = lines
         .push(fact(
             "Hostname",
             host.hostname.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
@@ -101,8 +101,26 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
             "Vendor",
             host.vendor.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
         ))
-        .push(fact("Latency", latency))
-        .into()
+        .push(fact("Latency", latency));
+    let announced = [
+        host.discovery.name.clone().map(|name| ("Announces", name)),
+        device_model(host).map(|model| ("Model", model)),
+        (!host.discovery.services.is_empty())
+            .then(|| ("Services", host.discovery.services.join(", "))),
+    ];
+    for (label, value) in announced.into_iter().flatten() {
+        lines = lines.push(fact(label, value));
+    }
+    lines.into()
+}
+
+/// Manufacturer and model as the device reports them.
+fn device_model(host: &Host) -> Option<String> {
+    let parts: Vec<&str> = [&host.discovery.manufacturer, &host.discovery.model]
+        .into_iter()
+        .filter_map(|part| part.as_deref())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join(" "))
 }
 
 fn ipv6_text(host: &Host) -> String {

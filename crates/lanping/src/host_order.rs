@@ -44,7 +44,11 @@ pub fn compare_hosts(a: &Host, b: &Host, key: SortKey) -> Ordering {
     match key {
         SortKey::Address => by_address,
         SortKey::Latency => compare_optional(&a.latency, &b.latency).then(by_address),
-        SortKey::Hostname => compare_optional_text(&a.hostname, &b.hostname).then(by_address),
+        SortKey::Hostname => compare_optional_text(
+            &a.display_name().map(str::to_owned),
+            &b.display_name().map(str::to_owned),
+        )
+        .then(by_address),
         SortKey::Mac => compare_optional_text(&a.mac, &b.mac).then(by_address),
         SortKey::Vendor => compare_optional_text(&a.vendor, &b.vendor).then(by_address),
         SortKey::Ports => a.open_ports.len().cmp(&b.open_ports.len()).then(by_address),
