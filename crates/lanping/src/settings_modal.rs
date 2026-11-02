@@ -5,7 +5,7 @@ use iced::widget::{
     Row, button, checkbox, column, container, mouse_area, pick_list, row, scrollable, space, text,
     text_input,
 };
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Font, Length, Padding};
 use lanping_core::ports::{COMMON_SERVICES, PORT_LIST_SOURCE_URL, PortGroup, Service};
 
 use crate::app::{LanPing, Message};
@@ -15,6 +15,8 @@ use crate::settings::{Column, SettingsTab};
 use crate::theme::{self, ACCENT, BAD, MUTED};
 
 const ITEM_SPACING: f32 = 10.0;
+const EDGE_PADDING: f32 = 20.0;
+const TAB_INSET: f32 = 10.0;
 const PORT_CELL_WIDTH: f32 = 200.0;
 const BOLD: Font = Font {
     weight: Weight::Bold,
@@ -41,44 +43,51 @@ pub fn settings_dialog<'a>(app: &'a LanPing, tab: &'a SettingsTab) -> Element<'a
         SettingsTab::Presets => presets_tab(app),
     };
 
+    // The dialog has no padding of its own, so the tab band and scrollbar reach its edges.
     column![
-        header,
+        container(header).padding(Padding {
+            top: EDGE_PADDING,
+            right: EDGE_PADDING,
+            bottom: 14.0,
+            left: EDGE_PADDING,
+        }),
         tab_strip(tab),
-        scrollable(container(content).padding(iced::Padding::ZERO.right(12.0)))
+        scrollable(container(content).padding(EDGE_PADDING))
+            .width(Length::Fill)
             .height(Length::Fill),
     ]
-    .spacing(ITEM_SPACING + 4.0)
     .into()
 }
 
+/// One row of connected tabs. The selected tab shares the dialog color, so it joins
+/// the page below. A window too narrow for the row scrolls it sideways.
 fn tab_strip(selected: &SettingsTab) -> Element<'_, Message> {
     let tabs = [
-        (
-            SettingsTab::CommonPorts,
-            lucide::list_checks(),
-            "Common ports",
-        ),
-        (
-            SettingsTab::CustomPorts,
-            lucide::square_pen(),
-            "Custom ports",
-        ),
+        (SettingsTab::CommonPorts, lucide::list_checks(), "Ports"),
+        (SettingsTab::CustomPorts, lucide::square_pen(), "Custom"),
         (SettingsTab::Columns, lucide::columns_three(), "Columns"),
         (SettingsTab::Monitoring, lucide::refresh_cw(), "Monitoring"),
         (SettingsTab::Network, lucide::network(), "Network"),
         (SettingsTab::Presets, lucide::bookmark(), "Presets"),
     ];
-    Row::with_children(tabs.into_iter().map(|(tab, icon, label)| {
+    let row = Row::with_children(tabs.into_iter().map(|(tab, icon, label)| {
         let is_selected = tab == *selected;
-        button(icon_label(icon, label, 14))
+        button(icon_label(icon, label, 13))
             .on_press(Message::ShowSettings(tab))
-            .padding([7.0, 16.0])
-            .style(theme::tab_button(is_selected))
+            .padding([9.0, 8.0])
+            .style(theme::folder_tab(is_selected))
             .into()
     }))
-    .spacing(8)
-    .wrap()
-    .vertical_spacing(8)
+    .spacing(2);
+    let hidden_bar = scrollable::Scrollbar::new().width(0).scroller_width(0);
+    container(
+        scrollable(container(row).padding(Padding::ZERO.left(TAB_INSET).right(TAB_INSET)))
+            .direction(scrollable::Direction::Horizontal(hidden_bar))
+            .width(Length::Fill),
+    )
+    .padding(Padding::ZERO.top(6.0))
+    .width(Length::Fill)
+    .style(theme::tab_band)
     .into()
 }
 

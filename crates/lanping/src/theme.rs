@@ -19,6 +19,7 @@ pub const WARN: Color = color!(0xf2b84b);
 pub const BAD: Color = color!(0xf26d6d);
 
 pub const PANEL_RADIUS: f32 = 14.0;
+const TAB_RADIUS: f32 = 8.0;
 pub const CONTROL_RADIUS: f32 = 10.0;
 
 pub fn app_theme() -> Theme {
@@ -277,6 +278,36 @@ pub fn dialog(_theme: &Theme) -> container::Style {
             blur_radius: 36.0,
         },
         ..container::Style::default()
+    }
+}
+
+/// The band behind the settings tabs, darker than the page.
+pub fn tab_band(_theme: &Theme) -> container::Style {
+    container::Style {
+        background: Some(Background::Color(BACKDROP)),
+        ..container::Style::default()
+    }
+}
+
+/// A folder-style tab: the selected one has the dialog color and joins the page below it.
+pub fn folder_tab(selected: bool) -> impl Fn(&Theme, button::Status) -> button::Style {
+    move |_theme, status| {
+        let (background, text_color) = match (selected, status) {
+            (true, _) => (Some(Background::Color(PANEL)), TEXT),
+            (false, button::Status::Hovered | button::Status::Pressed) => {
+                (Some(Background::Color(PANEL_RAISED)), TEXT)
+            }
+            (false, _) => (None, MUTED),
+        };
+        button::Style {
+            background,
+            text_color,
+            border: Border {
+                radius: border::top(TAB_RADIUS),
+                ..Border::default()
+            },
+            ..button::Style::default()
+        }
     }
 }
 
