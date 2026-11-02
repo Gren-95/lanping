@@ -314,6 +314,14 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
             ),
             "Summary",
         ),
+        with_tooltip(
+            icon_button(
+                lucide::network().size(ICON_SIZE),
+                has_hosts.then_some(Message::ShowNetworkMap),
+                Edge::Alone,
+            ),
+            "Network map",
+        ),
     ];
     if wide {
         items.push(space::horizontal().into());

@@ -52,7 +52,7 @@ macOS has no prebuilt download and is untested.
 - Devices are tagged new, changed or gone against the previous scan of the same network
 - Name your devices and note the owner, location and tags; these are stored by MAC address, so they follow a device between scans
 - Every finished scan is saved and can be reopened from "Saved scans"
-- A summary of totals by type, vendor and open port
+- A summary of totals by type, vendor and open port, and a map of devices grouped around the gateway
 - Export to CSV or JSON, or copy the visible rows
 
 **Actions**

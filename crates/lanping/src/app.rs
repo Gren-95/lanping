@@ -9,6 +9,7 @@ use iced::{Subscription, Task, Theme};
 use lanping_core::device_notes::{DeviceNote, DeviceNotes};
 use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
+use lanping_core::gateway::default_gateway;
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
@@ -97,6 +98,8 @@ pub enum Modal {
     HostActions(String),
     SavePreset,
     Summary(Summary),
+    /// Devices around this gateway, when it is known.
+    NetworkMap(Option<std::net::Ipv4Addr>),
     /// Everything known about one device, identified by [`Host::device_key`].
     HostDetails(String),
     /// Output of a ping or traceroute; `output` is empty while it runs.
@@ -125,6 +128,7 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    ShowNetworkMap,
     ShowSummary,
     ShowHostDetails(String),
     DiagnosticFinished(String, Result<String, String>),
@@ -402,6 +406,9 @@ impl LanPing {
             Message::DiagnosticFinished(title, result) => self.finish_diagnostic(&title, result),
             Message::ShowHostDetails(key) => self.show_host_details(key),
             Message::ShowSummary => self.show_summary(),
+            Message::ShowNetworkMap => {
+                self.modal = Some(Modal::NetworkMap(default_gateway()));
+            }
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
                 if self.modal.is_none() && !self.scanning {

@@ -11,6 +11,7 @@ use crate::actions::{HostAction, grouped_actions};
 use crate::app::{LanPing, Message, Modal};
 use crate::host_details::host_details_dialog;
 use crate::icons::{ICON_SIZE, lucide};
+use crate::map_dialog::map_dialog;
 use crate::results::pill;
 use crate::settings::Column;
 use crate::settings_modal::{column_list, settings_dialog, small_button};
@@ -39,6 +40,7 @@ pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {
         Modal::Diagnostic { title, output } => (diagnostic_dialog(title, output.as_deref()), false),
         Modal::HostDetails(key) => (host_details_dialog(app, key), true),
         Modal::Summary(summary) => (summary_dialog(summary), false),
+        Modal::NetworkMap(gateway) => (map_dialog(app, *gateway), true),
         Modal::SavePreset => (save_preset_dialog(app), false),
         Modal::ColumnMenu(column) => (column_menu_dialog(app, *column), false),
     };

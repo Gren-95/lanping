@@ -11,6 +11,7 @@ mod host_filter;
 mod host_order;
 mod host_rows;
 mod icons;
+mod map_dialog;
 mod modal;
 mod monitor;
 mod notify;
