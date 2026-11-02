@@ -4,6 +4,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use lanping_core::Host;
+use lanping_core::device_notes::DeviceNotes;
 use lanping_core::export::{to_csv, to_json};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,10 +23,10 @@ impl ExportFormat {
         }
     }
 
-    pub fn render(self, hosts: &[Host]) -> Result<String, String> {
+    pub fn render(self, hosts: &[Host], notes: &DeviceNotes) -> Result<String, String> {
         match self {
-            Self::Csv => Ok(to_csv(hosts)),
-            Self::Json => to_json(hosts).map_err(|error| error.to_string()),
+            Self::Csv => Ok(to_csv(hosts, notes)),
+            Self::Json => to_json(hosts, notes).map_err(|error| error.to_string()),
         }
     }
 }
@@ -69,13 +70,13 @@ mod tests {
         let hosts = [Host::new(std::net::Ipv4Addr::new(10, 0, 0, 1))];
         assert!(
             ExportFormat::Csv
-                .render(&hosts)
+                .render(&hosts, &DeviceNotes::default())
                 .unwrap()
                 .contains("10.0.0.1")
         );
         assert!(
             ExportFormat::Json
-                .render(&hosts)
+                .render(&hosts, &DeviceNotes::default())
                 .unwrap()
                 .contains("10.0.0.1")
         );

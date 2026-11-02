@@ -19,6 +19,10 @@ pub fn settings_path() -> Option<PathBuf> {
     ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.config_dir().join("settings.json"))
 }
 
+pub fn device_notes_path() -> Option<PathBuf> {
+    ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.config_dir().join("device_notes.json"))
+}
+
 pub fn labels_path() -> Option<PathBuf> {
     ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.config_dir().join("labels.json"))
 }

@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use iced::task::Handle;
 use iced::{Subscription, Task, Theme};
+use lanping_core::device_notes::{DeviceNote, DeviceNotes};
 use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
@@ -25,7 +26,8 @@ use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
 use crate::storage::{
-    export_directory, history_directory, labels_path, migrate_legacy_data, settings_path,
+    device_notes_path, export_directory, history_directory, labels_path, migrate_legacy_data,
+    settings_path,
 };
 use crate::timestamp::format_unix_utc;
 
@@ -45,6 +47,44 @@ pub struct HistoryEntry {
 impl fmt::Display for HistoryEntry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.label)
+    }
+}
+
+/// A field in the device notes form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteField {
+    Owner,
+    Location,
+    Tags,
+    Notes,
+}
+
+/// What is typed in the device notes form, before it is saved.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct NoteDraft {
+    pub owner: String,
+    pub location: String,
+    pub tags: String,
+    pub notes: String,
+}
+
+impl NoteDraft {
+    fn from_note(note: Option<&DeviceNote>) -> Self {
+        note.map_or_else(Self::default, |note| Self {
+            owner: note.owner.clone(),
+            location: note.location.clone(),
+            tags: note.tags_text(),
+            notes: note.notes.clone(),
+        })
+    }
+
+    fn set(&mut self, field: NoteField, text: String) {
+        match field {
+            NoteField::Owner => self.owner = text,
+            NoteField::Location => self.location = text,
+            NoteField::Tags => self.tags = text,
+            NoteField::Notes => self.notes = text,
+        }
     }
 }
 
@@ -120,6 +160,8 @@ pub enum Message {
     IgnoreVirtualToggled(bool),
     CardViewToggled,
     LabelDraftChanged(String),
+    NoteDraftChanged(NoteField, String),
+    SaveNote(String),
     SaveLabel(String),
     RunHostAction(String, HostAction),
     OpenUrl(String),
@@ -138,6 +180,8 @@ pub struct LanPing {
     pub labels: DeviceLabels,
     pub modal: Option<Modal>,
     pub label_draft: String,
+    pub notes: DeviceNotes,
+    pub note_draft: NoteDraft,
     pub preset_name_draft: String,
     pub filter: HostFilter,
     pub filters_open: bool,
@@ -232,7 +276,8 @@ impl LanPing {
             |network| network.target.clone(),
         );
         let (labels, labels_error) = load_labels();
-        let startup_error = settings_error.or(labels_error);
+        let (notes, notes_error) = load_notes();
+        let startup_error = settings_error.or(labels_error).or(notes_error);
         let startup_notice = match (startup_error, migration) {
             (Some(error), _) => Some((Notice::Error, error)),
             (None, Err(error)) => Some((
@@ -253,6 +298,8 @@ impl LanPing {
             labels,
             modal: None,
             label_draft: String::new(),
+            notes,
+            note_draft: NoteDraft::default(),
             preset_name_draft: String::new(),
             filter: last_filter,
             filters_open: false,
@@ -389,6 +436,8 @@ impl LanPing {
             }
             Message::CloseModal => self.modal = None,
             Message::LabelDraftChanged(text) => self.label_draft = text,
+            Message::NoteDraftChanged(field, text) => self.note_draft.set(field, text),
+            Message::SaveNote(key) => self.save_note(&key),
             Message::SaveLabel(key) => self.save_label(&key),
             Message::RunHostAction(key, action) => return self.run_host_action(&key, &action),
             Message::OpenUrl(url) => self.open_url(&url),
@@ -471,6 +520,24 @@ impl LanPing {
         self.modal = Some(Modal::HostActions(key));
     }
 
+    fn save_note(&mut self, key: &str) {
+        let draft = &self.note_draft;
+        let note = DeviceNote::from_input(&draft.owner, &draft.location, &draft.tags, &draft.notes);
+        self.notes.set(key, note);
+        let Some(path) = device_notes_path() else {
+            return;
+        };
+        match self.notes.save(&path) {
+            Ok(()) => self.set_notice(Notice::Info, "Device notes saved".to_owned()),
+            Err(error) => {
+                self.set_notice(
+                    Notice::Error,
+                    format!("Could not save device notes: {error}"),
+                );
+            }
+        }
+    }
+
     fn save_label(&mut self, key: &str) {
         self.labels.set(key, &self.label_draft);
         let Some(path) = labels_path() else { return };
@@ -551,7 +618,10 @@ impl LanPing {
                 status,
                 label: self.labels.get(&host.device_key()),
             })
-            .filter(|row| self.filter.matches(row.host, row.label, row.status))
+            .filter(|row| {
+                let note = self.notes.get(&row.host.device_key());
+                self.filter.matches(row.host, row.label, note, row.status)
+            })
             .collect();
         rows.sort_by(|a, b| {
             let gone_last = (a.status == RowStatus::Gone).cmp(&(b.status == RowStatus::Gone));
@@ -631,6 +701,7 @@ impl LanPing {
             .unwrap_or_default();
         self.detail_scan_count = scans.len();
         self.detail_sightings = sightings(&scans, &key);
+        self.note_draft = NoteDraft::from_note(self.notes.get(&key));
         self.modal = Some(Modal::HostDetails(key));
     }
 
@@ -666,7 +737,7 @@ impl LanPing {
 
     fn export(&mut self, format: ExportFormat, path: &Path) {
         let result = format
-            .render(&self.hosts)
+            .render(&self.hosts, &self.notes)
             .and_then(|content| fs::write(path, content).map_err(|error| error.to_string()));
         match result {
             Ok(()) => self.set_notice(Notice::Info, format!("Saved {}", path.display())),
@@ -772,6 +843,20 @@ pub(crate) fn load_settings() -> (Settings, Option<String>) {
         Err(error) => (
             Settings::default(),
             Some(format!("Could not read settings, using defaults: {error}")),
+        ),
+    }
+}
+
+fn load_notes() -> (DeviceNotes, Option<String>) {
+    let Some(path) = device_notes_path() else {
+        return (DeviceNotes::default(), None);
+    };
+    match DeviceNotes::load(&path) {
+        Ok(notes) => (notes, None),
+        Err(error) if error.kind() == ErrorKind::NotFound => (DeviceNotes::default(), None),
+        Err(error) => (
+            DeviceNotes::default(),
+            Some(format!("Could not read device notes: {error}")),
         ),
     }
 }

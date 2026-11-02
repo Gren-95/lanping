@@ -50,7 +50,7 @@ macOS has no prebuilt download and is untested.
 - Reorder and hide columns by dragging, from Settings or by right-clicking a column header
 - Click a device for its ports, banners and history across scans
 - Devices are tagged new, changed or gone against the previous scan of the same network
-- Name your devices; names are stored by MAC address, so they follow a device between scans
+- Name your devices and note the owner, location and tags; these are stored by MAC address, so they follow a device between scans
 - Every finished scan is saved and can be reopened from "Saved scans"
 - Export to CSV or JSON, or copy the visible rows
 

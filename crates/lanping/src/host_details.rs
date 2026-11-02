@@ -1,7 +1,7 @@
 //! The device detail dialog: what is known about one host and how it showed up in past scans.
 
 use iced::font::Weight;
-use iced::widget::{Row, column, row, scrollable, space, text};
+use iced::widget::{Row, column, container, row, scrollable, space, text, text_input};
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
 use lanping_core::device_type::guess_device_type;
@@ -9,15 +9,16 @@ use lanping_core::history::Sighting;
 use lanping_core::os_guess::guess_os;
 use lanping_core::ports::format_ports;
 
-use crate::app::{LanPing, Message};
+use crate::app::{LanPing, Message, NoteField};
 use crate::host_filter::RowStatus;
 use crate::results::pill;
 use crate::settings_modal::small_button;
-use crate::theme::{ACCENT, BAD, GOOD, MUTED, WARN};
+use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, WARN};
 use crate::timestamp::format_unix_utc;
 
 const ITEM_SPACING: f32 = 10.0;
 const LABEL_WIDTH: f32 = 90.0;
+const SCROLLBAR_GAP: f32 = 16.0;
 const RECENT_SCANS_SHOWN: usize = 8;
 const NO_VALUE: &str = "-";
 const BOLD: Font = Font {
@@ -64,6 +65,7 @@ pub fn host_details_dialog<'a>(app: &'a LanPing, key: &'a str) -> Element<'a, Me
     let content = column![
         heading,
         facts(host, label.is_some()),
+        notes_section(app, key),
         ports_section(host),
         history_section(app),
     ]
@@ -75,9 +77,46 @@ pub fn host_details_dialog<'a>(app: &'a LanPing, key: &'a str) -> Element<'a, Me
     ]
     .spacing(ITEM_SPACING);
 
-    column![scrollable(content).height(Length::Fill), buttons]
+    let page = container(content).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP));
+    column![scrollable(page).height(Length::Fill), buttons]
         .spacing(ITEM_SPACING + 4.0)
         .into()
+}
+
+/// The user's own facts about the device. They are saved with the button, like the device name.
+fn notes_section<'a>(app: &'a LanPing, key: &str) -> Element<'a, Message> {
+    let draft = &app.note_draft;
+    let field =
+        |label: &'static str, placeholder: &'static str, value: &'a str, field: NoteField| {
+            row![
+                text(label).size(13).color(MUTED).width(LABEL_WIDTH),
+                text_input(placeholder, value)
+                    .on_input(move |typed| Message::NoteDraftChanged(field, typed))
+                    .padding(theme::CONTROL_PADDING)
+                    .size(13)
+                    .style(theme::input),
+            ]
+            .spacing(ITEM_SPACING)
+            .align_y(Alignment::Center)
+        };
+    column![
+        text("Your notes").size(13).color(MUTED),
+        field("Owner", "Who it belongs to", &draft.owner, NoteField::Owner),
+        field(
+            "Location",
+            "Where it is",
+            &draft.location,
+            NoteField::Location
+        ),
+        field("Tags", "Separated by commas", &draft.tags, NoteField::Tags),
+        field("Notes", "Anything else", &draft.notes, NoteField::Notes),
+        row![
+            space::horizontal(),
+            small_button("Save notes", Some(Message::SaveNote(key.to_owned()))),
+        ],
+    ]
+    .spacing(6)
+    .into()
 }
 
 fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
