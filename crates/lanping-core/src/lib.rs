@@ -7,6 +7,7 @@ pub mod diagnostics;
 pub mod diff;
 pub mod discovery;
 pub mod export;
+pub mod gateway;
 pub mod history;
 pub mod host;
 pub mod labels;
