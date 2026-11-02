@@ -1,33 +1,63 @@
-<img src="packaging/lanping.svg" alt="" width="96" align="right">
+<div align="center">
+
+<img src="packaging/lanping.svg" alt="" width="120">
 
 # LanPing
+
+**See every device on your network.**
+
+A LAN scanner for the desktop, written in Rust with an [Iced](https://iced.rs) GUI. No root or admin rights needed.
 
 [![CI](https://github.com/Gren-95/lanping/actions/workflows/ci.yml/badge.svg)](https://github.com/Gren-95/lanping/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Gren-95/lanping)](https://github.com/Gren-95/lanping/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue)](#license)
 [![Rust 1.90+](https://img.shields.io/badge/rust-1.90%2B-orange)](https://www.rust-lang.org)
 
-Cross-platform LAN scanner written in Rust with an [Iced](https://iced.rs) GUI.
+[**Download**](https://github.com/Gren-95/lanping/releases/latest)
 
-![LanPing showing a made-up network](docs/screenshot.png)
+<img src="docs/screenshot.png" alt="LanPing showing a made-up network" width="800">
 
-*The screenshot uses the made-up scans in `docs/demo`.*
+<sub>The screenshot uses the made-up scans in <code>docs/demo</code>.</sub>
+
+</div>
+
+## Download
+
+Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases/latest):
+
+- **Linux:** `LanPing-<version>-x86_64.AppImage`. Make it executable with `chmod +x`, then run it.
+- **Windows:** `LanPing-<version>-x86_64.exe`. It is unsigned, so SmartScreen warns on first launch.
+
+macOS has no prebuilt download and is untested.
 
 ## Features
 
+**Scanning**
+
 - Scan a CIDR block, an address range or a single IP (`192.168.0.0/24`, `10.0.0.1-50`)
 - Runs without root or admin rights: ICMP datagram sockets, TCP connect probes and the OS ARP cache
-- Hostname lookup, MAC address and vendor (IEEE OUI registry embedded)
-- TCP port scan of live hosts for the ports ticked in Settings (list from Wikipedia); untick them all to skip it
-- Optional service banners (SSH version, web server and similar), shown on hover and in "Open with"
-- Network picker with physical interfaces and Tailscale devices; virtual adapters (Docker, VMs, VPNs) are hidden by default and can be shown in Settings
-- Sortable results with filters (text, latency, status, vendor, port, name) and presets
-- Customizable columns; CSV and JSON export (to the Downloads folder)
+- Hostname, MAC address and vendor (IEEE OUI registry embedded), plus IPv6 addresses from the neighbor cache
+- TCP port scan of live hosts for the ports ticked in Settings; untick them all to skip it
+- Optional service banners, such as the SSH version or web server
+- Suggestions for your networks and Tailscale devices as you type; virtual adapters (Docker, VMs, VPNs) are hidden by default
+- Optional scans at startup, on a timer or when the main network changes, with a desktop notification for new devices
+
+**Results**
+
+- Sortable table or card view, with search, filters and saved presets
+- Reorder and hide columns by dragging, from Settings or by right-clicking a column header
+- Click a device for its ports, banners and history across scans
+- Devices are tagged new, changed or gone against the previous scan of the same network
+- Name your devices; names are stored by MAC address, so they follow a device between scans
 - Every finished scan is saved and can be reopened from "Saved scans"
-- Rescan comparison: devices are tagged new, changed or gone against the previous scan of the same network
-- Device names stored by MAC address, so labels follow a device between scans
-- Wake-on-LAN and "Open with" actions: browser, SMB share, copy SSH command, copy details
-- Automatic rescans with a desktop notification when a new device appears
+- Export to CSV or JSON, or copy the visible rows
+
+**Actions**
+
+- Open in a browser or browse an SMB share
+- Ping, traceroute and Wake-on-LAN
+- Copy the SSH command, IP, MAC or hostname
+- Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run
 
@@ -56,7 +86,7 @@ Any saved scan file can be opened the same way: `lanping path/to/scan.json`.
 
 ## Releases
 
-Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) builds the Linux AppImage and the Windows `.exe` in GitHub Actions and attaches them to a GitHub Release.
+Pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`) builds the Linux AppImage and the Windows `.exe` in GitHub Actions and attaches them to a GitHub Release.
 
 ## Layout
 
