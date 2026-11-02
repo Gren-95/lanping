@@ -16,6 +16,9 @@ pub struct ServiceBanner {
 pub struct Host {
     pub ip: Ipv4Addr,
     pub latency: Option<Duration>,
+    /// Time-to-live of the ping reply, when the OS reports it. Absent in older saved scans.
+    #[serde(default)]
+    pub ttl: Option<u8>,
     pub hostname: Option<String>,
     pub mac: Option<String>,
     pub vendor: Option<String>,
@@ -36,6 +39,7 @@ impl Host {
         Self {
             ip,
             latency: None,
+            ttl: None,
             hostname: None,
             mac: None,
             vendor: None,
