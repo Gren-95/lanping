@@ -22,6 +22,27 @@ pub enum HostAction {
     Traceroute,
 }
 
+/// A heading in the "Open with" menu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionGroup {
+    Open,
+    Network,
+    Copy,
+}
+
+impl ActionGroup {
+    /// Menu order.
+    pub const ALL: [ActionGroup; 3] = [ActionGroup::Open, ActionGroup::Network, ActionGroup::Copy];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Open => "Open",
+            Self::Network => "Network",
+            Self::Copy => "Copy",
+        }
+    }
+}
+
 /// What the app has to do to carry out an action.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Effect {
@@ -48,6 +69,16 @@ impl HostAction {
             Self::WakeOnLan => "Wake on LAN".to_owned(),
             Self::Ping => "Ping".to_owned(),
             Self::Traceroute => "Traceroute".to_owned(),
+        }
+    }
+
+    pub fn group(&self) -> ActionGroup {
+        match self {
+            Self::OpenWeb { .. } | Self::BrowseFiles => ActionGroup::Open,
+            Self::Ping | Self::Traceroute | Self::WakeOnLan => ActionGroup::Network,
+            Self::CopySshCommand | Self::CopyAddress | Self::CopyMac | Self::CopyHostname => {
+                ActionGroup::Copy
+            }
         }
     }
 
@@ -83,6 +114,22 @@ impl HostAction {
             Self::Traceroute => Some(Effect::Diagnose(Diagnostic::Traceroute, host.ip)),
         }
     }
+}
+
+/// The actions for `host` under their headings. Empty groups are left out.
+pub fn grouped_actions(host: &Host) -> Vec<(ActionGroup, Vec<HostAction>)> {
+    let actions = actions_for(host);
+    ActionGroup::ALL
+        .into_iter()
+        .filter_map(|group| {
+            let members: Vec<HostAction> = actions
+                .iter()
+                .filter(|action| action.group() == group)
+                .cloned()
+                .collect();
+            (!members.is_empty()).then_some((group, members))
+        })
+        .collect()
 }
 
 /// Actions offered for `host`. Web ports beyond 80 and 443 appear only
@@ -139,6 +186,20 @@ mod tests {
             HostAction::Traceroute.effect(&found),
             Some(Effect::Diagnose(Diagnostic::Traceroute, found.ip))
         );
+    }
+
+    #[test]
+    fn groups_every_action_once_in_menu_order() {
+        let mut found = host();
+        found.mac = Some("02:00:5E:10:00:01".into());
+        found.hostname = Some("nas.lan".into());
+        let groups = grouped_actions(&found);
+        let titles: Vec<&str> = groups.iter().map(|(group, _)| group.title()).collect();
+        assert_eq!(titles, ["Open", "Network", "Copy"]);
+        let grouped: usize = groups.iter().map(|(_, members)| members.len()).sum();
+        assert_eq!(grouped, actions_for(&found).len());
+        assert!(groups[1].1.contains(&HostAction::WakeOnLan));
+        assert!(groups[2].1.contains(&HostAction::CopySshCommand));
     }
 
     #[test]
