@@ -2,6 +2,7 @@
 
 use iced::widget::{Row, button, column, container, pick_list, row, text, text_input};
 use iced::{Alignment, Element, Length};
+use lanping_core::device_type::DeviceType;
 
 use crate::app::{LanPing, Message, SEARCH_INPUT_ID};
 use crate::host_filter::{
@@ -110,7 +111,14 @@ fn dropdowns_row(app: &LanPing) -> Element<'_, Message> {
         .chain(RowStatus::FILTERABLE.into_iter().map(Choice::Only))
         .collect();
 
+    let device_types: Vec<Choice<DeviceType>> = std::iter::once(Choice::Any)
+        .chain(DeviceType::ALL.into_iter().map(Choice::Only))
+        .collect();
+
     let dropdowns = Row::with_children(vec![
+        dropdown(device_types, filter.device_type.into(), 170.0, |choice| {
+            Message::Filter(FilterChange::DeviceType(choice))
+        }),
         dropdown(LatencyBand::ALL.to_vec(), filter.latency, 190.0, |band| {
             Message::Filter(FilterChange::Latency(band))
         }),

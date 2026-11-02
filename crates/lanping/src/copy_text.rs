@@ -1,5 +1,6 @@
 //! Plain-text versions of the host list, for the clipboard.
 
+use lanping_core::device_type::guess_device_type;
 use lanping_core::ports::format_ports;
 
 use crate::host_rows::Row;
@@ -48,6 +49,7 @@ fn cell_text(column: Column, row: &Row<'_>) -> String {
             .unwrap_or_else(|| NO_VALUE.to_owned()),
         Column::Mac => host.mac.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
         Column::Vendor => host.vendor.clone().unwrap_or_else(|| NO_VALUE.to_owned()),
+        Column::DeviceType => guess_device_type(host).to_string(),
         Column::Ports if host.open_ports.is_empty() => NO_VALUE.to_owned(),
         Column::Ports => format_ports(&host.open_ports),
         Column::Actions => String::new(),

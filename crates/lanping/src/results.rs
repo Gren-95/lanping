@@ -7,6 +7,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
+use lanping_core::device_type::{DeviceType, guess_device_type};
 
 use crate::app::{LanPing, Message};
 use crate::host_filter::RowStatus;
@@ -195,6 +196,7 @@ fn base_width(column: Column) -> f32 {
         Column::Mac => 170.0,
         Column::Vendor => 200.0,
         Column::Ports => 220.0,
+        Column::DeviceType => 150.0,
         Column::Actions => 80.0,
     }
 }
@@ -258,6 +260,7 @@ fn cell<'a>(column: Column, row_data: Row<'a>) -> Element<'a, Message> {
             None => text(NO_VALUE).color(MUTED).into(),
         },
         Column::Ports => port_pills(host),
+        Column::DeviceType => device_type_cell(host),
         Column::Actions => open_button(host),
     }
 }
@@ -290,6 +293,34 @@ fn open_button<'a>(host: &Host) -> Element<'a, Message> {
         ),
         "Open with",
     )
+}
+
+/// The guessed type as an icon and a word; the tooltip says it is a guess.
+fn device_type_cell<'a>(host: &Host) -> Element<'a, Message> {
+    let device_type = guess_device_type(host);
+    with_tooltip(
+        row![
+            device_type_icon(device_type).size(ICON_SIZE).color(MUTED),
+            text(device_type.to_string()).size(13),
+        ]
+        .spacing(8)
+        .align_y(Alignment::Center),
+        "Best guess from the name, vendor and open ports",
+    )
+}
+
+pub fn device_type_icon(device_type: DeviceType) -> iced::widget::Text<'static> {
+    match device_type {
+        DeviceType::Network => lucide::router(),
+        DeviceType::Computer => lucide::monitor(),
+        DeviceType::Storage => lucide::hard_drive(),
+        DeviceType::Phone => lucide::smartphone(),
+        DeviceType::Printer => lucide::printer(),
+        DeviceType::Media => lucide::tv(),
+        DeviceType::Camera => lucide::camera(),
+        DeviceType::SmartHome => lucide::house(),
+        DeviceType::Unknown => lucide::circle_help(),
+    }
 }
 
 fn mac_cell<'a>(host: &Host) -> iced::widget::Text<'a> {
