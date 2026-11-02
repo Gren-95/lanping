@@ -37,6 +37,7 @@ macOS has no prebuilt download and is untested.
 - Scan a CIDR block, an address range or a single IP (`192.168.0.0/24`, `10.0.0.1-50`)
 - Runs without root or admin rights: ICMP datagram sockets, TCP connect probes and the OS ARP cache
 - Hostname, MAC address and vendor (IEEE OUI registry embedded), plus IPv6 addresses from the neighbor cache
+- Names, models and services that devices announce over mDNS, NetBIOS and SSDP/UPnP
 - TCP port scan of live hosts for the ports ticked in Settings; untick them all to skip it
 - Optional service banners, such as the SSH version or web server
 - Suggestions for your networks and Tailscale devices as you type; virtual adapters (Docker, VMs, VPNs) are hidden by default

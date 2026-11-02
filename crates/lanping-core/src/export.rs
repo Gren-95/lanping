@@ -1,6 +1,6 @@
 use crate::host::Host;
 
-const CSV_HEADER: &str = "ip,latency_ms,hostname,mac,vendor,open_ports,banners,ipv6";
+const CSV_HEADER: &str = "ip,latency_ms,hostname,mac,vendor,open_ports,banners,ipv6,device_name,manufacturer,model,services";
 
 pub fn to_csv(hosts: &[Host]) -> String {
     let mut output = String::from(CSV_HEADER);
@@ -37,6 +37,10 @@ pub fn to_csv(hosts: &[Host]) -> String {
             ports,
             banners,
             ipv6,
+            host.discovery.name.clone().unwrap_or_default(),
+            host.discovery.manufacturer.clone().unwrap_or_default(),
+            host.discovery.model.clone().unwrap_or_default(),
+            host.discovery.services.join(" "),
         ];
         let row: Vec<String> = fields.iter().map(|field| escape_csv_field(field)).collect();
         output.push_str(&row.join(","));
@@ -89,7 +93,7 @@ mod tests {
         assert_eq!(lines.next(), Some(CSV_HEADER));
         assert_eq!(
             lines.next(),
-            Some("192.168.0.2,1.5,\"nas, main\",AA:BB:CC:DD:EE:FF,,22 80,22: SSH-2.0-test,")
+            Some("192.168.0.2,1.5,\"nas, main\",AA:BB:CC:DD:EE:FF,,22 80,22: SSH-2.0-test,,,,,")
         );
     }
 

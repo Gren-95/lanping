@@ -71,7 +71,7 @@ fn describe(host: &Host, labels: &DeviceLabels) -> String {
     let name = labels
         .get(&host.device_key())
         .map(str::to_owned)
-        .or_else(|| host.hostname.clone())
+        .or_else(|| host.display_name().map(str::to_owned))
         .or_else(|| host.vendor.clone());
     match name {
         Some(name) => format!("{name} ({})", host.ip),

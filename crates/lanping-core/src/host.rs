@@ -3,6 +3,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::discovery::Discovery;
+
 /// What a service said when connected to, for example an SSH version string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServiceBanner {
@@ -24,6 +26,9 @@ pub struct Host {
     /// IPv6 addresses the neighbor cache lists for this device. Absent in older saved scans.
     #[serde(default)]
     pub ipv6: Vec<Ipv6Addr>,
+    /// What the device says about itself. Absent in older saved scans.
+    #[serde(default)]
+    pub discovery: Discovery,
 }
 
 impl Host {
@@ -37,6 +42,7 @@ impl Host {
             open_ports: Vec::new(),
             banners: Vec::new(),
             ipv6: Vec::new(),
+            discovery: Discovery::default(),
         }
     }
 
@@ -44,6 +50,11 @@ impl Host {
     /// DHCP can move a device to another IP, otherwise the IP itself.
     pub fn device_key(&self) -> String {
         self.mac.clone().unwrap_or_else(|| self.ip.to_string())
+    }
+
+    /// The best name known: the DNS hostname, else the one the device announces.
+    pub fn display_name(&self) -> Option<&str> {
+        self.hostname.as_deref().or(self.discovery.name.as_deref())
     }
 
     pub fn banner(&self, port: u16) -> Option<&str> {

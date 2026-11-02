@@ -12,22 +12,28 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio::time::timeout;
 
 use crate::banner::grab_banner;
+use crate::discovery::query_host;
 use crate::host::{Host, ServiceBanner};
 use crate::neighbors::{read_ipv6_neighbors, read_neighbor_table};
 use crate::ports::scan_ports;
 use crate::probe::{create_icmp_client, ping, tcp_liveness};
+use crate::ssdp;
 use crate::vendor::lookup_vendor;
 
 const EVENT_BUFFER: usize = 512;
 const PROGRESS_STEP: usize = 16;
 const MAX_PARALLEL_LOOKUPS: usize = 64;
 const HOSTNAME_TIMEOUT: Duration = Duration::from_secs(2);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_millis(800);
+const SSDP_LISTEN_TIME: Duration = Duration::from_millis(1500);
 
 #[derive(Debug, Clone)]
 pub struct ScanConfig {
     pub targets: Vec<Ipv4Addr>,
     /// TCP ports to check on every live host. Empty disables the port scan.
     pub ports: Vec<u16>,
+    /// Ask devices about themselves over mDNS, NetBIOS and SSDP.
+    pub discover: bool,
     /// Read the greeting of every open port found by the port scan.
     pub grab_banners: bool,
     pub probe_timeout: Duration,
@@ -39,6 +45,7 @@ impl ScanConfig {
         Self {
             targets,
             ports: Vec::new(),
+            discover: true,
             grab_banners: false,
             probe_timeout: Duration::from_millis(800),
             max_parallel_probes: 256,
@@ -185,6 +192,15 @@ async fn enrich(
     if total > 0 && events.send(report(0)).await.is_err() {
         return;
     }
+    let discover = config.discover;
+    let upnp_targets: Vec<Ipv4Addr> = known.keys().copied().collect();
+    let survey = tokio::spawn(async move {
+        if discover {
+            ssdp::survey(&upnp_targets, SSDP_LISTEN_TIME).await
+        } else {
+            HashMap::new()
+        }
+    });
     let limit = Arc::new(Semaphore::new(MAX_PARALLEL_LOOKUPS));
     let mut lookups = JoinSet::new();
     for (_ip, mut host) in known {
@@ -193,6 +209,9 @@ async fn enrich(
         lookups.spawn(async move {
             let _permit = limit.acquire_owned().await.ok()?;
             host.hostname = resolve_hostname(host.ip).await;
+            if discover {
+                host.discovery = query_host(host.ip, DISCOVERY_TIMEOUT).await;
+            }
             if !ports.is_empty() {
                 host.open_ports = scan_ports(host.ip, &ports, wait).await;
                 if grab {
@@ -204,15 +223,27 @@ async fn enrich(
     }
 
     let mut done = 0;
+    let mut finished = HashMap::new();
     while let Some(joined) = lookups.join_next().await {
         done += 1;
-        if let Ok(Some(host)) = joined
-            && events.send(ScanEvent::Host(host)).await.is_err()
-        {
-            return;
+        if let Ok(Some(host)) = joined {
+            finished.insert(host.ip, host.clone());
+            if events.send(ScanEvent::Host(host)).await.is_err() {
+                return;
+            }
         }
         if events.send(report(done)).await.is_err() {
             return;
+        }
+    }
+
+    // UPnP answers arrive on their own schedule, so they update hosts already sent.
+    for (ip, description) in survey.await.unwrap_or_default() {
+        if let Some(mut host) = finished.remove(&ip) {
+            host.discovery.add_description(description);
+            if events.send(ScanEvent::Host(host)).await.is_err() {
+                return;
+            }
         }
     }
 }
@@ -251,6 +282,7 @@ mod tests {
     async fn finds_loopback_and_reports_progress() {
         let mut config = ScanConfig::new(vec![Ipv4Addr::LOCALHOST]);
         config.probe_timeout = Duration::from_millis(500);
+        config.discover = false;
         let mut scan = start_scan(config);
 
         let mut found_loopback = false;

@@ -39,6 +39,9 @@ async fn main() {
             host.vendor.as_deref().unwrap_or("-"),
             host.open_ports,
         );
+        if host.discovery != Default::default() {
+            println!("    {:?}", host.discovery);
+        }
         for banner in &host.banners {
             println!("    {}: {}", banner.port, banner.text);
         }

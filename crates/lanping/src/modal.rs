@@ -71,7 +71,7 @@ fn host_actions_dialog<'a>(app: &'a LanPing, host: &'a Host) -> Element<'a, Mess
         .labels
         .get(&key)
         .map(str::to_owned)
-        .or_else(|| host.hostname.clone())
+        .or_else(|| host.display_name().map(str::to_owned))
         .or_else(|| host.vendor.clone())
         .unwrap_or_else(|| "Unknown device".to_owned());
     let header = row![

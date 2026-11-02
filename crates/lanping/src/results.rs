@@ -264,9 +264,9 @@ fn cell<'a>(column: Column, row_data: Row<'a>) -> Element<'a, Message> {
 
 /// The user's label in the accent color, else the network hostname.
 fn name_text<'a>(row_data: Row<'a>) -> iced::widget::Text<'a> {
-    match (row_data.label, &row_data.host.hostname) {
+    match (row_data.label, row_data.host.display_name()) {
         (Some(label), _) => text(label).font(BOLD).color(ACCENT),
-        (None, Some(hostname)) => text(hostname.clone()),
+        (None, Some(hostname)) => text(hostname.to_owned()),
         (None, None) => text("Unknown device").color(MUTED),
     }
 }
