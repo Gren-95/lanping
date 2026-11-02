@@ -29,6 +29,10 @@ cargo test --workspace
 scripts/build-appimage.sh                                          # needs appimagetool on PATH
 ```
 
+## Releases
+
+Pushing a version tag (`git tag v0.1.0 && git push origin v0.1.0`) builds the Linux AppImage and the Windows `.exe` in GitHub Actions and attaches them to a GitHub Release.
+
 ## Layout
 
 - `crates/lanping-core`: scan engine, no UI dependencies
@@ -39,7 +43,6 @@ scripts/build-appimage.sh                                          # needs appim
 - Scanning is IPv4 only. Found devices also show the IPv6 addresses in the OS neighbor cache (Linux and macOS), matched by MAC address.
 - Settings, device names and saved scans live in the platform config and data folders (`lanping`). Data from the earlier `lansweep` folders is moved there on first start.
 - Notifications use `notify-send` (Linux) and `osascript` (macOS); Windows shows results in the app only.
-- Windows and macOS builds type-check for Windows; they have not been run there.
 - Hosts that ignore ping and TCP are found through the ARP cache and show no latency. Entries
   the OS cached shortly before the scan can appear as hosts that have just left the network.
 - `crates/lanping-core/data/oui.tsv` is generated from the IEEE MA-L registry
