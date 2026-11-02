@@ -12,6 +12,7 @@ use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
+use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
@@ -95,6 +96,7 @@ pub enum Modal {
     /// Menu for one device, identified by [`Host::device_key`].
     HostActions(String),
     SavePreset,
+    Summary(Summary),
     /// Everything known about one device, identified by [`Host::device_key`].
     HostDetails(String),
     /// Output of a ping or traceroute; `output` is empty while it runs.
@@ -123,6 +125,7 @@ pub enum Message {
     Filter(FilterChange),
     FiltersPanelToggled,
     FocusSearch,
+    ShowSummary,
     ShowHostDetails(String),
     DiagnosticFinished(String, Result<String, String>),
     ScanOnStartupToggled(bool),
@@ -398,6 +401,7 @@ impl LanPing {
             Message::NetworksDetected(detected) => return self.apply_detected_networks(detected),
             Message::DiagnosticFinished(title, result) => self.finish_diagnostic(&title, result),
             Message::ShowHostDetails(key) => self.show_host_details(key),
+            Message::ShowSummary => self.show_summary(),
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
                 if self.modal.is_none() && !self.scanning {
@@ -698,15 +702,13 @@ impl LanPing {
         }
     }
 
+    fn show_summary(&mut self) {
+        let scans = load_saved_scans();
+        self.modal = Some(Modal::Summary(summarize(&self.hosts, &scans, unix_now())));
+    }
+
     fn show_host_details(&mut self, key: String) {
-        let scans: Vec<SavedScan> = history_directory()
-            .map(|directory| {
-                list_scans(&directory)
-                    .into_iter()
-                    .map(|(_, scan)| scan)
-                    .collect()
-            })
-            .unwrap_or_default();
+        let scans = load_saved_scans();
         self.detail_scan_count = scans.len();
         self.detail_sightings = sightings(&scans, &key);
         self.detail_timeline = device_timeline(&scans, &key);
@@ -854,6 +856,17 @@ pub(crate) fn load_settings() -> (Settings, Option<String>) {
             Some(format!("Could not read settings, using defaults: {error}")),
         ),
     }
+}
+
+fn load_saved_scans() -> Vec<SavedScan> {
+    history_directory()
+        .map(|directory| {
+            list_scans(&directory)
+                .into_iter()
+                .map(|(_, scan)| scan)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn load_notes() -> (DeviceNotes, Option<String>) {

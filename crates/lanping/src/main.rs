@@ -21,6 +21,7 @@ mod scan_flow;
 mod settings;
 mod settings_modal;
 mod storage;
+mod summary_dialog;
 mod theme;
 mod timestamp;
 mod view;

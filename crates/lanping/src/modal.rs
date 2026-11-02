@@ -14,6 +14,7 @@ use crate::icons::{ICON_SIZE, lucide};
 use crate::results::pill;
 use crate::settings::Column;
 use crate::settings_modal::{column_list, settings_dialog, small_button};
+use crate::summary_dialog::summary_dialog;
 use crate::theme::{self, ACCENT, MUTED};
 
 const DIALOG_MAX_WIDTH: f32 = 600.0;
@@ -37,6 +38,7 @@ pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {
         },
         Modal::Diagnostic { title, output } => (diagnostic_dialog(title, output.as_deref()), false),
         Modal::HostDetails(key) => (host_details_dialog(app, key), true),
+        Modal::Summary(summary) => (summary_dialog(summary), false),
         Modal::SavePreset => (save_preset_dialog(app), false),
         Modal::ColumnMenu(column) => (column_menu_dialog(app, *column), false),
     };

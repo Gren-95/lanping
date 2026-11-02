@@ -306,6 +306,14 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
             ),
             view_tip,
         ),
+        with_tooltip(
+            icon_button(
+                lucide::chart_column().size(ICON_SIZE),
+                has_hosts.then_some(Message::ShowSummary),
+                Edge::Alone,
+            ),
+            "Summary",
+        ),
     ];
     if wide {
         items.push(space::horizontal().into());
