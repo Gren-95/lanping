@@ -307,9 +307,16 @@ fn monitoring_tab(app: &LanPing) -> Element<'_, Message> {
         row![text("Automatic rescan").size(14), interval]
             .spacing(ITEM_SPACING)
             .align_y(Alignment::Center),
+        text("Notify me after an automatic rescan when:").size(13).color(MUTED),
         checkbox(settings.notify_new_devices)
-            .label("Show a desktop notification when a new device appears")
+            .label("A new device appears")
             .on_toggle(Message::NotifyToggled),
+        checkbox(settings.notify_ports_opened)
+            .label("A known device opens a new port")
+            .on_toggle(Message::NotifyPortsToggled),
+        checkbox(settings.notify_named_offline)
+            .label("A device you named goes offline")
+            .on_toggle(Message::NotifyOfflineToggled),
         text("Notifications use notify-send on Linux and osascript on macOS. Windows shows results in the app only.")
             .size(12)
             .color(MUTED),

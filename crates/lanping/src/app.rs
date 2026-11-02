@@ -158,6 +158,8 @@ pub enum Message {
     ColumnDragEnded,
     AutoRescanPicked(AutoInterval),
     NotifyToggled(bool),
+    NotifyPortsToggled(bool),
+    NotifyOfflineToggled(bool),
     IgnoreVirtualToggled(bool),
     CardViewToggled,
     LabelDraftChanged(String),
@@ -477,6 +479,8 @@ impl LanPing {
             }
             Message::AutoRescanPicked(interval) => self.settings.auto_rescan_minutes = interval.0,
             Message::NotifyToggled(enabled) => self.settings.notify_new_devices = enabled,
+            Message::NotifyPortsToggled(enabled) => self.settings.notify_ports_opened = enabled,
+            Message::NotifyOfflineToggled(enabled) => self.settings.notify_named_offline = enabled,
             Message::CardViewToggled => self.settings.card_view = !self.settings.card_view,
             Message::ScanOnStartupToggled(enabled) => self.settings.scan_on_startup = enabled,
             Message::ScanOnNetworkChangeToggled(enabled) => {
