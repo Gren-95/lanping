@@ -20,6 +20,7 @@ const ITEM_SPACING: f32 = 10.0;
 const LABEL_WIDTH: f32 = 90.0;
 const SCROLLBAR_GAP: f32 = 16.0;
 const RECENT_SCANS_SHOWN: usize = 8;
+const CHANGES_SHOWN: usize = 15;
 const NO_VALUE: &str = "-";
 const BOLD: Font = Font {
     weight: Weight::Bold,
@@ -257,13 +258,35 @@ fn history_section(app: &LanPing) -> Element<'_, Message> {
             )
         },
     );
+    let changes = app
+        .detail_timeline
+        .iter()
+        .take(CHANGES_SHOWN)
+        .fold(column![].spacing(4), |list, entry| {
+            list.push(fact_at(entry.at_unix, entry.change.to_string()))
+        });
     column![
         heading,
         summary_lines,
+        text("Changes").size(13).color(MUTED),
+        changes,
         text("Recent scans").size(13).color(MUTED),
         recent
     ]
     .spacing(6)
+    .into()
+}
+
+fn fact_at<'a>(at_unix: u64, what: String) -> Element<'a, Message> {
+    row![
+        text(format_unix_utc(at_unix))
+            .size(12)
+            .font(Font::MONOSPACE)
+            .color(MUTED),
+        text(what).size(13),
+    ]
+    .spacing(ITEM_SPACING)
+    .align_y(Alignment::Center)
     .into()
 }
 

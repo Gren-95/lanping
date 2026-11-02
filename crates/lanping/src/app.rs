@@ -12,6 +12,7 @@ use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
+use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
 
@@ -189,6 +190,8 @@ pub struct LanPing {
     pub detail_sightings: Vec<Sighting>,
     /// How many saved scans were searched for those appearances.
     pub detail_scan_count: usize,
+    /// What changed about that device over time, newest first.
+    pub detail_timeline: Vec<TimelineEntry>,
     /// Column being dragged in the column list.
     pub column_drag: Option<Column>,
     pub hosts: Vec<Host>,
@@ -305,6 +308,7 @@ impl LanPing {
             filters_open: false,
             detail_sightings: Vec::new(),
             detail_scan_count: 0,
+            detail_timeline: Vec::new(),
             column_drag: None,
             hosts: Vec::new(),
             diff: ScanDiff::default(),
@@ -701,6 +705,7 @@ impl LanPing {
             .unwrap_or_default();
         self.detail_scan_count = scans.len();
         self.detail_sightings = sightings(&scans, &key);
+        self.detail_timeline = device_timeline(&scans, &key);
         self.note_draft = NoteDraft::from_note(self.notes.get(&key));
         self.modal = Some(Modal::HostDetails(key));
     }
