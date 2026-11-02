@@ -89,6 +89,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn demo_scans_load_and_hold_only_made_up_macs() {
+        let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/demo");
+        let scans = list_scans(&directory);
+        assert_eq!(scans.len(), 2);
+        for (_, scan) in &scans {
+            assert!(scan.hosts.iter().all(|host| {
+                host.mac
+                    .as_deref()
+                    .is_some_and(|mac| mac.starts_with("02:00:5E:10"))
+            }));
+        }
+    }
+
+    #[test]
     fn finds_a_device_across_scans_by_mac_or_ip() {
         let mut printer = Host::new("10.0.0.5".parse().unwrap());
         printer.mac = Some("AA:BB:CC:DD:EE:FF".into());
