@@ -3,6 +3,13 @@
 use std::net::Ipv4Addr;
 use std::process::Command;
 
+/// A command that prints the routing table and the parser for its output.
+type RouteTool = (
+    &'static str,
+    &'static [&'static str],
+    fn(&str) -> Option<Ipv4Addr>,
+);
+
 /// The address after `via` in `ip -4 route show default` output.
 fn parse_ip_route(text: &str) -> Option<Ipv4Addr> {
     text.lines().find_map(|line| {
@@ -33,7 +40,7 @@ fn parse_route_print(text: &str) -> Option<Ipv4Addr> {
 
 /// The default gateway, or `None` when there is none or the tool is missing.
 pub fn default_gateway() -> Option<Ipv4Addr> {
-    let (program, args, parse): (&str, &[&str], fn(&str) -> Option<Ipv4Addr>) = if cfg!(windows) {
+    let (program, args, parse): RouteTool = if cfg!(windows) {
         ("route", &["print", "-4", "0.0.0.0"], parse_route_print)
     } else if cfg!(target_os = "macos") {
         ("route", &["-n", "get", "default"], parse_route_get)
