@@ -4,6 +4,7 @@ use std::fmt;
 use std::time::Duration;
 
 use lanping_core::Host;
+use lanping_core::device_notes::DeviceNote;
 use lanping_core::device_type::{DeviceType, guess_device_type};
 use lanping_core::diff::HostStatus;
 use lanping_core::ports::format_ports;
@@ -244,7 +245,13 @@ impl HostFilter {
         .count()
     }
 
-    pub fn matches(&self, host: &Host, label: Option<&str>, status: RowStatus) -> bool {
+    pub fn matches(
+        &self,
+        host: &Host,
+        label: Option<&str>,
+        note: Option<&DeviceNote>,
+        status: RowStatus,
+    ) -> bool {
         self.latency.contains(host.latency)
             && self.status.is_none_or(|wanted| wanted == status)
             && self.name.contains(host, label)
@@ -256,12 +263,12 @@ impl HostFilter {
             && self
                 .device_type
                 .is_none_or(|wanted| guess_device_type(host) == wanted)
-            && text_matches(host, label, &self.text.trim().to_lowercase())
+            && text_matches(host, label, note, &self.text.trim().to_lowercase())
     }
 }
 
-fn text_matches(host: &Host, label: Option<&str>, needle: &str) -> bool {
-    if needle.is_empty() {
+fn text_matches(host: &Host, label: Option<&str>, note: Option<&DeviceNote>, needle: &str) -> bool {
+    if needle.is_empty() || note.is_some_and(|note| note.contains(needle)) {
         return true;
     }
     let ports = format_ports(&host.open_ports);
@@ -333,7 +340,7 @@ mod tests {
     fn empty_filter_matches_everything() {
         let filter = HostFilter::default();
         assert_eq!(filter.active_count(), 0);
-        assert!(filter.matches(&host(1), None, RowStatus::Unchanged));
+        assert!(filter.matches(&host(1), None, None, RowStatus::Unchanged));
     }
 
     #[test]
@@ -345,12 +352,23 @@ mod tests {
             text: query.into(),
             ..HostFilter::default()
         };
-        assert!(text("HEWLETT").matches(&printer, None, RowStatus::Unchanged));
-        assert!(text("9100").matches(&printer, None, RowStatus::Unchanged));
-        assert!(text("10.0.0.5").matches(&printer, None, RowStatus::Unchanged));
+        assert!(text("HEWLETT").matches(&printer, None, None, RowStatus::Unchanged));
+        assert!(text("9100").matches(&printer, None, None, RowStatus::Unchanged));
+        assert!(text("10.0.0.5").matches(&printer, None, None, RowStatus::Unchanged));
         printer.ipv6 = vec!["fe80::5".parse().unwrap()];
-        assert!(text("FE80::5").matches(&printer, None, RowStatus::Unchanged));
-        assert!(!text("cisco").matches(&printer, None, RowStatus::Unchanged));
+        assert!(text("FE80::5").matches(&printer, None, None, RowStatus::Unchanged));
+        assert!(!text("cisco").matches(&printer, None, None, RowStatus::Unchanged));
+    }
+
+    #[test]
+    fn search_also_covers_the_users_notes() {
+        let note = DeviceNote::from_input("Sam", "", "", "");
+        let wanted = HostFilter {
+            text: "SAM".into(),
+            ..HostFilter::default()
+        };
+        assert!(wanted.matches(&host(1), None, Some(&note), RowStatus::Unchanged));
+        assert!(!wanted.matches(&host(1), None, None, RowStatus::Unchanged));
     }
 
     #[test]
@@ -362,8 +380,8 @@ mod tests {
             ..HostFilter::default()
         };
         assert_eq!(wanted.active_count(), 1);
-        assert!(wanted.matches(&printer, None, RowStatus::Unchanged));
-        assert!(!wanted.matches(&host(6), None, RowStatus::Unchanged));
+        assert!(wanted.matches(&printer, None, None, RowStatus::Unchanged));
+        assert!(!wanted.matches(&host(6), None, None, RowStatus::Unchanged));
     }
 
     #[test]
@@ -372,26 +390,44 @@ mod tests {
             latency: band,
             ..HostFilter::default()
         };
-        assert!(band(LatencyBand::Fast).matches(&with_latency(1, 39), None, RowStatus::Unchanged));
-        assert!(!band(LatencyBand::Fast).matches(&with_latency(1, 40), None, RowStatus::Unchanged));
+        assert!(band(LatencyBand::Fast).matches(
+            &with_latency(1, 39),
+            None,
+            None,
+            RowStatus::Unchanged
+        ));
+        assert!(!band(LatencyBand::Fast).matches(
+            &with_latency(1, 40),
+            None,
+            None,
+            RowStatus::Unchanged
+        ));
         assert!(band(LatencyBand::Medium).matches(
             &with_latency(1, 40),
+            None,
             None,
             RowStatus::Unchanged
         ));
         assert!(band(LatencyBand::Medium).matches(
             &with_latency(1, 149),
             None,
-            RowStatus::Unchanged
-        ));
-        assert!(band(LatencyBand::Slow).matches(&with_latency(1, 150), None, RowStatus::Unchanged));
-        assert!(band(LatencyBand::NoReply).matches(&host(1), None, RowStatus::Unchanged));
-        assert!(!band(LatencyBand::NoReply).matches(
-            &with_latency(1, 5),
             None,
             RowStatus::Unchanged
         ));
-        assert!(!band(LatencyBand::Fast).matches(&host(1), None, RowStatus::Unchanged));
+        assert!(band(LatencyBand::Slow).matches(
+            &with_latency(1, 150),
+            None,
+            None,
+            RowStatus::Unchanged
+        ));
+        assert!(band(LatencyBand::NoReply).matches(&host(1), None, None, RowStatus::Unchanged));
+        assert!(!band(LatencyBand::NoReply).matches(
+            &with_latency(1, 5),
+            None,
+            None,
+            RowStatus::Unchanged
+        ));
+        assert!(!band(LatencyBand::Fast).matches(&host(1), None, None, RowStatus::Unchanged));
     }
 
     #[test]
@@ -407,15 +443,15 @@ mod tests {
             ..HostFilter::default()
         };
         assert_eq!(filter.active_count(), 3);
-        assert!(filter.matches(&nas, None, RowStatus::Unchanged));
+        assert!(filter.matches(&nas, None, None, RowStatus::Unchanged));
         nas.hostname = None;
-        assert!(!filter.matches(&nas, None, RowStatus::Unchanged));
+        assert!(!filter.matches(&nas, None, None, RowStatus::Unchanged));
         assert!(
             !HostFilter {
                 port: Some(80),
                 ..HostFilter::default()
             }
-            .matches(&nas, None, RowStatus::Unchanged)
+            .matches(&nas, None, None, RowStatus::Unchanged)
         );
     }
 
@@ -426,25 +462,25 @@ mod tests {
             status: Some(RowStatus::New),
             ..HostFilter::default()
         };
-        assert!(new_only.matches(&device, None, RowStatus::New));
-        assert!(!new_only.matches(&device, None, RowStatus::Unchanged));
+        assert!(new_only.matches(&device, None, None, RowStatus::New));
+        assert!(!new_only.matches(&device, None, None, RowStatus::Unchanged));
         let unlabeled = HostFilter {
             name: NameFilter::NoLabel,
             ..HostFilter::default()
         };
-        assert!(unlabeled.matches(&device, None, RowStatus::Unchanged));
-        assert!(!unlabeled.matches(&device, Some("TV"), RowStatus::Unchanged));
+        assert!(unlabeled.matches(&device, None, None, RowStatus::Unchanged));
+        assert!(!unlabeled.matches(&device, Some("TV"), None, RowStatus::Unchanged));
         let labeled = HostFilter {
             name: NameFilter::HasLabel,
             ..HostFilter::default()
         };
-        assert!(labeled.matches(&device, Some("TV"), RowStatus::Unchanged));
-        assert!(!labeled.matches(&device, None, RowStatus::Unchanged));
+        assert!(labeled.matches(&device, Some("TV"), None, RowStatus::Unchanged));
+        assert!(!labeled.matches(&device, None, None, RowStatus::Unchanged));
         let by_label = HostFilter {
             text: "tv".into(),
             ..HostFilter::default()
         };
-        assert!(by_label.matches(&device, Some("Living room TV"), RowStatus::Unchanged));
+        assert!(by_label.matches(&device, Some("Living room TV"), None, RowStatus::Unchanged));
     }
 
     #[test]
