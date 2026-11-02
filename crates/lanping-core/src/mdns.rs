@@ -6,6 +6,8 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
+use crate::socket_budget::socket_permit;
+
 const MDNS_PORT: u16 = 5353;
 const SERVICE_LIST_NAME: &str = "_services._dns-sd._udp.local";
 const LOCAL_SUFFIX: &str = ".local";
@@ -108,6 +110,9 @@ fn service_type(name: &str) -> Option<String> {
 }
 
 async fn ask(ip: Ipv4Addr, name: &str, wait: Duration) -> Vec<String> {
+    let Some(_permit) = socket_permit().await else {
+        return Vec::new();
+    };
     let Ok(socket) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await else {
         return Vec::new();
     };

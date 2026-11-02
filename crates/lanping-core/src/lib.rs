@@ -22,6 +22,7 @@ pub mod range;
 pub mod report;
 pub mod scan;
 pub mod snmp;
+pub mod socket_budget;
 pub mod ssdp;
 pub mod summary;
 pub mod tailnet;

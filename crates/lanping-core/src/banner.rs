@@ -8,6 +8,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
+use crate::socket_budget::socket_permit;
+
 const READ_LIMIT: usize = 512;
 const MAX_BANNER_CHARS: usize = 100;
 const HTTP_PORTS: [u16; 6] = [80, 8000, 8008, 8080, 8888, 9000];
@@ -18,6 +20,7 @@ pub async fn grab_banner(ip: Ipv4Addr, port: u16, wait: Duration) -> Option<Stri
     if TLS_PORTS.contains(&port) {
         return None;
     }
+    let _permit = socket_permit().await?;
     let mut stream = timeout(wait, TcpStream::connect((ip, port)))
         .await
         .ok()?

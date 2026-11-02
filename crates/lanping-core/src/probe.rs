@@ -5,6 +5,7 @@ use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
+use crate::socket_budget::socket_permit;
 use surge_ping::{Client, Config, ICMP, IcmpPacket, PingIdentifier, PingSequence};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -54,6 +55,7 @@ pub enum TcpOutcome {
 }
 
 pub async fn tcp_probe(ip: Ipv4Addr, port: u16, wait: Duration) -> (TcpOutcome, Duration) {
+    let _permit = socket_permit().await;
     let started = Instant::now();
     let address = SocketAddr::new(IpAddr::V4(ip), port);
     let outcome = match timeout(wait, TcpStream::connect(address)).await {

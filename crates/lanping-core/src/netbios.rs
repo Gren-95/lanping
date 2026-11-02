@@ -6,6 +6,8 @@ use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
+use crate::socket_budget::socket_permit;
+
 const NETBIOS_PORT: u16 = 137;
 const NAME_ENTRY_LENGTH: usize = 18;
 /// Header (12), encoded name (34), type, class, TTL and data length (10).
@@ -37,6 +39,7 @@ fn parse_status_response(packet: &[u8]) -> Option<String> {
 
 /// The NetBIOS name of `ip`, or `None` when it does not answer in time.
 pub async fn query_name(ip: Ipv4Addr, wait: Duration) -> Option<String> {
+    let _permit = socket_permit().await?;
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await.ok()?;
     socket.connect((ip, NETBIOS_PORT)).await.ok()?;
     socket.send(&status_request()).await.ok()?;
