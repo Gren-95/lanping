@@ -41,7 +41,7 @@ macOS has no prebuilt download and is untested.
 - TCP port scan of live hosts for the ports ticked in Settings; untick them all to skip it
 - Optional service banners, such as the SSH version or web server
 - Suggestions for your networks and Tailscale devices as you type; virtual adapters (Docker, VMs, VPNs) are hidden by default
-- Optional scans at startup, on a timer or when the main network changes, with a desktop notification for new devices
+- Optional scans at startup, on a timer or when the main network changes, with desktop notifications for new devices, newly opened ports and named devices going offline
 
 **Results**
 

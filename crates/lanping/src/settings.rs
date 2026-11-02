@@ -93,6 +93,10 @@ pub struct Settings {
     /// Minutes between automatic rescans; `0` turns them off.
     pub auto_rescan_minutes: u32,
     pub notify_new_devices: bool,
+    /// Notify when a known device opens a port it did not have open before.
+    pub notify_ports_opened: bool,
+    /// Notify when a device the user named goes offline.
+    pub notify_named_offline: bool,
     /// Hide container bridges, VPN tunnels and VM switches from the network picker.
     pub ignore_virtual_networks: bool,
     /// Show hosts as stacked cards instead of a table.
@@ -116,6 +120,8 @@ impl Default for Settings {
             grab_banners: false,
             auto_rescan_minutes: 0,
             notify_new_devices: true,
+            notify_ports_opened: false,
+            notify_named_offline: false,
             ignore_virtual_networks: true,
             card_view: false,
             scan_on_startup: false,
