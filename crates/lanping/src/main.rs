@@ -33,6 +33,18 @@ const MIN_WINDOW: Size = Size::new(360.0, 480.0);
 #[cfg(target_os = "linux")]
 const APPLICATION_ID: &str = "lanping";
 
+const WINDOW_ICON_SIZE: u32 = 64;
+const WINDOW_ICON_RGBA: &[u8] = include_bytes!("../assets/window-icon-64.rgba");
+
+fn window_icon() -> Option<window::Icon> {
+    window::icon::from_rgba(
+        WINDOW_ICON_RGBA.to_vec(),
+        WINDOW_ICON_SIZE,
+        WINDOW_ICON_SIZE,
+    )
+    .ok()
+}
+
 /// Saved size from the last session, kept at least as large as the minimum.
 fn starting_size() -> Size {
     let (settings, _) = app::load_settings();
@@ -55,6 +67,7 @@ fn main() -> iced::Result {
         .window(window::Settings {
             size: starting_size(),
             exit_on_close_request: false,
+            icon: window_icon(),
             min_size: Some(MIN_WINDOW),
             #[cfg(target_os = "linux")]
             platform_specific: window::settings::PlatformSpecific {
@@ -64,4 +77,14 @@ fn main() -> iced::Result {
             ..window::Settings::default()
         })
         .run()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_built_in_window_icon_is_valid() {
+        assert!(window_icon().is_some());
+    }
 }

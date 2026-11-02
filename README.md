@@ -1,3 +1,5 @@
+<img src="packaging/lanping.svg" alt="" width="96" align="right">
+
 # LanPing
 
 [![CI](https://github.com/Gren-95/lanping/actions/workflows/ci.yml/badge.svg)](https://github.com/Gren-95/lanping/actions/workflows/ci.yml)
