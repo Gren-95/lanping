@@ -19,6 +19,7 @@ pub mod ports;
 pub mod probe;
 pub mod range;
 pub mod scan;
+pub mod snmp;
 pub mod ssdp;
 pub mod summary;
 pub mod tailnet;

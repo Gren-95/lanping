@@ -188,6 +188,9 @@ pub fn guess_device_type(host: &Host) -> DeviceType {
         host.hostname.as_deref(),
         host.discovery.name.as_deref(),
         host.discovery.model.as_deref(),
+        host.snmp.name.as_deref(),
+        host.snmp.model.as_deref(),
+        host.snmp.description.as_deref(),
     ]
     .into_iter()
     .flatten()

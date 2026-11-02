@@ -30,7 +30,9 @@ pub fn guess_os(host: &Host) -> Option<&'static str> {
     let banners = host
         .banners
         .iter()
-        .map(|banner| banner.text.to_lowercase())
+        .map(|banner| banner.text.as_str())
+        .chain(host.snmp.description.as_deref())
+        .map(str::to_lowercase)
         .collect::<Vec<_>>()
         .join(" ");
     if let Some((_, os)) = BANNER_RULES.iter().find(|(word, _)| banners.contains(word)) {

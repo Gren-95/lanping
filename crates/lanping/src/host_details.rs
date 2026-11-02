@@ -21,6 +21,7 @@ const LABEL_WIDTH: f32 = 90.0;
 const SCROLLBAR_GAP: f32 = 16.0;
 const RECENT_SCANS_SHOWN: usize = 8;
 const CHANGES_SHOWN: usize = 15;
+const SECONDS_PER_DAY: u64 = 86_400;
 const NO_VALUE: &str = "-";
 const BOLD: Font = Font {
     weight: Weight::Bold,
@@ -149,6 +150,15 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
         guess_os(host).map(|os| ("OS", format!("{os} (best guess)"))),
         host.discovery.name.clone().map(|name| ("Announces", name)),
         device_model(host).map(|model| ("Model", model)),
+        host.snmp.serial.clone().map(|serial| ("Serial", serial)),
+        host.snmp.location.clone().map(|place| ("Location", place)),
+        host.snmp
+            .uptime_seconds
+            .map(|seconds| ("Uptime", format!("{} days", seconds / SECONDS_PER_DAY))),
+        host.snmp
+            .interface_count
+            .map(|count| ("Interfaces", count.to_string())),
+        host.snmp.description.clone().map(|about| ("SNMP", about)),
         (!host.discovery.services.is_empty())
             .then(|| ("Services", host.discovery.services.join(", "))),
     ];
@@ -160,9 +170,11 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
 
 /// Manufacturer and model as the device reports them.
 fn device_model(host: &Host) -> Option<String> {
-    let parts: Vec<&str> = [&host.discovery.manufacturer, &host.discovery.model]
+    let model = host.discovery.model.as_ref().or(host.snmp.model.as_ref());
+    let parts: Vec<&str> = [host.discovery.manufacturer.as_ref(), model]
         .into_iter()
-        .filter_map(|part| part.as_deref())
+        .flatten()
+        .map(String::as_str)
         .collect();
     (!parts.is_empty()).then(|| parts.join(" "))
 }

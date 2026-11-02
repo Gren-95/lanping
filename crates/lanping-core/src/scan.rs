@@ -17,6 +17,7 @@ use crate::host::{Host, ServiceBanner};
 use crate::neighbors::{read_ipv6_neighbors, read_neighbor_table};
 use crate::ports::scan_ports;
 use crate::probe::{create_icmp_client, ping, tcp_liveness};
+use crate::snmp::{SnmpCommunity, query_device};
 use crate::ssdp;
 use crate::vendor::lookup_vendor;
 
@@ -34,6 +35,8 @@ pub struct ScanConfig {
     pub ports: Vec<u16>,
     /// Ask devices about themselves over mDNS, NetBIOS and SSDP.
     pub discover: bool,
+    /// Community for read-only SNMP queries. `None` leaves SNMP off.
+    pub snmp_community: Option<SnmpCommunity>,
     /// Read the greeting of every open port found by the port scan.
     pub grab_banners: bool,
     pub probe_timeout: Duration,
@@ -46,6 +49,7 @@ impl ScanConfig {
             targets,
             ports: Vec::new(),
             discover: true,
+            snmp_community: None,
             grab_banners: false,
             probe_timeout: Duration::from_millis(800),
             max_parallel_probes: 256,
@@ -212,11 +216,17 @@ async fn enrich(
     for (_ip, mut host) in known {
         let (limit, ports, wait) = (limit.clone(), config.ports.clone(), config.probe_timeout);
         let grab = config.grab_banners;
+        let community = config.snmp_community.clone();
         lookups.spawn(async move {
             let _permit = limit.acquire_owned().await.ok()?;
             host.hostname = resolve_hostname(host.ip).await;
             if discover {
                 host.discovery = query_host(host.ip, DISCOVERY_TIMEOUT).await;
+            }
+            if let Some(community) = &community {
+                host.snmp = query_device(host.ip, community, DISCOVERY_TIMEOUT)
+                    .await
+                    .unwrap_or_default();
             }
             if !ports.is_empty() {
                 host.open_ports = scan_ports(host.ip, &ports, wait).await;
