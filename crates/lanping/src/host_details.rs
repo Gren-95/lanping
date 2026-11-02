@@ -4,6 +4,7 @@ use iced::font::Weight;
 use iced::widget::{Row, column, row, scrollable, space, text};
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
+use lanping_core::device_type::guess_device_type;
 use lanping_core::history::Sighting;
 use lanping_core::ports::format_ports;
 
@@ -103,6 +104,7 @@ fn facts(host: &Host, has_label: bool) -> Element<'_, Message> {
         ))
         .push(fact("Latency", latency));
     let announced = [
+        Some(("Type", format!("{} (best guess)", guess_device_type(host)))),
         host.discovery.name.clone().map(|name| ("Announces", name)),
         device_model(host).map(|model| ("Model", model)),
         (!host.discovery.services.is_empty())
