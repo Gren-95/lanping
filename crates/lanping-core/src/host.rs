@@ -4,6 +4,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::discovery::Discovery;
+use crate::snmp::SnmpInfo;
 
 /// What a service said when connected to, for example an SSH version string.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +33,9 @@ pub struct Host {
     /// What the device says about itself. Absent in older saved scans.
     #[serde(default)]
     pub discovery: Discovery,
+    /// What the device reports over SNMP. Absent in older saved scans.
+    #[serde(default)]
+    pub snmp: SnmpInfo,
 }
 
 impl Host {
@@ -47,6 +51,7 @@ impl Host {
             banners: Vec::new(),
             ipv6: Vec::new(),
             discovery: Discovery::default(),
+            snmp: SnmpInfo::default(),
         }
     }
 
@@ -58,7 +63,10 @@ impl Host {
 
     /// The best name known: the DNS hostname, else the one the device announces.
     pub fn display_name(&self) -> Option<&str> {
-        self.hostname.as_deref().or(self.discovery.name.as_deref())
+        self.hostname
+            .as_deref()
+            .or(self.discovery.name.as_deref())
+            .or(self.snmp.name.as_deref())
     }
 
     pub fn banner(&self, port: u16) -> Option<&str> {

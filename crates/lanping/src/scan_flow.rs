@@ -4,6 +4,7 @@ use iced::Task;
 use iced::futures::SinkExt;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::range::parse_targets;
+use lanping_core::snmp::SnmpCommunity;
 use lanping_core::{Host, ScanConfig, ScanEvent, ScanStage, start_scan};
 
 use crate::app::{LanPing, Message, Notice};
@@ -47,6 +48,9 @@ impl LanPing {
 
         let mut config = ScanConfig::new(targets);
         config.grab_banners = self.settings.grab_banners && !ports.is_empty();
+        let community = self.settings.snmp_community.trim();
+        config.snmp_community =
+            (!community.is_empty()).then(|| SnmpCommunity(community.to_owned()));
         config.ports = ports;
         let events = iced::stream::channel(STREAM_BUFFER, async move |mut output| {
             let mut scan = start_scan(config);

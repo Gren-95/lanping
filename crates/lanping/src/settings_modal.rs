@@ -342,6 +342,16 @@ fn network_tab(app: &LanPing) -> Element<'_, Message> {
         text("The network list is checked every 10 seconds while the second option is on.")
             .size(12)
             .color(MUTED),
+        text("SNMP community").size(14),
+        text_input("Empty leaves SNMP off", &app.settings.snmp_community)
+            .on_input(Message::SnmpCommunityChanged)
+            .secure(true)
+            .padding(theme::CONTROL_PADDING)
+            .size(13)
+            .style(theme::input),
+        text("Reads model, serial number, uptime and port count, and never changes anything. SNMP v2c sends the community unencrypted to every scanned host, so use a read-only one, and only on networks you trust.")
+            .size(12)
+            .color(MUTED),
     ]
     .spacing(ITEM_SPACING + 4.0)
     .into()

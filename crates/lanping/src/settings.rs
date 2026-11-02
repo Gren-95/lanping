@@ -89,6 +89,8 @@ pub struct Settings {
     pub custom_ports: String,
     /// Read the greeting of every open port found.
     pub grab_banners: bool,
+    /// SNMP community to read device details with. Empty leaves SNMP off.
+    pub snmp_community: String,
     pub columns: Vec<ColumnSetting>,
     /// Minutes between automatic rescans; `0` turns them off.
     pub auto_rescan_minutes: u32,
@@ -118,6 +120,7 @@ impl Default for Settings {
             selected_ports: common_ports().collect(),
             custom_ports: String::new(),
             grab_banners: false,
+            snmp_community: String::new(),
             auto_rescan_minutes: 0,
             notify_new_devices: true,
             notify_ports_opened: false,
