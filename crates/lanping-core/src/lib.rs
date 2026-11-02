@@ -20,6 +20,7 @@ pub mod range;
 pub mod scan;
 pub mod ssdp;
 pub mod tailnet;
+pub mod timeline;
 pub mod vendor;
 pub mod wol;
 

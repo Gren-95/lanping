@@ -48,7 +48,7 @@ macOS has no prebuilt download and is untested.
 - Sortable table or card view, with search, filters and saved presets
 - A best guess at each device's type, with an icon and a filter, and at its operating system
 - Reorder and hide columns by dragging, from Settings or by right-clicking a column header
-- Click a device for its ports, banners and history across scans
+- Click a device for its ports, banners, scan history and a timeline of what changed
 - Devices are tagged new, changed or gone against the previous scan of the same network
 - Name your devices and note the owner, location and tags; these are stored by MAC address, so they follow a device between scans
 - Every finished scan is saved and can be reopened from "Saved scans"
