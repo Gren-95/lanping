@@ -7,7 +7,7 @@ use lanping_core::range::parse_targets;
 use lanping_core::{Host, ScanConfig, ScanEvent, ScanStage, start_scan};
 
 use crate::app::{LanPing, Message, Notice};
-use crate::monitor::new_device_alert;
+use crate::monitor::{AlertRules, scan_alert};
 use crate::notify;
 
 const STREAM_BUFFER: usize = 64;
@@ -134,15 +134,19 @@ impl LanPing {
             format!("Scan finished: {} hosts found", self.hosts.len())
         };
         self.set_notice(Notice::Info, summary);
-        self.alert_about_new_devices();
+        self.alert_about_changes();
     }
 
-    fn alert_about_new_devices(&mut self) {
-        let wanted = self.auto_run && self.settings.notify_new_devices && self.baseline.is_some();
-        if !wanted {
+    fn alert_about_changes(&mut self) {
+        let Some(previous) = self.baseline.as_deref().filter(|_| self.auto_run) else {
             return;
-        }
-        let Some(text) = new_device_alert(&self.hosts, &self.diff, &self.labels) else {
+        };
+        let rules = AlertRules {
+            new_devices: self.settings.notify_new_devices,
+            ports_opened: self.settings.notify_ports_opened,
+            named_offline: self.settings.notify_named_offline,
+        };
+        let Some(text) = scan_alert(previous, &self.hosts, &self.diff, &self.labels, rules) else {
             return;
         };
         if let Err(error) = notify::send("LanPing", &text) {
