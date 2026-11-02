@@ -7,6 +7,7 @@ use lanping_core::Host;
 use lanping_core::device_type::guess_device_type;
 use lanping_core::history::Sighting;
 use lanping_core::os_guess::guess_os;
+use lanping_core::port_risk::port_hint;
 use lanping_core::ports::format_ports;
 
 use crate::app::{LanPing, Message, NoteField};
@@ -213,18 +214,41 @@ fn ports_section(host: &Host) -> Element<'_, Message> {
             let banner = host.banner(port).unwrap_or_default();
             list.push(
                 Row::with_children(vec![
-                    pill(port.to_string(), ACCENT),
+                    pill(
+                        port.to_string(),
+                        if port_hint(port).is_some() {
+                            WARN
+                        } else {
+                            ACCENT
+                        },
+                    ),
                     text(banner.to_owned())
                         .font(Font::MONOSPACE)
                         .size(12)
                         .color(MUTED)
+                        .into(),
+                    text(port_hint(port).unwrap_or_default())
+                        .size(12)
+                        .color(WARN)
                         .into(),
                 ])
                 .spacing(ITEM_SPACING)
                 .align_y(Alignment::Center),
             )
         });
-    column![heading, lines].spacing(6).into()
+    let mut section = column![heading, lines].spacing(6);
+    if host
+        .open_ports
+        .iter()
+        .any(|&port| port_hint(port).is_some())
+    {
+        section = section.push(
+            text("Amber ports are hints to check, based only on the port number. This is not a security audit.")
+                .size(12)
+                .color(MUTED),
+        );
+    }
+    section.into()
 }
 
 fn history_section(app: &LanPing) -> Element<'_, Message> {
