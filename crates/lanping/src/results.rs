@@ -8,6 +8,7 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
 use lanping_core::device_type::{DeviceType, guess_device_type};
+use lanping_core::port_risk::port_hint;
 
 use crate::app::{LanPing, Message};
 use crate::host_filter::RowStatus;
@@ -375,24 +376,26 @@ fn latency_pill<'a>(host: &Host) -> Element<'a, Message> {
     }
 }
 
-/// One pill per open port. Hovering a pill shows the service banner.
+/// One pill per open port, amber when it is worth a look. Hovering shows why, and the banner.
 fn port_pills<'a>(host: &Host) -> Element<'a, Message> {
     if host.open_ports.is_empty() {
         return text(NO_VALUE).color(MUTED).into();
     }
     LayoutRow::with_children(host.open_ports.iter().map(|&port| {
-        let port_pill = pill(port.to_string(), ACCENT);
-        match host.banner(port) {
-            Some(banner) => tooltip(
-                port_pill,
-                container(text(banner.to_owned()).size(12))
-                    .padding(8)
-                    .style(theme::card),
-                tooltip::Position::Top,
-            )
-            .into(),
-            None => port_pill,
+        let hint = port_hint(port);
+        let port_pill = pill(port.to_string(), if hint.is_some() { WARN } else { ACCENT });
+        let details: Vec<&str> = hint.into_iter().chain(host.banner(port)).collect();
+        if details.is_empty() {
+            return port_pill;
         }
+        tooltip(
+            port_pill,
+            container(text(details.join("\n")).size(12))
+                .padding(8)
+                .style(theme::card),
+            tooltip::Position::Top,
+        )
+        .into()
     }))
     .spacing(6)
     .wrap()
