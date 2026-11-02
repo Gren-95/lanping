@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - scripts/build-appimage.sh
+      - scripts/build-macos-app.sh
       - packaging/**
       - crates/lanping/build.rs
   workflow_dispatch:
@@ -55,9 +56,23 @@ jobs:
           path: dist/*.exe
           if-no-files-found: error
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add Rust targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Build app and disk image
+        run: scripts/build-macos-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: target/macos/*.dmg
+          if-no-files-found: error
+
   publish:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [appimage, windows]
+    needs: [appimage, windows, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
