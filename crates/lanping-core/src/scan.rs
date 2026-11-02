@@ -70,7 +70,7 @@ pub enum ScanEvent {
         total: usize,
     },
     /// A live host was found, or new details arrived for a known one.
-    Host(Host),
+    Host(Box<Host>),
     Finished,
 }
 
@@ -126,7 +126,7 @@ async fn sweep(config: &ScanConfig, events: &mpsc::Sender<ScanEvent>) -> HashMap
         scanned += 1;
         if let Ok(Some(host)) = joined {
             known.insert(host.ip, host.clone());
-            if events.send(ScanEvent::Host(host)).await.is_err() {
+            if events.send(ScanEvent::Host(Box::new(host))).await.is_err() {
                 return known;
             }
         }
@@ -172,7 +172,11 @@ async fn merge_neighbors(
         host.vendor = lookup_vendor(mac).map(str::to_owned);
         host.ipv6 = ipv6.get(mac).cloned().unwrap_or_default();
         host.mac = Some(mac.clone());
-        if events.send(ScanEvent::Host(host.clone())).await.is_err() {
+        if events
+            .send(ScanEvent::Host(Box::new(host.clone())))
+            .await
+            .is_err()
+        {
             return;
         }
     }
@@ -228,7 +232,7 @@ async fn enrich(
         done += 1;
         if let Ok(Some(host)) = joined {
             finished.insert(host.ip, host.clone());
-            if events.send(ScanEvent::Host(host)).await.is_err() {
+            if events.send(ScanEvent::Host(Box::new(host))).await.is_err() {
                 return;
             }
         }
@@ -241,7 +245,7 @@ async fn enrich(
     for (ip, description) in survey.await.unwrap_or_default() {
         if let Some(mut host) = finished.remove(&ip) {
             host.discovery.add_description(description);
-            if events.send(ScanEvent::Host(host)).await.is_err() {
+            if events.send(ScanEvent::Host(Box::new(host))).await.is_err() {
                 return;
             }
         }

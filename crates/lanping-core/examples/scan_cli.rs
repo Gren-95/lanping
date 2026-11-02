@@ -20,7 +20,7 @@ async fn main() {
     while let Some(event) = scan.next_event().await {
         match event {
             ScanEvent::Host(host) => {
-                hosts.insert(host.ip, host);
+                hosts.insert(host.ip, *host);
             }
             ScanEvent::Progress { .. } => {}
             ScanEvent::Finished => break,

@@ -26,7 +26,9 @@ fn parse_status_response(packet: &[u8]) -> Option<String> {
     let count = usize::from(*packet.get(NAME_COUNT_OFFSET)?);
     let names = packet.get(NAME_COUNT_OFFSET + 1..)?;
     names
-        .chunks_exact(NAME_ENTRY_LENGTH)
+        .as_chunks::<NAME_ENTRY_LENGTH>()
+        .0
+        .iter()
         .take(count)
         .find(|entry| entry[15] == WORKSTATION_SUFFIX && entry[16] & GROUP_NAME_FLAG == 0)
         .map(|entry| String::from_utf8_lossy(&entry[..15]).trim().to_owned())

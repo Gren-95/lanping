@@ -95,7 +95,7 @@ impl LanPing {
                 self.progress_stage = stage;
                 self.progress = (scanned, total);
             }
-            ScanEvent::Host(host) => self.upsert_host(host),
+            ScanEvent::Host(host) => self.upsert_host(*host),
             ScanEvent::Finished => self.finish_scan(),
         }
     }
