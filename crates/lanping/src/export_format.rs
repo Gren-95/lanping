@@ -3,30 +3,32 @@
 use std::fmt;
 use std::path::PathBuf;
 
-use lanping_core::Host;
-use lanping_core::device_notes::DeviceNotes;
 use lanping_core::export::{to_csv, to_json};
+use lanping_core::report::{ReportInput, to_html};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportFormat {
     Csv,
     Json,
+    Html,
 }
 
 impl ExportFormat {
-    pub const ALL: [ExportFormat; 2] = [ExportFormat::Csv, ExportFormat::Json];
+    pub const ALL: [ExportFormat; 3] = [ExportFormat::Csv, ExportFormat::Json, ExportFormat::Html];
 
     pub fn extension(self) -> &'static str {
         match self {
             Self::Csv => "csv",
             Self::Json => "json",
+            Self::Html => "html",
         }
     }
 
-    pub fn render(self, hosts: &[Host], notes: &DeviceNotes) -> Result<String, String> {
+    pub fn render(self, input: &ReportInput<'_>) -> Result<String, String> {
         match self {
-            Self::Csv => Ok(to_csv(hosts, notes)),
-            Self::Json => to_json(hosts, notes).map_err(|error| error.to_string()),
+            Self::Csv => Ok(to_csv(input.hosts, input.notes)),
+            Self::Json => to_json(input.hosts, input.notes).map_err(|error| error.to_string()),
+            Self::Html => Ok(to_html(input)),
         }
     }
 }
@@ -36,6 +38,7 @@ impl fmt::Display for ExportFormat {
         f.write_str(match self {
             Self::Csv => "Export as CSV",
             Self::Json => "Export as JSON",
+            Self::Html => "Export as report (HTML)",
         })
     }
 }
@@ -64,23 +67,26 @@ pub async fn ask_save_path(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lanping_core::Host;
+    use lanping_core::device_notes::DeviceNotes;
+    use lanping_core::labels::DeviceLabels;
 
     #[test]
     fn renders_each_format_with_its_extension() {
         let hosts = [Host::new(std::net::Ipv4Addr::new(10, 0, 0, 1))];
-        assert!(
-            ExportFormat::Csv
-                .render(&hosts, &DeviceNotes::default())
-                .unwrap()
-                .contains("10.0.0.1")
-        );
-        assert!(
-            ExportFormat::Json
-                .render(&hosts, &DeviceNotes::default())
-                .unwrap()
-                .contains("10.0.0.1")
-        );
+        let (labels, notes) = (DeviceLabels::default(), DeviceNotes::default());
+        let input = ReportInput {
+            target: "10.0.0.0/24",
+            generated_at: "now",
+            hosts: &hosts,
+            labels: &labels,
+            notes: &notes,
+        };
+        for format in ExportFormat::ALL {
+            assert!(format.render(&input).unwrap().contains("10.0.0.1"));
+        }
         assert_eq!(ExportFormat::Csv.extension(), "csv");
         assert_eq!(ExportFormat::Json.extension(), "json");
+        assert_eq!(ExportFormat::Html.extension(), "html");
     }
 }

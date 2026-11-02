@@ -264,7 +264,7 @@ fn tools_row(app: &LanPing, wide: bool) -> Element<'_, Message> {
         .placeholder("Export")
         .text_size(13)
         .padding(theme::CONTROL_PADDING)
-        .width(120)
+        .width(190)
         .style(theme::pick_at(Edge::Last));
 
     let sort_key = pick_list(
