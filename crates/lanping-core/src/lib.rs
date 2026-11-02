@@ -19,6 +19,7 @@ pub mod probe;
 pub mod range;
 pub mod scan;
 pub mod ssdp;
+pub mod summary;
 pub mod tailnet;
 pub mod timeline;
 pub mod vendor;
