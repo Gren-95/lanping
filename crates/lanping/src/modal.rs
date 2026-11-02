@@ -40,8 +40,14 @@ pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {
         Modal::SavePreset => (save_preset_dialog(app), false),
         Modal::ColumnMenu(column) => (column_menu_dialog(app, *column), false),
     };
+    // Settings lays out its own padding so its tabs and scrollbar reach the edges.
+    let padding = if matches!(modal, Modal::Settings(_)) {
+        0.0
+    } else {
+        DIALOG_PADDING
+    };
     let mut frame = container(dialog)
-        .padding(DIALOG_PADDING)
+        .padding(padding)
         .width(Length::Fill)
         .max_width(DIALOG_MAX_WIDTH)
         .max_height(DIALOG_MAX_HEIGHT)
