@@ -10,6 +10,8 @@ use tokio::net::{TcpStream, UdpSocket};
 use tokio::task::JoinSet;
 use tokio::time::timeout;
 
+use crate::socket_budget::socket_permit;
+
 const MULTICAST_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 255, 250);
 const SSDP_PORT: u16 = 1900;
 const SEARCH_ATTEMPTS: usize = 2;
@@ -72,6 +74,7 @@ fn parse_description(xml: &str) -> DeviceDescription {
 
 async fn read_description(location: HttpLocation) -> Option<DeviceDescription> {
     let exchange = async {
+        let _permit = socket_permit().await?;
         let mut stream = TcpStream::connect((location.host, location.port))
             .await
             .ok()?;

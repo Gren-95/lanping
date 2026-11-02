@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 
+use crate::socket_budget::socket_permit;
+
 const SNMP_PORT: u16 = 161;
 const VERSION_2C: u8 = 1;
 const TAG_INTEGER: u8 = 0x02;
@@ -236,6 +238,7 @@ async fn query_address(
     community: &SnmpCommunity,
     wait: Duration,
 ) -> Option<SnmpInfo> {
+    let _permit = socket_permit().await?;
     let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await.ok()?;
     socket.connect(SocketAddr::V4(address)).await.ok()?;
     socket
