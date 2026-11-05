@@ -8,6 +8,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
 use crate::command::run;
+use crate::dns::parse_resolv_conf;
 use crate::gateway::default_gateway;
 
 const RESOLV_CONF: &str = "/etc/resolv.conf";
@@ -122,13 +123,13 @@ async fn dns_servers() -> Vec<IpAddr> {
         };
     }
     let configured = fs::read_to_string(RESOLV_CONF)
-        .map(|text| parse_resolv_conf(&text))
+        .map(|text| without_repeats(parse_resolv_conf(&text)))
         .unwrap_or_default();
     // A stub on this computer forwards to the servers that matter.
     if configured.iter().all(|server| server.is_loopback())
         && let Ok(text) = fs::read_to_string(RESOLVED_CONF)
     {
-        let behind_stub = parse_resolv_conf(&text);
+        let behind_stub = without_repeats(parse_resolv_conf(&text));
         if !behind_stub.is_empty() {
             return behind_stub;
         }
@@ -136,27 +137,15 @@ async fn dns_servers() -> Vec<IpAddr> {
     configured
 }
 
-/// The `nameserver` lines of a `resolv.conf`.
-fn parse_resolv_conf(text: &str) -> Vec<IpAddr> {
-    let mut servers: Vec<IpAddr> = Vec::new();
-    for line in text.lines() {
-        let mut words = line.split_whitespace();
-        if words.next() != Some("nameserver") {
-            continue;
-        }
-        // A server on a link-local IPv6 address is written `fe80::1%eth0`.
-        let Some(address) = words
-            .next()
-            .and_then(|word| word.split('%').next())
-            .and_then(|word| word.parse().ok())
-        else {
-            continue;
-        };
-        if !servers.contains(&address) {
-            servers.push(address);
+/// `servers` without repeats, in order.
+fn without_repeats(servers: Vec<IpAddr>) -> Vec<IpAddr> {
+    let mut unique: Vec<IpAddr> = Vec::with_capacity(servers.len());
+    for server in servers {
+        if !unique.contains(&server) {
+            unique.push(server);
         }
     }
-    servers
+    unique
 }
 
 /// The addresses after `DNS Servers` in `ipconfig /all`, which go on over the lines below.
@@ -272,18 +261,15 @@ mod tests {
     }
 
     #[test]
-    fn nameservers_are_read_once_each_and_zone_names_are_dropped() {
-        let text = "# generated\nsearch lan\nnameserver 192.168.0.1\nnameserver 1.1.1.1\n\
-                    nameserver fe80::1%eth0\nnameserver 192.168.0.1\nnameserver bad\noptions edns0\n";
+    fn a_server_listed_twice_is_shown_once() {
+        let text = "nameserver 192.168.0.1\nnameserver 1.1.1.1\nnameserver 192.168.0.1\n";
         assert_eq!(
-            parse_resolv_conf(text),
+            without_repeats(parse_resolv_conf(text)),
             [
                 "192.168.0.1".parse::<IpAddr>().unwrap(),
                 "1.1.1.1".parse().unwrap(),
-                "fe80::1".parse().unwrap(),
             ]
         );
-        assert!(parse_resolv_conf("").is_empty());
     }
 
     #[test]
