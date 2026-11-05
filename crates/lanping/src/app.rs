@@ -9,24 +9,29 @@ use iced::{Subscription, Task, Theme};
 use lanping_core::device_notes::{DeviceNote, DeviceNotes};
 use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
+use lanping_core::dns::{Answer, DnsError, RecordType, ResolverTiming};
 use lanping_core::gateway::default_gateway;
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
+use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::trace::{HopSample, TraceError};
+use lanping_core::whois::{WhoisError, WhoisReport};
 use lanping_core::wifi::{AccessPoint, WifiError};
 use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
 
 use crate::actions::{Effect, HostAction};
 use crate::copy_text::rows_as_text;
+use crate::dns_tab::{DnsPage, DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
 use crate::host_order::{SortKey, compare_hosts};
 use crate::host_rows::Row;
+use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
@@ -35,10 +40,12 @@ use crate::storage::{
     device_notes_path, export_directory, history_directory, labels_path, migrate_legacy_data,
     settings_path,
 };
+use crate::subnet_tab::SubnetState;
+use crate::tabs::Tab;
 use crate::timestamp::format_unix_utc;
 use crate::trace_tab::TraceState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
-use crate::wifi_tab::{Tab, WifiState};
+use crate::wifi_tab::WifiState;
 
 /// How often the interface list is read while "scan when the network changes" is on.
 const NETWORK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
@@ -194,6 +201,30 @@ pub enum Message {
     TraceStop,
     TraceRound(u64, Result<Vec<HopSample>, TraceError>),
     TraceCopyRows,
+    LatencyTargetChanged(String),
+    LatencyIntervalPicked(Interval),
+    LatencyStart,
+    LatencyStop,
+    LatencyReady(u64, Result<Prober, LatencyError>),
+    LatencySample(u64, Option<f64>),
+    LatencyCopySummary,
+    LatencySaveLog,
+    LatencyLogPathChosen(Option<PathBuf>),
+    DnsPagePicked(DnsPage),
+    WhoisQueryChanged(String),
+    WhoisLookup,
+    WhoisDone(u64, Result<WhoisReport, WhoisError>),
+    WhoisCopy,
+    DnsNameChanged(String),
+    DnsTypePicked(RecordType),
+    DnsResolverPicked(ResolverChoice),
+    DnsLookup,
+    DnsLookupDone(u64, Result<Answer, DnsError>),
+    DnsCompare,
+    DnsComparisonDone(u64, Vec<ResolverTiming>),
+    DnsCopyRecords,
+    SubnetInputChanged(String),
+    SubnetScanRange(String),
     WifiScanned(Result<Vec<AccessPoint>, WifiError>),
 }
 
@@ -212,6 +243,9 @@ pub struct LanPing {
     pub settings_tab: SettingsTab,
     pub wifi: WifiState,
     pub trace: TraceState,
+    pub subnet: SubnetState,
+    pub latency: LatencyState,
+    pub dns: DnsState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -336,6 +370,9 @@ impl LanPing {
             settings_tab: SettingsTab::default(),
             wifi: WifiState::default(),
             trace: TraceState::default(),
+            subnet: SubnetState::default(),
+            latency: LatencyState::default(),
+            dns: DnsState::new(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -506,6 +543,64 @@ impl LanPing {
             Message::WifiAutoRefreshToggled(on) => self.wifi.set_auto_refresh(on),
             Message::WifiSortBy(key) => self.wifi.sort_by(key),
             Message::WifiFilter(change) => self.wifi.apply_filter(change),
+            Message::LatencyTargetChanged(target) => self.latency.set_target(target),
+            Message::LatencyIntervalPicked(interval) => self.latency.set_interval(interval),
+            Message::LatencyStart => return self.latency.start(),
+            Message::LatencyStop => self.latency.stop(),
+            Message::LatencyReady(generation, result) => {
+                return self.latency.ready(generation, result);
+            }
+            Message::LatencySample(generation, rtt_ms) => {
+                return self.latency.sampled(generation, rtt_ms);
+            }
+            Message::LatencyCopySummary => {
+                self.set_notice(Notice::Info, "Copied latency summary".to_owned());
+                return iced::clipboard::write(self.latency.summary());
+            }
+            Message::LatencySaveLog => {
+                return Task::perform(
+                    ask_save_path(
+                        ExportFormat::Csv,
+                        self.latency.default_log_name(),
+                        export_directory(),
+                    ),
+                    Message::LatencyLogPathChosen,
+                );
+            }
+            Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
+            Message::LatencyLogPathChosen(None) => {}
+            Message::DnsPagePicked(page) => self.dns.set_page(page),
+            Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
+            Message::WhoisLookup => return self.dns.whois.start(),
+            Message::WhoisDone(generation, result) => self.dns.whois.finish(generation, result),
+            Message::WhoisCopy => {
+                if let Some(answer) = self.dns.whois.answer_text() {
+                    let answer = answer.to_owned();
+                    self.set_notice(Notice::Info, "Copied the WHOIS answer".to_owned());
+                    return iced::clipboard::write(answer);
+                }
+            }
+            Message::DnsNameChanged(name) => self.dns.set_name(name),
+            Message::DnsTypePicked(record_type) => self.dns.set_record_type(record_type),
+            Message::DnsResolverPicked(resolver) => self.dns.set_resolver(resolver),
+            Message::DnsLookup => return self.dns.start_lookup(),
+            Message::DnsLookupDone(generation, result) => {
+                self.dns.finish_lookup(generation, result);
+            }
+            Message::DnsCompare => return self.dns.start_comparison(),
+            Message::DnsComparisonDone(generation, timings) => {
+                self.dns.finish_comparison(generation, timings);
+            }
+            Message::DnsCopyRecords => {
+                let (text, count) = self.dns.records_as_text();
+                self.set_notice(Notice::Info, format!("Copied {count} records"));
+                return iced::clipboard::write(text);
+            }
+            Message::SubnetInputChanged(input) => self.subnet.set_input(input),
+            Message::SubnetScanRange(target) => {
+                self.target = target;
+                self.tab = Tab::Scan;
+            }
             Message::TraceTargetChanged(target) => self.trace.set_target(target),
             Message::TraceStart => return self.trace.start(),
             Message::TraceStop => self.trace.stop(),
@@ -819,6 +914,13 @@ impl LanPing {
             ask_save_path(format, file_name, export_directory()),
             move |path| Message::ExportPathChosen(format, path),
         )
+    }
+
+    fn save_latency_log(&mut self, path: &Path) {
+        match fs::write(path, self.latency.log_as_csv()) {
+            Ok(()) => self.set_notice(Notice::Info, format!("Saved {}", path.display())),
+            Err(error) => self.set_notice(Notice::Error, format!("Could not save log: {error}")),
+        }
     }
 
     fn export(&mut self, format: ExportFormat, path: &Path) {

@@ -2,8 +2,7 @@
 
 use iced::font::Weight;
 use iced::widget::{
-    Row as LayoutRow, button, checkbox, column, container, pick_list, row, scrollable, space, text,
-    text_input,
+    Row as LayoutRow, checkbox, column, container, pick_list, scrollable, space, text, text_input,
 };
 use iced::{Alignment, Element, Font, Length, Task};
 use lanping_core::wifi::{AccessPoint, SignalHistory, WifiError, scan_access_points};
@@ -32,16 +31,6 @@ const WIDE_WIDTH: f32 = 820.0;
 const CONTROL_TEXT_SIZE: u32 = 13;
 const BAND_PICK_WIDTH: f32 = 130.0;
 const SECURITY_PICK_WIDTH: f32 = 150.0;
-
-/// The pages the window can show.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Tab {
-    #[default]
-    Scan,
-    Wifi,
-    Trace,
-    Settings,
-}
 
 /// What the last Wi-Fi scan found, and how it is searched and ordered.
 #[derive(Debug, Default)]
@@ -128,37 +117,6 @@ impl WifiState {
         let rows = self.rows();
         (rows_as_text(&rows), rows.len())
     }
-}
-
-/// The row of tab buttons above the page.
-pub fn tab_bar(app: &LanPing) -> Element<'_, Message> {
-    let tabs = [
-        (Tab::Scan, lucide::scan_search(), "Devices"),
-        (Tab::Wifi, lucide::wifi(), "Wi-Fi"),
-        (Tab::Trace, lucide::activity(), "Trace"),
-    ];
-    LayoutRow::with_children(tabs.into_iter().map(|(tab, icon, label)| {
-        button(
-            row![icon.size(ICON_SIZE), text(label).size(14)]
-                .spacing(8)
-                .align_y(Alignment::Center),
-        )
-        .on_press(Message::TabSelected(tab))
-        .padding([7.0, 16.0])
-        .style(theme::tab_button(app.tab == tab))
-        .into()
-    }))
-    .spacing(8)
-    .push(space::horizontal())
-    .push(with_tooltip(
-        button(lucide::settings().size(ICON_SIZE))
-            .on_press(Message::TabSelected(Tab::Settings))
-            .padding([7.0, 12.0])
-            .style(theme::tab_button(app.tab == Tab::Settings)),
-        "Settings",
-    ))
-    .align_y(Alignment::Center)
-    .into()
 }
 
 pub fn wifi_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
