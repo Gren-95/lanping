@@ -45,8 +45,9 @@ impl LanPing {
                 server_name,
             } => {
                 // The tab may be hidden in the settings. Showing it keeps the page reachable.
-                self.settings.set_tab_visible(Tab::Tls, true);
-                self.tab = Tab::Tls;
+                self.settings.set_tab_visible(Tab::Dns, true);
+                self.tab = Tab::Dns;
+                self.dns.set_page(DnsPage::Tls);
                 self.tls.set_target(target);
                 self.tls.set_server_name(server_name.unwrap_or_default());
                 self.tls.start()

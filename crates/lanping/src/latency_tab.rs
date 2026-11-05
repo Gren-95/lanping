@@ -21,7 +21,7 @@ use crate::theme::{
     latency_color, loss_color,
 };
 use crate::timestamp::unix_now;
-use crate::ui::{empty_state, panel};
+use crate::ui::empty_state;
 use crate::view::input_group;
 
 const CHART_HEIGHT: f32 = 120.0;
@@ -194,7 +194,7 @@ impl LatencyState {
     }
 }
 
-pub fn latency_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn latency_page(app: &LanPing) -> Element<'_, Message> {
     let latency = &app.latency;
     let content: Element<'_, Message> = match (&latency.error, latency.series.sent) {
         (Some(error), _) => empty_state("Cannot measure", error.to_string()),
@@ -211,7 +211,7 @@ pub fn latency_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![toolbar(latency), content]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    panel(page)
+    page.into()
 }
 
 fn toolbar(latency: &LatencyState) -> Element<'_, Message> {

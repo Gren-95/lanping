@@ -126,3 +126,15 @@ pub fn page_strip<'a, P: Copy + PartialEq + 'a>(
     .spacing(8)
     .into()
 }
+
+/// The panel of a tab made of pages: the strip that picks the page, and the page under it.
+pub fn tabbed_panel<'a>(
+    strip: Element<'a, Message>,
+    page: Element<'a, Message>,
+) -> Element<'a, Message> {
+    panel(
+        column![strip, page]
+            .spacing(theme::SECTION_SPACING)
+            .height(Length::Fill),
+    )
+}

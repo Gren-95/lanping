@@ -91,27 +91,45 @@ pub enum SettingsTab {
     Presets,
 }
 
-/// Reads the saved tabs and leaves out any this version does not have, such as one that a
-/// newer version added or that was folded into another tab. One unknown tab must not make the
-/// whole settings file unreadable.
+/// Reads the saved tabs. A tab that was folded into another one keeps its choice there, and
+/// any other this version does not have is left out. One unknown tab must not make the whole
+/// settings file unreadable.
 fn tabs_that_are_known<'de, D>(deserializer: D) -> Result<Vec<TabSetting>, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     #[derive(Deserialize)]
+    struct Old {
+        tab: String,
+        visible: bool,
+    }
+    #[derive(Deserialize)]
     #[serde(untagged)]
     enum Entry {
         Known(TabSetting),
+        Old(Old),
         Unknown(serde::de::IgnoredAny),
     }
-    let entries = Vec::<Entry>::deserialize(deserializer)?;
-    Ok(entries
-        .into_iter()
-        .filter_map(|entry| match entry {
-            Entry::Known(setting) => Some(setting),
-            Entry::Unknown(_) => None,
-        })
-        .collect())
+    let mut tabs: Vec<TabSetting> = Vec::new();
+    for entry in Vec::<Entry>::deserialize(deserializer)? {
+        let setting = match entry {
+            Entry::Known(setting) => setting,
+            Entry::Old(old) => match Tab::folded_into(&old.tab) {
+                Some(tab) => TabSetting {
+                    tab,
+                    visible: old.visible,
+                },
+                None => continue,
+            },
+            Entry::Unknown(_) => continue,
+        };
+        // Tabs folded into one show if any of them did.
+        match tabs.iter_mut().find(|known| known.tab == setting.tab) {
+            Some(known) => known.visible |= setting.visible,
+            None => tabs.push(setting),
+        }
+    }
+    Ok(tabs)
 }
 
 /// Fields missing from an older settings file take their default value.
@@ -344,18 +362,11 @@ mod tests {
     use lanping_core::ports::COMMON_SERVICES;
 
     #[test]
-    fn the_default_layout_shows_the_six_main_tabs_and_keeps_the_others_one_tick_away() {
+    fn the_default_layout_shows_the_five_main_tabs_and_keeps_the_others_one_tick_away() {
         let settings = Settings::default();
         assert_eq!(
             settings.visible_tabs(),
-            [
-                Tab::Scan,
-                Tab::Wifi,
-                Tab::Trace,
-                Tab::Latency,
-                Tab::Speed,
-                Tab::Dns
-            ]
+            [Tab::Scan, Tab::Wifi, Tab::Path, Tab::Speed, Tab::Dns]
         );
         let all: Vec<Tab> = settings.tabs.iter().map(|setting| setting.tab).collect();
         assert_eq!(
@@ -364,6 +375,34 @@ mod tests {
             "hidden tabs are still in the list, in order"
         );
         assert!(!settings.visible_tabs().contains(&Tab::Settings));
+    }
+
+    #[test]
+    fn tabs_that_were_folded_into_another_keep_their_choice_there() {
+        let json = r#"{"tabs":[
+            {"tab":"Trace","visible":false},
+            {"tab":"Wifi","visible":true},
+            {"tab":"Latency","visible":true},
+            {"tab":"Snmp","visible":false},
+            {"tab":"Upnp","visible":false},
+            {"tab":"Tls","visible":true}]}"#;
+        let path = std::env::temp_dir().join(format!("lanping-folded-{}.json", std::process::id()));
+        std::fs::write(&path, json).unwrap();
+        let settings = Settings::load(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+        let find = |tab: Tab| settings.tabs.iter().position(|s| s.tab == tab).unwrap();
+        assert!(
+            settings.tabs[find(Tab::Path)].visible,
+            "one of Trace and Latency was shown"
+        );
+        assert!(
+            find(Tab::Path) < find(Tab::Wifi),
+            "Path takes the place of Trace"
+        );
+        assert!(
+            !settings.tabs[find(Tab::Router)].visible,
+            "none of the router tabs was shown"
+        );
     }
 
     #[test]
@@ -425,13 +464,13 @@ mod tests {
     #[test]
     fn a_hidden_tab_keeps_its_place_in_the_order() {
         let mut settings = Settings::default();
-        settings.set_tab_visible(Tab::Trace, false);
-        settings.move_tab_to(Tab::Speed, Tab::Trace);
-        settings.set_tab_visible(Tab::Trace, true);
+        settings.set_tab_visible(Tab::Path, false);
+        settings.move_tab_to(Tab::Speed, Tab::Path);
+        settings.set_tab_visible(Tab::Path, true);
         let order: Vec<Tab> = settings.tabs.iter().map(|setting| setting.tab).collect();
         assert!(
             order.iter().position(|t| *t == Tab::Speed)
-                < order.iter().position(|t| *t == Tab::Trace)
+                < order.iter().position(|t| *t == Tab::Path)
         );
     }
 
@@ -459,7 +498,7 @@ mod tests {
         );
         let shown = |tab: Tab| partial.tabs.iter().find(|s| s.tab == tab).unwrap().visible;
         assert!(shown(Tab::Wifi), "a main tab is appended shown");
-        assert!(!shown(Tab::Tls), "a tool tab is appended hidden");
+        assert!(!shown(Tab::Router), "a tool tab is appended hidden");
         assert!(
             partial.visible_tabs().contains(&Tab::Scan),
             "devices cannot stay hidden"

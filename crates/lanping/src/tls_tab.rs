@@ -10,7 +10,7 @@ use crate::job::Job;
 use crate::results::pill;
 use crate::theme::{self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
 use crate::timestamp::format_unix_utc;
-use crate::ui::{note, panel, scrolling};
+use crate::ui::{note, scrolling};
 use crate::view::input_group;
 
 const LABEL_WIDTH: f32 = 130.0;
@@ -79,7 +79,7 @@ const WIDE_WIDTH: f32 = 820.0;
 const NAME_INPUT_WIDTH: f32 = 260.0;
 const INPUT_TEXT_SIZE: u32 = 13;
 
-pub fn tls_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
+pub fn tls_page(app: &LanPing, width: f32) -> Element<'_, Message> {
     let tls = &app.tls;
     let busy = matches!(tls.lookup, Lookup::Running);
     let wide = width >= WIDE_WIDTH;
@@ -133,8 +133,7 @@ pub fn tls_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
         Lookup::Done(report) => report_view(report),
     };
     let body = column![inputs, result].spacing(SECTION_SPACING);
-    let page = scrolling(body);
-    panel(page)
+    scrolling(body).into()
 }
 
 fn report_view(report: &TlsReport) -> Element<'_, Message> {

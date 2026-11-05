@@ -222,6 +222,8 @@ pub enum Message {
     ServicesDone(u64, Vec<ServiceEntry>),
     UpnpDone(u64, Result<UpnpReport, UpnpError>),
     DnsPagePicked(DnsPage),
+    PathPagePicked(PathPage),
+    RouterPagePicked(RouterPage),
     WhoisQueryChanged(String),
     WhoisLookup,
     WhoisDone(u64, Result<WhoisReport, WhoisError>),

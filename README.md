@@ -68,12 +68,12 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Trace**
 
-- A Trace tab repeats a traceroute to any host name or IP address and shows loss, latency, jitter and a latency graph for every hop, like MTR
+- A Trace page in the Path tab repeats a traceroute to any host name or IP address and shows loss, latency, jitter and a latency graph for every hop, like MTR
 - Runs the system `traceroute` (or `tracepath`, `tracert` on Windows) once per round, so no root is needed and nothing extra is installed
 
 **Latency**
 
-- A Latency tab probes one host every second, 5 seconds or 30 seconds with ICMP ping (TCP connects when the system does not allow unprivileged ping), shows loss, average, best, worst and jitter with a history graph, and saves the log as CSV
+- A Latency page in the Path tab probes one host every second, 5 seconds or 30 seconds with ICMP ping (TCP connects when the system does not allow unprivileged ping), shows loss, average, best, worst and jitter with a history graph, and saves the log as CSV
 
 **Speed**
 
@@ -87,11 +87,11 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **TLS**
 
-- A TLS tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, an optional server name lets you check an IP address on a server that hosts several sites, such as Caddy, and an open HTTPS port in the device menu offers a one-click check
+- A TLS page in the DNS tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, an optional server name lets you check an IP address on a server that hosts several sites, such as Caddy, and an open HTTPS port in the device menu offers a one-click check
 
 **SNMP**
 
-- An SNMP tab asks a router or switch over read-only SNMP v2c how much each interface carries: status, link speed, live in and out rates, how full the link is, and a graph. It uses the 64-bit counters where the device has them and copes with counter wraps and device restarts. The community is typed by you and never guessed. SNMP counts per interface, not per device on the network. `docker/snmp-test` has a throwaway SNMP device in a container to try it against
+- An SNMP page in the Router tab asks a router or switch over read-only SNMP v2c how much each interface carries: status, link speed, live in and out rates, how full the link is, and a graph. It uses the 64-bit counters where the device has them and copes with counter wraps and device restarts. The community is typed by you and never guessed. SNMP counts per interface, not per device on the network. `docker/snmp-test` has a throwaway SNMP device in a container to try it against
 
 **Subnet**
 
@@ -103,7 +103,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **UPnP**
 
-- A UPnP tab lists the port forwards the router has open, as programs asked it to over UPnP IGD: protocol, outside port, inside address and port, description and lease. It flags forwards that point at a device the last scan did not find, and says so clearly when the router has UPnP turned off. Read-only: it only lists, and never adds or removes a forward
+- A UPnP page in the Router tab lists the port forwards the router has open, as programs asked it to over UPnP IGD: protocol, outside port, inside address and port, description and lease. It flags forwards that point at a device the last scan did not find, and says so clearly when the router has UPnP turned off. Read-only: it only lists, and never adds or removes a forward
 
 **Services**
 
@@ -113,20 +113,20 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A My network tab shows what people look up constantly: this computer's addresses per interface (IPv4 and IPv6, with link-local ones marked), the gateway, the DNS servers and the Wi-Fi name, each with a copy button. Those are read from this computer only. A separate button checks the public address, whether IPv6 works and whether a sign-in page is in the way; it says up front that it contacts Cloudflare and sends nothing unless pressed
 
-**More DNS pages**
+**Pages of the DNS, Path and Router tabs**
 
-- The DNS tab has five pages: Lookup, WHOIS, Website, Email records and MTU. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
+- The DNS tab has five pages: Lookup, WHOIS, Website, Email records and TLS. The Path tab has three: Trace, Latency and MTU. The Router tab has three: SNMP, UPnP and Syslog. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
 
 **Syslog**
 
-- A Syslog tab listens for log messages from a router, NAS or other device and shows them live, newest first, with a filter by host or address, a text search and a minimum severity, and a button to copy what is shown. It reads both the old BSD form (RFC 3164) and the newer one (RFC 5424) and keeps the raw line of anything it cannot read. It only listens after you press Start, on UDP and optionally TCP, and says which addresses it is on and how to point the device at it. It defaults to port 5514 because 514 needs administrator rights. Messages are bounded in size and in number (the newest 5000 are kept), and a flood is dropped rather than stored
+- A Syslog page in the Router tab listens for log messages from a router, NAS or other device and shows them live, newest first, with a filter by host or address, a text search and a minimum severity, and a button to copy what is shown. It reads both the old BSD form (RFC 3164) and the newer one (RFC 5424) and keeps the raw line of anything it cannot read. It only listens after you press Start, on UDP and optionally TCP, and says which addresses it is on and how to point the device at it. It defaults to port 5514 because 514 needs administrator rights. Messages are bounded in size and in number (the newest 5000 are kept), and a flood is dropped rather than stored
 
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, My network and Syslog start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). Router, Subnet, Clock, Services and My network start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Command line

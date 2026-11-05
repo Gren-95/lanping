@@ -11,7 +11,7 @@ use crate::job::Job;
 use crate::results::pill;
 use crate::snmp_tab::format_uptime;
 use crate::theme::{self, ACCENT, BOLD, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{empty_state, note, page_header, panel, scrolling};
+use crate::ui::{empty_state, note, page_header, scrolling};
 
 const CARD_PADDING: f32 = 12.0;
 
@@ -54,7 +54,7 @@ impl UpnpState {
     }
 }
 
-pub fn upnp_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn upnp_page(app: &LanPing) -> Element<'_, Message> {
     let busy = matches!(app.upnp.lookup, Lookup::Running);
     let read = with_tooltip(
         button(
@@ -84,11 +84,10 @@ pub fn upnp_panel(app: &LanPing) -> Element<'_, Message> {
         Lookup::Failed(error) => empty_state("Cannot read port forwards", error.to_string()),
         Lookup::Done(report) => scrolling(report_view(report, &app.hosts)).into(),
     };
-    panel(
-        column![header, content]
-            .spacing(SECTION_SPACING)
-            .height(Length::Fill),
-    )
+    column![header, content]
+        .spacing(SECTION_SPACING)
+        .height(Length::Fill)
+        .into()
 }
 
 fn report_view<'a>(report: &'a UpnpReport, hosts: &[Host]) -> Element<'a, Message> {

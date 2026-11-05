@@ -52,7 +52,9 @@ use crate::mtu_tab::MtuState;
 use crate::network_tab::NetworkState;
 use crate::ntp_tab::NtpState;
 use crate::opener::open_target;
+use crate::path_tab::PathPage;
 use crate::presets::{PresetChoice, upsert_preset};
+use crate::router_tab::RouterPage;
 use crate::row_list::{RowInputs, RowList};
 use crate::services_tab::ServicesState;
 use crate::settings::{Column, Settings, SettingsTab};
@@ -103,6 +105,8 @@ pub struct LanPing {
     pub subnet: SubnetState,
     pub latency: LatencyState,
     pub dns: DnsState,
+    pub path_page: PathPage,
+    pub router_page: RouterPage,
     pub tls: TlsState,
     pub ntp: NtpState,
     pub mtu: MtuState,
@@ -191,6 +195,8 @@ impl LanPing {
             subnet: SubnetState::default(),
             latency: LatencyState::default(),
             dns: DnsState::new(),
+            path_page: PathPage::default(),
+            router_page: RouterPage::default(),
             tls: TlsState::new(),
             ntp: NtpState::new(),
             mtu: MtuState::new(),
@@ -538,6 +544,8 @@ impl LanPing {
             Message::ServicesDone(generation, entries) => self.services.finish(generation, entries),
             Message::UpnpDone(generation, result) => self.upnp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
+            Message::PathPagePicked(page) => self.path_page = page,
+            Message::RouterPagePicked(page) => self.router_page = page,
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
             Message::WhoisLookup => return self.dns.whois.start(),
             Message::WhoisDone(generation, result) => self.dns.whois.finish(generation, result),

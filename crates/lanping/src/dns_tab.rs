@@ -16,13 +16,13 @@ use lanping_core::dns::{
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
 use crate::job::Job;
-use crate::mtu_tab::mtu_page;
 use crate::results::pill;
 use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{
     self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SECTION_SPACING, WARN, latency_color,
 };
-use crate::ui::{note, page_strip, panel, scrolling};
+use crate::tls_tab::tls_page;
+use crate::ui::{note, page_strip, scrolling, tabbed_panel};
 use crate::view::input_group;
 use crate::web_view::{email_page, website_page};
 use crate::whois_page::{WhoisState, whois_view};
@@ -73,7 +73,7 @@ pub enum DnsPage {
     Whois,
     Website,
     Email,
-    Mtu,
+    Tls,
 }
 
 impl DnsPage {
@@ -82,7 +82,7 @@ impl DnsPage {
         Self::Whois,
         Self::Website,
         Self::Email,
-        Self::Mtu,
+        Self::Tls,
     ];
 
     pub(crate) fn title(self) -> &'static str {
@@ -91,7 +91,7 @@ impl DnsPage {
             Self::Whois => "WHOIS",
             Self::Website => "Website",
             Self::Email => "Email records",
-            Self::Mtu => "MTU",
+            Self::Tls => "TLS",
         }
     }
 }
@@ -222,29 +222,22 @@ pub fn dns_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
         DnsPage::title,
         Message::DnsPagePicked,
     );
-    let body = match dns.page {
-        DnsPage::Lookup => column![
-            lookup_controls(dns, width >= WIDE_WIDTH),
-            lookup_result(dns),
-            comparison_section(dns),
-        ]
-        .spacing(SECTION_SPACING * 1.5),
-        DnsPage::Whois => column![whois_view(&dns.whois)],
-        // These pages have empty states that fill the page, so they do not scroll as a whole.
-        DnsPage::Website | DnsPage::Email | DnsPage::Mtu => {
-            let page = match dns.page {
-                DnsPage::Website => website_page(app),
-                DnsPage::Email => email_page(app),
-                _ => mtu_page(app),
-            };
-            return panel(
-                column![strip, page]
-                    .spacing(SECTION_SPACING)
-                    .height(Length::Fill),
-            );
-        }
+    let page = match dns.page {
+        DnsPage::Lookup => scrolling(
+            column![
+                lookup_controls(dns, width >= WIDE_WIDTH),
+                lookup_result(dns),
+                comparison_section(dns),
+            ]
+            .spacing(SECTION_SPACING * 1.5),
+        )
+        .into(),
+        DnsPage::Whois => scrolling(whois_view(&dns.whois)).into(),
+        DnsPage::Website => website_page(app),
+        DnsPage::Email => email_page(app),
+        DnsPage::Tls => tls_page(app, width),
     };
-    panel(scrolling(column![strip, body].spacing(SECTION_SPACING)))
+    tabbed_panel(strip, page)
 }
 
 fn lookup_controls(dns: &DnsState, wide: bool) -> Element<'_, Message> {

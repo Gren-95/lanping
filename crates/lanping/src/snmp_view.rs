@@ -15,7 +15,7 @@ use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{
     self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SCROLLBAR_GAP, SECTION_SPACING, WARN,
 };
-use crate::ui::{note, panel, scrolling};
+use crate::ui::{note, scrolling};
 use crate::view::input_group;
 
 const TEXT_SIZE: u32 = 13;
@@ -34,11 +34,10 @@ const COLUMNS: [(&str, f32); 6] = [
     ("Used", 70.0),
 ];
 
-pub fn snmp_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn snmp_page(app: &LanPing) -> Element<'_, Message> {
     let snmp = &app.snmp;
     let body = column![controls(app), summary(snmp), content(snmp)].spacing(SECTION_SPACING);
-    let page = scrolling(body);
-    panel(page)
+    scrolling(body).into()
 }
 
 fn controls(app: &LanPing) -> Element<'_, Message> {
