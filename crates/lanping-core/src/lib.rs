@@ -30,6 +30,7 @@ pub mod report;
 pub mod rtt_stats;
 pub mod scan;
 pub mod snmp;
+pub mod snmp_interfaces;
 pub mod socket_budget;
 pub mod speedtest;
 pub mod ssdp;
