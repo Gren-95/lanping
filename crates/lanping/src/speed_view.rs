@@ -12,7 +12,6 @@ use lanping_core::speedtest::SERVICE_HOST;
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::sparkline::{Bar, chart};
-use crate::speed_locations::LocationChoice;
 use crate::speed_tab::{
     Phase, Report, Run, ServerStatus, Source, SpeedPage, SpeedService, SpeedState, TestKind,
     TestLength,
@@ -111,8 +110,8 @@ fn internet_page(speed: &SpeedState) -> Element<'_, Message> {
 /// The location and server pickers for M-Lab.
 fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
     let location = pick_list(
-        LocationChoice::all(),
-        Some(speed.location),
+        speed.countries.clone(),
+        Some(speed.location.clone()),
         Message::SpeedLocationPicked,
     )
     .text_size(TEXT_SIZE)

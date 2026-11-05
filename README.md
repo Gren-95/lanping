@@ -77,7 +77,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Speed**
 
-- A Speed tab measures download and upload speed against `speed.cloudflare.com` or against M-Lab's open NDT7 servers around the world (pick the nearest, or a country, and a server), and between two computers that run LanPing: start the test server on one (default port 5252) and run a test against it from the other. A test measures ping first, then download and upload (or only one of them), and shows the speed of each second as a graph. Any country can be picked for M-Lab; where it has no server, such as Estonia, it offers the nearest ones
+- A Speed tab measures download and upload speed against `speed.cloudflare.com` or against M-Lab's open NDT7 servers around the world (pick the nearest, or a country, and a server), and between two computers that run LanPing: start the test server on one (default port 5252) and run a test against it from the other. A test measures ping first, then download and upload (or only one of them), and shows the speed of each second as a graph. For M-Lab, pick the nearest servers or one of the countries M-Lab actually has a server in (the list comes from M-Lab itself; there is none in Estonia, so use "nearest" there)
 - Finished speed tests and latency runs are saved next to the saved scans and listed on the History page
 
 **DNS**

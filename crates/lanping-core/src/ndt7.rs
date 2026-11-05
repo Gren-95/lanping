@@ -22,6 +22,7 @@ use crate::websocket::{self, Message};
 /// Where servers are looked up.
 pub const LOCATE_HOST: &str = "locate.measurementlab.net";
 const LOCATE_PATH: &str = "/v2/nearest/ndt/ndt7";
+const REGISTRATIONS_PATH: &str = "/v2/siteinfo/registrations";
 const SUBPROTOCOL: &str = "net.measurementlab.ndt.v7";
 const DOWNLOAD_KEY: &str = "wss:///ndt/v7/download";
 const UPLOAD_KEY: &str = "wss:///ndt/v7/upload";
@@ -125,10 +126,77 @@ struct Place {
 }
 
 /// Asks M-Lab for test servers in `location`. Servers without both test addresses are left out.
+/// For a country, only servers in that country are returned: M-Lab otherwise fills the answer
+/// up with the nearest servers of other countries.
 pub async fn locate(location: &Location) -> Result<Vec<Server>, String> {
     let path = format!("{LOCATE_PATH}{}", location.query());
     let body = https::get(LOCATE_HOST, &path).await?;
-    parse_servers(&body)
+    let servers = parse_servers(&body)?;
+    match location {
+        Location::Nearest => Ok(servers),
+        Location::Country(code) => in_country(servers, code),
+    }
+}
+
+fn in_country(servers: Vec<Server>, code: &str) -> Result<Vec<Server>, String> {
+    let servers: Vec<Server> = servers
+        .into_iter()
+        .filter(|server| server.country.eq_ignore_ascii_case(code))
+        .collect();
+    if servers.is_empty() {
+        return Err(format!("M-Lab has no test server in {code}"));
+    }
+    Ok(servers)
+}
+
+/// The countries (two letter codes, sorted) that have a working NDT7 test server.
+pub async fn countries() -> Result<Vec<String>, String> {
+    let body = https::get(LOCATE_HOST, REGISTRATIONS_PATH).await?;
+    parse_countries(&body)
+}
+
+#[derive(Deserialize)]
+struct RegistryEntry {
+    /// An object with a `Score` for servers, but a plain flag for some other entries.
+    #[serde(rename = "Health", default)]
+    health: serde_json::Value,
+    #[serde(rename = "Registration")]
+    registration: Option<Registration>,
+}
+
+impl RegistryEntry {
+    fn is_healthy(&self) -> bool {
+        self.health
+            .get("Score")
+            .and_then(serde_json::Value::as_f64)
+            .is_some_and(|score| score > 0.0)
+    }
+}
+
+#[derive(Deserialize)]
+struct Registration {
+    #[serde(rename = "Experiment")]
+    experiment: String,
+    #[serde(rename = "CountryCode")]
+    country_code: String,
+}
+
+fn parse_countries(body: &[u8]) -> Result<Vec<String>, String> {
+    let registry: HashMap<String, RegistryEntry> = serde_json::from_slice(body)
+        .map_err(|_| "M-Lab sent a list of sites that could not be read".to_owned())?;
+    let mut countries: Vec<String> = registry
+        .into_values()
+        .filter(RegistryEntry::is_healthy)
+        .filter_map(|entry| entry.registration)
+        .filter(|registration| registration.experiment == "ndt")
+        .map(|registration| registration.country_code)
+        .collect();
+    countries.sort();
+    countries.dedup();
+    if countries.is_empty() {
+        return Err("M-Lab listed no test servers".to_owned());
+    }
+    Ok(countries)
 }
 
 fn parse_servers(body: &[u8]) -> Result<Vec<Server>, String> {
@@ -361,6 +429,35 @@ mod tests {
         assert!(parse_servers(br#"{"results":[]}"#).is_err());
         assert!(parse_servers(br#"{"error":{"title":"x"}}"#).is_err());
         assert!(parse_servers(b"nonsense").is_err());
+    }
+
+    #[test]
+    fn only_servers_in_the_asked_country_are_kept() {
+        let server = |machine: &str, country: &str| {
+            Server::new(machine, "City", country, "wss://h/d", "wss://h/u")
+        };
+        let found = vec![server("a", "US"), server("b", "CO"), server("c", "us")];
+        let kept = in_country(found.clone(), "US").unwrap();
+        assert_eq!(kept.len(), 2);
+        assert!(kept.iter().all(|s| s.country.eq_ignore_ascii_case("US")));
+        let error = in_country(found, "DO").unwrap_err();
+        assert!(error.contains("no test server in DO"), "{error}");
+    }
+
+    #[test]
+    fn lists_countries_with_a_healthy_ndt_server_only() {
+        let registry = r#"{
+            "a": {"Health":{"Score":1},"Registration":{"Experiment":"ndt","CountryCode":"JP"}},
+            "b": {"Health":{"Score":1},"Registration":{"Experiment":"ndt","CountryCode":"JP"}},
+            "c": {"Health":{"Score":0},"Registration":{"Experiment":"ndt","CountryCode":"BD"}},
+            "d": {"Health":{"Score":1},"Registration":{"Experiment":"wehe","CountryCode":"EE"}},
+            "e": {"Health":{"Score":1},"Registration":{"Experiment":"ndt","CountryCode":"BR"}},
+            "f": {"Health":{"Score":1},"Registration":null},
+            "g": {"Health":true}
+        }"#;
+        assert_eq!(parse_countries(registry.as_bytes()).unwrap(), ["BR", "JP"]);
+        assert!(parse_countries(b"{}").is_err());
+        assert!(parse_countries(b"nonsense").is_err());
     }
 
     #[test]

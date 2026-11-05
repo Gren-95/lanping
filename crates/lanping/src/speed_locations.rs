@@ -258,32 +258,62 @@ const COUNTRIES: [(&str, &str); 249] = [
     ("AX", "Åland Islands"),
 ];
 
-/// One entry of the location list: nearest, or a country.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Countries known to have a working M-Lab test server. Used until M-Lab's own list arrives,
+/// and when it cannot be fetched.
+const COUNTRIES_WITH_SERVERS: [&str; 48] = [
+    "AR", "AU", "BE", "BG", "BR", "CA", "CH", "CL", "CO", "CZ", "DE", "ES", "FI", "FR", "GB", "GR",
+    "HK", "ID", "IE", "IL", "IN", "IT", "JP", "KE", "KR", "ME", "MG", "MN", "MX", "MZ", "NG", "NL",
+    "NO", "NP", "NZ", "PE", "PH", "PK", "PL", "PT", "QA", "RS", "SE", "SG", "TN", "TW", "US", "ZA",
+];
+
+/// The name of a country, when it is known.
+fn country_name(code: &str) -> Option<&'static str> {
+    COUNTRIES
+        .iter()
+        .find(|(known, _)| *known == code)
+        .map(|(_, name)| *name)
+}
+
+/// One entry of the location list: nearest, or a country that has a server.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocationChoice {
-    code: Option<&'static str>,
-    name: &'static str,
+    code: Option<String>,
+    name: String,
 }
 
 impl LocationChoice {
-    pub const NEAREST: Self = Self {
-        code: None,
-        name: "Nearest to me",
-    };
-
-    /// Nearest first, then the countries by name.
-    pub fn all() -> Vec<Self> {
-        std::iter::once(Self::NEAREST)
-            .chain(COUNTRIES.iter().map(|&(code, name)| Self {
-                code: Some(code),
-                name,
-            }))
-            .collect()
+    pub fn nearest() -> Self {
+        Self {
+            code: None,
+            name: "Nearest to me".to_owned(),
+        }
     }
 
-    pub fn location(self) -> Location {
-        match self.code {
-            Some(code) => Location::Country(code.to_owned()),
+    /// Nearest first, then the countries by name.
+    pub fn from_codes(codes: &[String]) -> Vec<Self> {
+        let mut countries: Vec<Self> = codes
+            .iter()
+            .map(|code| Self {
+                code: Some(code.clone()),
+                name: country_name(code).unwrap_or(code).to_owned(),
+            })
+            .collect();
+        countries.sort_by(|a, b| a.name.cmp(&b.name));
+        std::iter::once(Self::nearest()).chain(countries).collect()
+    }
+
+    /// The list to show before M-Lab's own arrives.
+    pub fn known() -> Vec<Self> {
+        let codes: Vec<String> = COUNTRIES_WITH_SERVERS
+            .iter()
+            .map(|code| (*code).to_owned())
+            .collect();
+        Self::from_codes(&codes)
+    }
+
+    pub fn location(&self) -> Location {
+        match &self.code {
+            Some(code) => Location::Country(code.clone()),
             None => Location::Nearest,
         }
     }
@@ -291,15 +321,15 @@ impl LocationChoice {
 
 impl Default for LocationChoice {
     fn default() -> Self {
-        Self::NEAREST
+        Self::nearest()
     }
 }
 
 impl fmt::Display for LocationChoice {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.code {
-            Some(code) => write!(f, "{} ({code})", self.name),
-            None => f.write_str(self.name),
+        match &self.code {
+            Some(code) if *code != self.name => write!(f, "{} ({code})", self.name),
+            _ => f.write_str(&self.name),
         }
     }
 }
@@ -308,43 +338,63 @@ impl fmt::Display for LocationChoice {
 mod tests {
     use super::*;
 
+    fn names(choices: &[LocationChoice]) -> Vec<String> {
+        choices.iter().map(ToString::to_string).collect()
+    }
+
     #[test]
     fn nearest_comes_first_and_maps_to_the_nearest_location() {
-        let all = LocationChoice::all();
-        assert_eq!(all[0], LocationChoice::NEAREST);
+        let all = LocationChoice::known();
+        assert_eq!(all[0], LocationChoice::nearest());
         assert_eq!(all[0].location(), Location::Nearest);
-        assert_eq!(all.len(), COUNTRIES.len() + 1);
+        assert_eq!(all.len(), COUNTRIES_WITH_SERVERS.len() + 1);
     }
 
     #[test]
-    fn a_country_maps_to_its_code() {
-        let japan = LocationChoice::all()
-            .into_iter()
-            .find(|choice| choice.name == "Japan")
-            .unwrap();
+    fn only_countries_with_servers_are_offered() {
+        let shown = names(&LocationChoice::known());
+        assert!(shown.contains(&"Japan (JP)".to_owned()));
+        for without in ["Estonia (EE)", "Dominican Republic (DO)", "Latvia (LV)"] {
+            assert!(!shown.contains(&without.to_owned()), "{without}");
+        }
+    }
+
+    #[test]
+    fn a_country_maps_to_its_code_and_the_list_is_sorted_by_name() {
+        let all = LocationChoice::known();
+        let japan = all.iter().find(|choice| choice.name == "Japan").unwrap();
         assert_eq!(japan.location(), Location::Country("JP".to_owned()));
-        assert_eq!(japan.to_string(), "Japan (JP)");
+        let countries = &all[1..];
+        assert!(
+            countries
+                .windows(2)
+                .all(|pair| pair[0].name <= pair[1].name)
+        );
     }
 
     #[test]
-    fn every_country_is_offered_including_estonia() {
-        let estonia = LocationChoice::all()
-            .into_iter()
-            .find(|choice| choice.name == "Estonia")
-            .unwrap();
-        assert_eq!(estonia.location(), Location::Country("EE".to_owned()));
-        assert!(LocationChoice::all().len() > 200);
+    fn a_new_country_from_m_lab_is_offered_by_its_name_or_else_its_code() {
+        let codes = vec!["EE".to_owned(), "ZZ".to_owned()];
+        let shown = names(&LocationChoice::from_codes(&codes));
+        assert_eq!(shown, ["Nearest to me", "Estonia (EE)", "ZZ"]);
     }
 
     #[test]
-    fn country_codes_are_two_capital_letters_and_unique() {
+    fn the_known_codes_are_two_capital_letters_and_unique() {
         let mut seen = std::collections::HashSet::new();
-        for (code, _) in COUNTRIES {
+        for code in COUNTRIES_WITH_SERVERS {
             assert!(
                 code.len() == 2 && code.chars().all(|c| c.is_ascii_uppercase()),
                 "{code}"
             );
             assert!(seen.insert(code), "{code} listed twice");
+        }
+    }
+
+    #[test]
+    fn every_known_code_has_a_name() {
+        for code in COUNTRIES_WITH_SERVERS {
+            assert!(country_name(code).is_some(), "{code}");
         }
     }
 }

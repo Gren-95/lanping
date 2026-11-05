@@ -256,6 +256,9 @@ pub struct SpeedState {
     pub page: SpeedPage,
     pub service: SpeedService,
     pub location: LocationChoice,
+    /// The places M-Lab can be asked for: the known list at first, then M-Lab's own.
+    pub countries: Vec<LocationChoice>,
+    countries_loaded: bool,
     /// Servers found for the chosen location. Their addresses carry a token that expires, so a
     /// test asks again for the chosen server just before it starts.
     pub servers: Vec<Server>,
@@ -326,6 +329,8 @@ impl SpeedState {
             page: SpeedPage::default(),
             service: SpeedService::default(),
             location: LocationChoice::default(),
+            countries: LocationChoice::known(),
+            countries_loaded: false,
             servers: Vec::new(),
             selected_server: None,
             locating: false,
@@ -356,10 +361,32 @@ impl SpeedState {
     /// Chooses the service. M-Lab looks for servers when none are known yet.
     pub fn set_service(&mut self, service: SpeedService) -> Task<Message> {
         self.service = service;
-        if service == SpeedService::Mlab && self.servers.is_empty() && !self.locating {
-            return self.locate();
+        if service != SpeedService::Mlab {
+            return Task::none();
         }
-        Task::none()
+        let mut tasks = Vec::new();
+        if self.servers.is_empty() && !self.locating {
+            tasks.push(self.locate());
+        }
+        if !self.countries_loaded {
+            self.countries_loaded = true;
+            tasks.push(Task::perform(
+                async { ndt7::countries().await },
+                Message::SpeedCountriesFound,
+            ));
+        }
+        Task::batch(tasks)
+    }
+
+    /// Replaces the known list with M-Lab's own. A failure keeps the known list.
+    pub fn countries_found(&mut self, result: Result<Vec<String>, String>) {
+        let Ok(codes) = result else {
+            return;
+        };
+        self.countries = LocationChoice::from_codes(&codes);
+        if !self.countries.contains(&self.location) {
+            self.location = LocationChoice::nearest();
+        }
     }
 
     /// Chooses where to look for M-Lab servers, and looks.
@@ -940,6 +967,30 @@ mod tests {
             state.locate_error.as_deref(),
             Some("M-Lab has no test server there")
         );
+    }
+
+    #[test]
+    fn m_lab_s_own_country_list_replaces_the_known_one_and_a_failure_keeps_it() {
+        let mut state = SpeedState::new(None);
+        let known = state.countries.len();
+        state.countries_found(Err("offline".to_owned()));
+        assert_eq!(state.countries.len(), known);
+        state.countries_found(Ok(vec!["JP".to_owned(), "EE".to_owned()]));
+        assert_eq!(state.countries.len(), 3);
+    }
+
+    #[test]
+    fn a_chosen_country_that_m_lab_no_longer_lists_goes_back_to_nearest() {
+        let mut state = SpeedState::new(None);
+        let japan = state
+            .countries
+            .iter()
+            .find(|choice| choice.to_string() == "Japan (JP)")
+            .cloned()
+            .unwrap();
+        state.location = japan;
+        state.countries_found(Ok(vec!["BR".to_owned()]));
+        assert_eq!(state.location, LocationChoice::nearest());
     }
 
     #[test]
