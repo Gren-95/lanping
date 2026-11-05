@@ -66,7 +66,7 @@ impl Tab {
             Self::Wifi => "Wi-Fi",
             Self::Path => "Path",
             Self::Speed => "Speed",
-            Self::Dns => "DNS",
+            Self::Dns => "Internet",
             Self::Router => "Router",
             Self::Network => "This computer",
             Self::Settings => "Settings",
