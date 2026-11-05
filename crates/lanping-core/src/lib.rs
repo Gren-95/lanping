@@ -32,6 +32,7 @@ pub mod range;
 pub mod report;
 pub mod rtt_stats;
 pub mod scan;
+pub mod service_browse;
 pub mod snmp;
 pub mod snmp_interfaces;
 pub mod snmp_rates;

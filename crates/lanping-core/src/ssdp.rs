@@ -26,9 +26,14 @@ pub struct DeviceDescription {
 
 /// The `LOCATION` header of an SSDP response.
 pub(crate) fn location_header(response: &str) -> Option<&str> {
+    header_value(response, "location")
+}
+
+/// The value of header `name` in an SSDP response, whatever its case.
+pub(crate) fn header_value<'a>(response: &'a str, name: &str) -> Option<&'a str> {
     response.lines().find_map(|line| {
-        let (name, value) = line.split_once(':')?;
-        name.eq_ignore_ascii_case("location").then(|| value.trim())
+        let (header, value) = line.split_once(':')?;
+        header.eq_ignore_ascii_case(name).then(|| value.trim())
     })
 }
 
@@ -104,6 +109,64 @@ pub(crate) async fn collect_locations(
         }
     }
     found
+}
+
+/// One SSDP answer: a device, and one kind of thing it says it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Announcement {
+    pub ip: Ipv4Addr,
+    /// The `ST` header, such as `urn:schemas-upnp-org:device:MediaServer:1`.
+    pub search_target: String,
+    pub location: Option<HttpLocation>,
+}
+
+/// Everything that answers an SSDP search on the network until `wait` runs out, once for
+/// each address and kind. A `LOCATION` on another host than the sender is dropped.
+pub(crate) async fn announcements(wait: Duration) -> Vec<Announcement> {
+    let mut found: Vec<Announcement> = Vec::new();
+    let Ok(socket) = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).await else {
+        return found;
+    };
+    let group = SocketAddrV4::new(MULTICAST_GROUP, SSDP_PORT);
+    for _ in 0..SEARCH_ATTEMPTS {
+        if socket.send_to(SEARCH.as_bytes(), group).await.is_err() {
+            return found;
+        }
+    }
+    let deadline = Instant::now() + wait;
+    let mut buffer = [0; 2048];
+    while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+        let Ok(Ok((length, SocketAddr::V4(from)))) =
+            timeout(left, socket.recv_from(&mut buffer)).await
+        else {
+            break;
+        };
+        let text = String::from_utf8_lossy(&buffer[..length]);
+        let Some(search_target) = header_value(&text, "st") else {
+            continue;
+        };
+        let ip = *from.ip();
+        if found
+            .iter()
+            .any(|known| known.ip == ip && known.search_target == search_target)
+        {
+            continue;
+        }
+        let location = location_header(&text)
+            .and_then(parse_location)
+            .filter(|location| location.host == ip);
+        found.push(Announcement {
+            ip,
+            search_target: search_target.to_owned(),
+            location,
+        });
+    }
+    found
+}
+
+/// The friendly name of the device behind `location`, when it gives one.
+pub(crate) async fn friendly_name(location: HttpLocation) -> Option<String> {
+    read_description(location).await?.friendly_name
 }
 
 /// Asks the network for UPnP devices among `targets` and reads their descriptions.
