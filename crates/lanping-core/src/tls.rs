@@ -5,7 +5,7 @@
 //! can still be read and shown. The trust verdict comes from the normal verifier.
 
 use std::fmt;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,8 +13,8 @@ use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{
-    CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsFailure, RootCertStore,
-    SignatureScheme,
+    AlertDescription, CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsFailure,
+    RootCertStore, SignatureScheme,
 };
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -245,6 +245,38 @@ async fn system_roots() -> Arc<RootCertStore> {
     Arc::clone(ROOTS.get_or_init(|| loaded))
 }
 
+/// Alerts a server sends when it has no certificate for the name it was given.
+const NAME_RELATED_ALERTS: [AlertDescription; 4] = [
+    AlertDescription::InternalError,
+    AlertDescription::UnrecognisedName,
+    AlertDescription::HandshakeFailure,
+    AlertDescription::AccessDenied,
+];
+
+/// Turns a failed handshake into a sentence that says what to try.
+fn explain_handshake_failure(error: &std::io::Error, name: &str) -> String {
+    let cause = error
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<TlsFailure>());
+    match cause {
+        Some(TlsFailure::AlertReceived(alert)) => {
+            let hint = if NAME_RELATED_ALERTS.contains(alert) && name.parse::<IpAddr>().is_ok() {
+                " Servers that host several sites, such as Caddy, need a server name: enter one in the second field."
+            } else {
+                ""
+            };
+            format!("The server refused the TLS handshake ({alert:?}).{hint}")
+        }
+        Some(TlsFailure::InvalidMessage(_)) => {
+            "This port does not seem to speak TLS. It answered with something else, such as plain HTTP.".to_owned()
+        }
+        _ if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+            "The server closed the connection without a TLS answer. This port may not speak TLS.".to_owned()
+        }
+        _ => error.to_string(),
+    }
+}
+
 fn setup_error(error: impl fmt::Display) -> TlsError {
     TlsError::Failed(format!("Could not set up TLS: {error}"))
 }
@@ -256,8 +288,18 @@ fn unix_now() -> i64 {
 }
 
 /// Connects to `target` (see [`parse_target`]) and reports the certificate it presents.
-pub async fn check(target: &str) -> Result<TlsReport, TlsError> {
+///
+/// `server_name` is the host name to ask for, when it differs from the address connected
+/// to. Servers that host several sites, such as Caddy, pick their certificate by that name
+/// and refuse a connection that gives none. The certificate is checked against it too.
+pub async fn check(target: &str, server_name: Option<&str>) -> Result<TlsReport, TlsError> {
     let (host, port) = parse_target(target)?;
+    let name = match server_name.map(str::trim).filter(|name| !name.is_empty()) {
+        Some(name) => validate_target(name)
+            .map_err(|_| TlsError::InvalidTarget)?
+            .to_owned(),
+        None => host.clone(),
+    };
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let inner =
         WebPkiServerVerifier::builder_with_provider(system_roots().await, Arc::clone(&provider))
@@ -273,7 +315,7 @@ pub async fn check(target: &str) -> Result<TlsReport, TlsError> {
         .dangerous()
         .with_custom_certificate_verifier(Arc::clone(&verifier) as Arc<dyn ServerCertVerifier>)
         .with_no_client_auth();
-    let server_name = ServerName::try_from(host.clone()).map_err(|_| TlsError::InvalidTarget)?;
+    let server_name = ServerName::try_from(name.clone()).map_err(|_| TlsError::InvalidTarget)?;
 
     let _permit = socket_permit().await;
     let stream = timeout(STEP_WAIT, TcpStream::connect((host.as_str(), port)))
@@ -298,7 +340,7 @@ pub async fn check(target: &str) -> Result<TlsReport, TlsError> {
                 None,
             )
         }
-        Err(error) => (None, None, Some(error.to_string())),
+        Err(error) => (None, None, Some(explain_handshake_failure(&error, &name))),
     };
     let seen = verifier
         .seen
@@ -372,6 +414,8 @@ mod tests {
     use super::*;
     use rustls::ServerConfig;
     use rustls::pki_types::PrivateKeyDer;
+    use rustls::server::{ClientHello, ResolvesServerCert};
+    use rustls::sign::CertifiedKey;
     use tokio::net::TcpListener;
     use tokio_rustls::TlsAcceptor;
 
@@ -455,16 +499,12 @@ mod tests {
         ));
     }
 
-    /// Serves the test certificate on a free local port and returns that port.
-    async fn serve_test_certificate() -> u16 {
-        let provider = Arc::new(rustls::crypto::ring::default_provider());
-        let key = PrivateKeyDer::try_from(TEST_KEY).unwrap().clone_key();
-        let config = ServerConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(vec![CertificateDer::from(TEST_CERT)], key)
-            .unwrap();
+    fn provider() -> Arc<rustls::crypto::CryptoProvider> {
+        Arc::new(rustls::crypto::ring::default_provider())
+    }
+
+    /// Serves `config` on a free local port and returns that port.
+    async fn serve(config: ServerConfig) -> u16 {
         let acceptor = TlsAcceptor::from(Arc::new(config));
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -479,10 +519,44 @@ mod tests {
         port
     }
 
+    /// Serves the test certificate to everyone.
+    async fn serve_test_certificate() -> u16 {
+        let key = PrivateKeyDer::try_from(TEST_KEY).unwrap().clone_key();
+        let config = ServerConfig::builder_with_provider(provider())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![CertificateDer::from(TEST_CERT)], key)
+            .unwrap();
+        serve(config).await
+    }
+
+    /// Gives the test certificate only to clients that ask for `lanping.test`, as Caddy does.
+    #[derive(Debug)]
+    struct NamedOnly(Arc<CertifiedKey>);
+
+    impl ResolvesServerCert for NamedOnly {
+        fn resolve(&self, hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+            (hello.server_name() == Some("lanping.test")).then(|| Arc::clone(&self.0))
+        }
+    }
+
+    async fn serve_for_one_name() -> u16 {
+        let key = PrivateKeyDer::try_from(TEST_KEY).unwrap();
+        let signing_key = rustls::crypto::ring::sign::any_supported_type(&key).unwrap();
+        let certified = CertifiedKey::new(vec![CertificateDer::from(TEST_CERT)], signing_key);
+        let config = ServerConfig::builder_with_provider(provider())
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_no_client_auth()
+            .with_cert_resolver(Arc::new(NamedOnly(Arc::new(certified))));
+        serve(config).await
+    }
+
     #[tokio::test]
     async fn checking_a_self_signed_server_reports_it_instead_of_failing() {
         let port = serve_test_certificate().await;
-        let report = check(&format!("127.0.0.1:{port}")).await.unwrap();
+        let report = check(&format!("127.0.0.1:{port}"), None).await.unwrap();
         assert_eq!(report.trust, Trust::SelfSigned);
         assert_eq!(report.chain.len(), 1);
         assert!(report.chain[0].subject.contains("lanping.test"));
@@ -498,7 +572,51 @@ mod tests {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             listener.local_addr().unwrap().port()
         };
-        let result = check(&format!("127.0.0.1:{port}")).await;
+        let result = check(&format!("127.0.0.1:{port}"), None).await;
         assert!(matches!(result, Err(TlsError::Failed(_))));
+    }
+
+    #[tokio::test]
+    async fn a_server_that_needs_a_name_says_so_and_works_when_given_one() {
+        let port = serve_for_one_name().await;
+        let target = format!("127.0.0.1:{port}");
+        let refused = check(&target, None).await.unwrap_err();
+        let TlsError::Failed(message) = refused else {
+            panic!("expected a handshake failure, got {refused:?}");
+        };
+        assert!(message.contains("refused the TLS handshake"), "{message}");
+        assert!(message.contains("server name"), "{message}");
+        let report = check(&target, Some("lanping.test")).await.unwrap();
+        assert_eq!(report.trust, Trust::SelfSigned);
+        assert!(report.chain[0].names.contains(&"lanping.test".to_owned()));
+        assert_eq!(report.host, "127.0.0.1");
+    }
+
+    #[tokio::test]
+    async fn a_port_that_does_not_speak_tls_is_explained() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            use tokio::io::AsyncWriteExt;
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let _ = stream
+                    .write_all(b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n")
+                    .await;
+            }
+        });
+        let result = check(&format!("127.0.0.1:{port}"), None).await;
+        let Err(TlsError::Failed(message)) = result else {
+            panic!("expected a handshake failure, got {result:?}");
+        };
+        assert!(message.contains("does not seem to speak TLS"), "{message}");
+    }
+
+    #[test]
+    fn a_bad_server_name_is_refused() {
+        let result = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(check("127.0.0.1:1", Some("-x")));
+        assert_eq!(result, Err(TlsError::InvalidTarget));
     }
 }

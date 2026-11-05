@@ -213,6 +213,7 @@ pub enum Message {
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
     TlsTargetChanged(String),
+    TlsServerNameChanged(String),
     TlsCheck,
     TlsDone(u64, Result<TlsReport, TlsError>),
     DnsPagePicked(DnsPage),
@@ -577,6 +578,7 @@ impl LanPing {
             Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
             Message::LatencyLogPathChosen(None) => {}
             Message::TlsTargetChanged(target) => self.tls.set_target(target),
+            Message::TlsServerNameChanged(name) => self.tls.set_server_name(name),
             Message::TlsCheck => return self.tls.start(),
             Message::TlsDone(generation, result) => self.tls.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
@@ -867,9 +869,13 @@ impl LanPing {
                     Message::DiagnosticFinished(title.clone(), result)
                 })
             }
-            Effect::CheckCertificate(target) => {
+            Effect::CheckCertificate {
+                target,
+                server_name,
+            } => {
                 self.tab = Tab::Tls;
                 self.tls.set_target(target);
+                self.tls.set_server_name(server_name.unwrap_or_default());
                 self.tls.start()
             }
             Effect::Wake(mac) => {

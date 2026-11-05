@@ -82,7 +82,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **TLS**
 
-- A TLS tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, and an open HTTPS port in the device menu offers a one-click check
+- A TLS tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, an optional server name lets you check an IP address on a server that hosts several sites, such as Caddy, and an open HTTPS port in the device menu offers a one-click check
 
 **Subnet**
 

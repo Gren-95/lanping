@@ -61,8 +61,11 @@ pub enum Effect {
     Wake(String),
     /// Run ping or traceroute against this address and show the output.
     Diagnose(Diagnostic, Ipv4Addr),
-    /// Check the TLS certificate at this `address:port`.
-    CheckCertificate(String),
+    /// Check the TLS certificate at this `address:port`, asking for the host name when known.
+    CheckCertificate {
+        target: String,
+        server_name: Option<String>,
+    },
 }
 
 impl HostAction {
@@ -127,9 +130,10 @@ impl HostAction {
             Self::WakeOnLan => host.mac.clone().map(Effect::Wake),
             Self::Ping => Some(Effect::Diagnose(Diagnostic::Ping, host.ip)),
             Self::Traceroute => Some(Effect::Diagnose(Diagnostic::Traceroute, host.ip)),
-            Self::CheckCertificate { port } => {
-                Some(Effect::CheckCertificate(format!("{}:{port}", host.ip)))
-            }
+            Self::CheckCertificate { port } => Some(Effect::CheckCertificate {
+                target: format!("{}:{port}", host.ip),
+                server_name: host.hostname.clone(),
+            }),
         }
     }
 }
@@ -271,7 +275,18 @@ mod tests {
         assert!(!actions.contains(&HostAction::CheckCertificate { port: 8443 }));
         assert_eq!(
             HostAction::CheckCertificate { port: 443 }.effect(&with_tls),
-            Some(Effect::CheckCertificate("192.168.0.9:443".into()))
+            Some(Effect::CheckCertificate {
+                target: "192.168.0.9:443".into(),
+                server_name: None
+            })
+        );
+        with_tls.hostname = Some("nas.lan".into());
+        assert_eq!(
+            HostAction::CheckCertificate { port: 443 }.effect(&with_tls),
+            Some(Effect::CheckCertificate {
+                target: "192.168.0.9:443".into(),
+                server_name: Some("nas.lan".into())
+            })
         );
     }
 

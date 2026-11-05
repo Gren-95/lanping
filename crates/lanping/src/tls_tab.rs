@@ -36,6 +36,8 @@ enum Lookup {
 /// What is typed, and what the last check found.
 pub struct TlsState {
     target: String,
+    /// The host name to ask for when it differs from the address. Empty for none.
+    server_name: String,
     lookup: Lookup,
     /// Counts checks, so an answer that was overtaken is ignored.
     generation: u64,
@@ -45,6 +47,7 @@ impl TlsState {
     pub fn new() -> Self {
         Self {
             target: String::new(),
+            server_name: String::new(),
             lookup: Lookup::Idle,
             generation: 0,
         }
@@ -54,14 +57,20 @@ impl TlsState {
         self.target = target;
     }
 
+    pub fn set_server_name(&mut self, server_name: String) {
+        self.server_name = server_name;
+    }
+
     pub fn start(&mut self) -> Task<Message> {
         self.generation += 1;
         self.lookup = Lookup::Running;
         let target = self.target.clone();
+        let server_name = self.server_name.clone();
         let generation = self.generation;
-        Task::perform(async move { check(&target).await }, move |result| {
-            Message::TlsDone(generation, result)
-        })
+        Task::perform(
+            async move { check(&target, Some(&server_name)).await },
+            move |result| Message::TlsDone(generation, result),
+        )
     }
 
     pub fn finish(&mut self, generation: u64, result: Result<TlsReport, TlsError>) {
@@ -75,20 +84,40 @@ impl TlsState {
     }
 }
 
-pub fn tls_panel(app: &LanPing) -> Element<'_, Message> {
+/// Windows at least this wide keep the inputs on one line.
+const WIDE_WIDTH: f32 = 820.0;
+const NAME_INPUT_WIDTH: f32 = 260.0;
+const INPUT_TEXT_SIZE: u32 = 13;
+
+pub fn tls_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
     let tls = &app.tls;
     let busy = matches!(tls.lookup, Lookup::Running);
+    let wide = width >= WIDE_WIDTH;
+    let target_edge = if wide { Edge::First } else { Edge::Alone };
     let mut target = text_input(
         "Host name or address, and a port if it is not 443",
         &tls.target,
     )
     .padding(theme::CONTROL_PADDING)
-    .size(13)
+    .size(INPUT_TEXT_SIZE)
     .width(Length::Fill)
-    .style(theme::input_at(Edge::First));
+    .style(theme::input_at(target_edge));
+    let name_edge = if wide { Edge::Middle } else { Edge::First };
+    let mut name = text_input("Server name (optional)", &tls.server_name)
+        .padding(theme::CONTROL_PADDING)
+        .size(INPUT_TEXT_SIZE)
+        .width(if wide {
+            Length::Fixed(NAME_INPUT_WIDTH)
+        } else {
+            Length::Fill
+        })
+        .style(theme::input_at(name_edge));
     if !busy {
         target = target
             .on_input(Message::TlsTargetChanged)
+            .on_submit(Message::TlsCheck);
+        name = name
+            .on_input(Message::TlsServerNameChanged)
             .on_submit(Message::TlsCheck);
     }
     let go = with_tooltip(
@@ -98,6 +127,13 @@ pub fn tls_panel(app: &LanPing) -> Element<'_, Message> {
             .style(theme::button_at(Edge::Last, theme::primary_button)),
         "Check certificate",
     );
+    let inputs: Element<'_, Message> = if wide {
+        input_group(vec![target.into(), name.into(), go])
+    } else {
+        column![target, input_group(vec![name.into(), go])]
+            .spacing(8)
+            .into()
+    };
     let result: Element<'_, Message> = match &tls.lookup {
         Lookup::Idle => {
             note("Enter a host, such as example.com or 192.168.0.1:8443, and press the button.")
@@ -106,7 +142,7 @@ pub fn tls_panel(app: &LanPing) -> Element<'_, Message> {
         Lookup::Failed(error) => text(error.to_string()).color(BAD).into(),
         Lookup::Done(report) => report_view(report),
     };
-    let body = column![input_group(vec![target.into(), go]), result].spacing(SECTION_SPACING);
+    let body = column![inputs, result].spacing(SECTION_SPACING);
     let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
         .width(Length::Fill)
         .height(Length::Fill);
