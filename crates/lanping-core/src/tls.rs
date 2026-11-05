@@ -5,7 +5,7 @@
 //! can still be read and shown. The trust verdict comes from the normal verifier.
 
 use std::fmt;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,8 +13,8 @@ use rustls::client::WebPkiServerVerifier;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{
-    AlertDescription, CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsFailure,
-    RootCertStore, SignatureScheme,
+    CertificateError, ClientConfig, DigitallySignedStruct, Error as TlsFailure, RootCertStore,
+    SignatureScheme,
 };
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -23,6 +23,7 @@ use x509_parser::extensions::GeneralName;
 use x509_parser::prelude::{FromDer, X509Certificate};
 
 use crate::socket_budget::socket_permit;
+use crate::tls_explain::{connect_failure, handshake_failure, silent_after_connect};
 use crate::trace::validate_target;
 
 /// The port used when a target names none: the one HTTPS uses.
@@ -44,7 +45,7 @@ impl fmt::Display for TlsError {
             Self::InvalidTarget => {
                 f.write_str("Enter a host name or address, with a port if it is not 443")
             }
-            Self::Timeout => f.write_str("The server did not answer in time"),
+            Self::Timeout => f.write_str("The server did not answer in time. A firewall may be dropping packets to this port, or the host is down."),
             Self::Failed(reason) => f.write_str(reason),
         }
     }
@@ -245,38 +246,6 @@ async fn system_roots() -> Arc<RootCertStore> {
     Arc::clone(ROOTS.get_or_init(|| loaded))
 }
 
-/// Alerts a server sends when it has no certificate for the name it was given.
-const NAME_RELATED_ALERTS: [AlertDescription; 4] = [
-    AlertDescription::InternalError,
-    AlertDescription::UnrecognisedName,
-    AlertDescription::HandshakeFailure,
-    AlertDescription::AccessDenied,
-];
-
-/// Turns a failed handshake into a sentence that says what to try.
-fn explain_handshake_failure(error: &std::io::Error, name: &str) -> String {
-    let cause = error
-        .get_ref()
-        .and_then(|inner| inner.downcast_ref::<TlsFailure>());
-    match cause {
-        Some(TlsFailure::AlertReceived(alert)) => {
-            let hint = if NAME_RELATED_ALERTS.contains(alert) && name.parse::<IpAddr>().is_ok() {
-                " Servers that host several sites, such as Caddy, need a server name: enter one in the second field."
-            } else {
-                ""
-            };
-            format!("The server refused the TLS handshake ({alert:?}).{hint}")
-        }
-        Some(TlsFailure::InvalidMessage(_)) => {
-            "This port does not seem to speak TLS. It answered with something else, such as plain HTTP.".to_owned()
-        }
-        _ if error.kind() == std::io::ErrorKind::UnexpectedEof => {
-            "The server closed the connection without a TLS answer. This port may not speak TLS.".to_owned()
-        }
-        _ => error.to_string(),
-    }
-}
-
 fn setup_error(error: impl fmt::Display) -> TlsError {
     TlsError::Failed(format!("Could not set up TLS: {error}"))
 }
@@ -321,12 +290,14 @@ pub async fn check(target: &str, server_name: Option<&str>) -> Result<TlsReport,
     let stream = timeout(STEP_WAIT, TcpStream::connect((host.as_str(), port)))
         .await
         .map_err(|_| TlsError::Timeout)?
-        .map_err(|error| TlsError::Failed(format!("Could not connect: {error}")))?;
+        .map_err(|error| TlsError::Failed(connect_failure(&error, &host, port)))?;
     let address = stream.peer_addr().ok();
     let connector = TlsConnector::from(Arc::new(config));
-    let handshake = timeout(STEP_WAIT, connector.connect(server_name, stream))
-        .await
-        .map_err(|_| TlsError::Timeout)?;
+    let Ok(handshake) = timeout(STEP_WAIT, connector.connect(server_name, stream)).await else {
+        return Err(TlsError::Failed(
+            silent_after_connect(&host, port, &name).await,
+        ));
+    };
     let (protocol, cipher, failure) = match handshake {
         Ok(stream) => {
             let (_, connection) = stream.get_ref();
@@ -340,7 +311,11 @@ pub async fn check(target: &str, server_name: Option<&str>) -> Result<TlsReport,
                 None,
             )
         }
-        Err(error) => (None, None, Some(explain_handshake_failure(&error, &name))),
+        Err(error) => (
+            None,
+            None,
+            Some(handshake_failure(&error, &host, port, &name).await),
+        ),
     };
     let seen = verifier
         .seen
@@ -608,7 +583,7 @@ mod tests {
         let Err(TlsError::Failed(message)) = result else {
             panic!("expected a handshake failure, got {result:?}");
         };
-        assert!(message.contains("does not seem to speak TLS"), "{message}");
+        assert!(message.contains("a plain HTTP server"), "{message}");
     }
 
     #[test]
