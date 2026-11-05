@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use crate::theme::NO_VALUE;
+use lanping_core::text::contains_ignore_case;
 use lanping_core::vendor::lookup_vendor;
 use lanping_core::wifi::{AccessPoint, Band};
 
@@ -154,7 +155,12 @@ impl WifiFilter {
             + usize::from(self.security != SecurityChoice::Any)
     }
 
-    fn matches(&self, access_point: &AccessPoint) -> bool {
+    /// The text to look for, lowercased once so it is not redone for every row.
+    fn needle(&self) -> String {
+        self.text.trim().to_lowercase()
+    }
+
+    fn matches(&self, access_point: &AccessPoint, needle: &str) -> bool {
         let band_matches = match self.band {
             BandChoice::Any => true,
             BandChoice::Only(band) => access_point.band == band,
@@ -164,26 +170,26 @@ impl WifiFilter {
             SecurityChoice::Open => access_point.security.is_empty(),
             SecurityChoice::Secured => !access_point.security.is_empty(),
         };
-        band_matches && security_matches && self.text_matches(access_point)
+        band_matches && security_matches && text_matches(access_point, needle)
     }
+}
 
-    fn text_matches(&self, access_point: &AccessPoint) -> bool {
-        let needle = self.text.trim().to_lowercase();
-        if needle.is_empty() {
-            return true;
-        }
-        let fields = [
-            access_point.ssid.clone(),
-            access_point.bssid.clone(),
-            vendor_of(access_point).unwrap_or_default().to_owned(),
-            access_point.security.clone(),
-            access_point.channel.to_string(),
-            access_point.band.to_string(),
-        ];
-        fields
-            .iter()
-            .any(|field| field.to_lowercase().contains(&needle))
+/// Whether any searchable field of `access_point` contains `needle`, which is lowercase.
+fn text_matches(access_point: &AccessPoint, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
     }
+    let text_fields = [
+        access_point.ssid.as_str(),
+        access_point.bssid.as_str(),
+        vendor_of(access_point).unwrap_or_default(),
+        access_point.security.as_str(),
+    ];
+    text_fields
+        .into_iter()
+        .any(|field| contains_ignore_case(field, needle))
+        || contains_ignore_case(&access_point.channel.to_string(), needle)
+        || contains_ignore_case(&access_point.band.to_string(), needle)
 }
 
 /// The access points that pass `filter`, in the requested order.
@@ -193,9 +199,10 @@ pub fn visible<'a>(
     key: WifiSortKey,
     ascending: bool,
 ) -> Vec<&'a AccessPoint> {
+    let needle = filter.needle();
     let mut rows: Vec<&AccessPoint> = access_points
         .iter()
-        .filter(|access_point| filter.matches(access_point))
+        .filter(|access_point| filter.matches(access_point, &needle))
         .collect();
     rows.sort_by(|a, b| {
         let order = key.compare(a, b);
