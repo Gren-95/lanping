@@ -5,20 +5,16 @@ use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::time::{Duration, Instant};
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpStream, UdpSocket};
+use tokio::net::UdpSocket;
 use tokio::task::JoinSet;
 use tokio::time::timeout;
 
-use crate::socket_budget::socket_permit;
+use crate::local_http::{HttpLocation, get, parse_location};
 
-const MULTICAST_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 255, 250);
-const SSDP_PORT: u16 = 1900;
+pub(crate) const MULTICAST_GROUP: Ipv4Addr = Ipv4Addr::new(239, 255, 255, 250);
+pub(crate) const SSDP_PORT: u16 = 1900;
 const SEARCH_ATTEMPTS: usize = 2;
 const SEARCH: &str = "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n";
-/// Device descriptions are small; anything larger is cut off here.
-const MAX_DESCRIPTION_BYTES: u64 = 64 * 1024;
-const DESCRIPTION_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// What a device's UPnP description says about it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -28,27 +24,8 @@ pub struct DeviceDescription {
     pub model: Option<String>,
 }
 
-/// A plain `http://` URL split up. Other schemes are not read.
-#[derive(Debug, PartialEq, Eq)]
-struct HttpLocation {
-    host: Ipv4Addr,
-    port: u16,
-    path: String,
-}
-
-fn parse_location(url: &str) -> Option<HttpLocation> {
-    let rest = url.trim().strip_prefix("http://")?;
-    let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
-    let (host, port) = authority.split_once(':').unwrap_or((authority, "80"));
-    Some(HttpLocation {
-        host: host.parse().ok()?,
-        port: port.parse().ok()?,
-        path: format!("/{path}"),
-    })
-}
-
 /// The `LOCATION` header of an SSDP response.
-fn location_header(response: &str) -> Option<&str> {
+pub(crate) fn location_header(response: &str) -> Option<&str> {
     response.lines().find_map(|line| {
         let (name, value) = line.split_once(':')?;
         name.eq_ignore_ascii_case("location").then(|| value.trim())
@@ -57,14 +34,24 @@ fn location_header(response: &str) -> Option<&str> {
 
 /// The text of the first `<tag>` element. This is a plain text search on purpose:
 /// no XML parser means no entity or external reference handling on untrusted input.
-fn element_text(xml: &str, tag: &str) -> Option<String> {
+pub(crate) fn element_text(xml: &str, tag: &str) -> Option<String> {
     let (_, after_open) = xml.split_once(&format!("<{tag}>"))?;
     let (text, _) = after_open.split_once(&format!("</{tag}>"))?;
-    let text = text.trim().replace("&amp;", "&");
+    let text = decode_entities(text.trim());
     (!text.is_empty()).then_some(text)
 }
 
-fn parse_description(xml: &str) -> DeviceDescription {
+/// Turns the five predefined XML entities back into characters. `&amp;` comes last, so
+/// `&amp;lt;` stays the text `&lt;`.
+fn decode_entities(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+pub(crate) fn parse_description(xml: &str) -> DeviceDescription {
     DeviceDescription {
         friendly_name: element_text(xml, "friendlyName"),
         manufacturer: element_text(xml, "manufacturer"),
@@ -73,30 +60,14 @@ fn parse_description(xml: &str) -> DeviceDescription {
 }
 
 async fn read_description(location: HttpLocation) -> Option<DeviceDescription> {
-    let exchange = async {
-        let _permit = socket_permit().await?;
-        let mut stream = TcpStream::connect((location.host, location.port))
-            .await
-            .ok()?;
-        let request = format!(
-            "GET {} HTTP/1.0\r\nHost: {}:{}\r\nConnection: close\r\n\r\n",
-            location.path, location.host, location.port
-        );
-        stream.write_all(request.as_bytes()).await.ok()?;
-        let mut body = Vec::new();
-        stream
-            .take(MAX_DESCRIPTION_BYTES)
-            .read_to_end(&mut body)
-            .await
-            .ok()?;
-        Some(parse_description(&String::from_utf8_lossy(&body)))
-    };
-    timeout(DESCRIPTION_TIMEOUT, exchange).await.ok()?
+    let response = get(&location).await?;
+    Some(parse_description(&response.body))
 }
 
 /// Collects `LOCATION` URLs by answering address until `wait` runs out.
 /// Answers from outside `targets`, and URLs on another host, are ignored.
-async fn collect_locations(
+pub(crate) async fn collect_locations(
+    search: &str,
     search_address: SocketAddrV4,
     targets: &HashSet<Ipv4Addr>,
     wait: Duration,
@@ -108,7 +79,7 @@ async fn collect_locations(
     // UDP over Wi-Fi often loses multicast, so the search goes out more than once.
     for _ in 0..SEARCH_ATTEMPTS {
         if socket
-            .send_to(SEARCH.as_bytes(), search_address)
+            .send_to(search.as_bytes(), search_address)
             .await
             .is_err()
         {
@@ -140,7 +111,7 @@ pub async fn survey(targets: &[Ipv4Addr], wait: Duration) -> HashMap<Ipv4Addr, D
     let targets: HashSet<Ipv4Addr> = targets.iter().copied().collect();
     let mut reads = JoinSet::new();
     let group = SocketAddrV4::new(MULTICAST_GROUP, SSDP_PORT);
-    for (ip, location) in collect_locations(group, &targets, wait).await {
+    for (ip, location) in collect_locations(SEARCH, group, &targets, wait).await {
         reads.spawn(async move { Some((ip, read_description(location).await?)) });
     }
     let mut descriptions = HashMap::new();
@@ -155,7 +126,6 @@ pub async fn survey(targets: &[Ipv4Addr], wait: Duration) -> HashMap<Ipv4Addr, D
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::net::TcpListener;
 
     #[test]
     fn reads_the_location_header_in_any_case() {
@@ -169,18 +139,11 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_plain_http_with_an_ip_host() {
+    fn xml_entities_are_decoded_once() {
         assert_eq!(
-            parse_location("http://192.168.1.5:8080/a/b.xml"),
-            Some(HttpLocation {
-                host: Ipv4Addr::new(192, 168, 1, 5),
-                port: 8080,
-                path: "/a/b.xml".to_owned(),
-            })
+            element_text("<a>x &lt;y&gt; &amp;lt; &quot;z&quot;</a>", "a").as_deref(),
+            Some("x <y> &lt; \"z\"")
         );
-        assert_eq!(parse_location("http://192.168.1.5").unwrap().port, 80);
-        assert_eq!(parse_location("https://192.168.1.5/a"), None);
-        assert_eq!(parse_location("http://example.com/a"), None);
     }
 
     #[test]
@@ -213,32 +176,11 @@ mod tests {
             responder.send_to(here, from).await.unwrap();
         });
         let targets = HashSet::from([Ipv4Addr::LOCALHOST]);
-        let found = collect_locations(address, &targets, Duration::from_millis(300)).await;
+        let found = collect_locations(SEARCH, address, &targets, Duration::from_millis(300)).await;
         assert_eq!(found[&Ipv4Addr::LOCALHOST].port, 8200);
 
-        let none = collect_locations(address, &HashSet::new(), Duration::from_millis(50)).await;
+        let none =
+            collect_locations(SEARCH, address, &HashSet::new(), Duration::from_millis(50)).await;
         assert!(none.is_empty());
-    }
-
-    #[tokio::test]
-    async fn reads_a_description_over_http() {
-        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        tokio::spawn(async move {
-            let (mut stream, _) = listener.accept().await.unwrap();
-            let mut request = [0; 256];
-            let _ = stream.read(&mut request).await;
-            let _ = stream
-                .write_all(b"HTTP/1.0 200 OK\r\n\r\n<modelName>M1</modelName>")
-                .await;
-        });
-        let description = read_description(HttpLocation {
-            host: Ipv4Addr::LOCALHOST,
-            port,
-            path: "/d.xml".to_owned(),
-        })
-        .await
-        .unwrap();
-        assert_eq!(description.model.as_deref(), Some("M1"));
     }
 }
