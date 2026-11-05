@@ -1,4 +1,4 @@
-//! Drawing of the Traffic tab.
+//! Drawing of the SNMP tab.
 
 use iced::font::Weight;
 use iced::widget::{
@@ -10,10 +10,10 @@ use lanping_core::snmp_interfaces::{HISTORY_LENGTH, Interface};
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::results::pill;
+use crate::snmp_tab::{SnmpState, Status, format_rate, format_uptime, utilization_percent};
 use crate::sparkline::{Bar, sparkline, width_of};
 use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
-use crate::traffic_tab::{Status, TrafficState, format_rate, format_uptime, utilization_percent};
 use crate::view::input_group;
 
 const BOLD: Font = Font {
@@ -40,9 +40,9 @@ const COLUMNS: [(&str, f32); 6] = [
     ("Used", 70.0),
 ];
 
-pub fn traffic_panel(app: &LanPing) -> Element<'_, Message> {
-    let traffic = &app.traffic;
-    let body = column![controls(app), summary(traffic), content(traffic)].spacing(SECTION_SPACING);
+pub fn snmp_panel(app: &LanPing) -> Element<'_, Message> {
+    let snmp = &app.snmp;
+    let body = column![controls(app), summary(snmp), content(snmp)].spacing(SECTION_SPACING);
     let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
         .width(Length::Fill)
         .height(Length::Fill);
@@ -54,13 +54,13 @@ pub fn traffic_panel(app: &LanPing) -> Element<'_, Message> {
 }
 
 fn controls(app: &LanPing) -> Element<'_, Message> {
-    let traffic = &app.traffic;
-    let running = traffic.running();
-    let hint = traffic.gateway_hint.map_or_else(
+    let snmp = &app.snmp;
+    let running = snmp.running();
+    let hint = snmp.gateway_hint.map_or_else(
         || "Router or switch address, with :port if it is not 161".to_owned(),
         |ip| format!("Router or switch address, such as {ip} (with :port if it is not 161)"),
     );
-    let mut target = text_input(&hint, &traffic.target)
+    let mut target = text_input(&hint, &snmp.target)
         .padding(theme::CONTROL_PADDING)
         .size(TEXT_SIZE)
         .width(Length::Fill)
@@ -73,16 +73,16 @@ fn controls(app: &LanPing) -> Element<'_, Message> {
         .style(theme::input_at(Edge::Middle));
     if !running {
         target = target
-            .on_input(Message::TrafficTargetChanged)
-            .on_submit(Message::TrafficStart);
+            .on_input(Message::SnmpTargetChanged)
+            .on_submit(Message::SnmpStart);
         community = community
             .on_input(Message::SnmpCommunityChanged)
-            .on_submit(Message::TrafficStart);
+            .on_submit(Message::SnmpStart);
     }
     let action = if running {
         with_tooltip(
             button(lucide::square().size(ICON_SIZE + 2.0))
-                .on_press(Message::TrafficStop)
+                .on_press(Message::SnmpStop)
                 .padding([7.0, 20.0])
                 .style(theme::button_at(Edge::Last, theme::danger_button)),
             "Stop",
@@ -90,7 +90,7 @@ fn controls(app: &LanPing) -> Element<'_, Message> {
     } else {
         with_tooltip(
             button(lucide::play().size(ICON_SIZE + 2.0))
-                .on_press(Message::TrafficStart)
+                .on_press(Message::SnmpStart)
                 .padding([7.0, 20.0])
                 .style(theme::button_at(Edge::Last, theme::primary_button)),
             "Start",
@@ -106,29 +106,29 @@ fn controls(app: &LanPing) -> Element<'_, Message> {
     .into()
 }
 
-fn summary(traffic: &TrafficState) -> Element<'_, Message> {
+fn summary(snmp: &SnmpState) -> Element<'_, Message> {
     let mut items: Vec<Element<'_, Message>> = Vec::new();
-    match &traffic.status {
+    match &snmp.status {
         Status::Connecting => items.push(pill("Connecting", WARN)),
         Status::Running => {
             items.push(pill("Live", GOOD));
-            if let Some(uptime) = traffic.tracker.uptime_seconds() {
+            if let Some(uptime) = snmp.tracker.uptime_seconds() {
                 items.push(pill(format!("Up {}", format_uptime(uptime)), ACCENT));
             }
-            if traffic.failures > 0 {
+            if snmp.failures > 0 {
                 items.push(pill("Missed a reading", WARN));
             }
         }
         Status::Idle | Status::Failed(_) => {}
     }
     items.push(space::horizontal().into());
-    if !traffic.interfaces.is_empty() {
+    if !snmp.interfaces.is_empty() {
         items.push(
-            checkbox(traffic.show_all)
+            checkbox(snmp.show_all)
                 .label("Show all interfaces")
                 .size(16)
                 .text_size(TEXT_SIZE)
-                .on_toggle(Message::TrafficShowAllToggled)
+                .on_toggle(Message::SnmpShowAllToggled)
                 .into(),
         );
     }
@@ -138,14 +138,14 @@ fn summary(traffic: &TrafficState) -> Element<'_, Message> {
         .into()
 }
 
-fn content(traffic: &TrafficState) -> Element<'_, Message> {
-    match &traffic.status {
+fn content(snmp: &SnmpState) -> Element<'_, Message> {
+    match &snmp.status {
         Status::Idle => note(
             "Enter the address of a router or switch that has SNMP turned on, and its read-only community, then press start.",
         ),
         Status::Connecting => note("Asking the device for its interfaces."),
         Status::Failed(message) => text(message.as_str()).color(BAD).into(),
-        Status::Running => interface_table(traffic),
+        Status::Running => interface_table(snmp),
     }
 }
 
@@ -157,8 +157,8 @@ fn graph_width() -> f32 {
     cell_width(width_of(HISTORY_LENGTH))
 }
 
-fn interface_table(traffic: &TrafficState) -> Element<'_, Message> {
-    let visible = traffic.visible();
+fn interface_table(snmp: &SnmpState) -> Element<'_, Message> {
+    let visible = snmp.visible();
     if visible.is_empty() {
         return note("No interface is up. Tick \"Show all interfaces\" to see the others.");
     }
@@ -176,8 +176,7 @@ fn interface_table(traffic: &TrafficState) -> Element<'_, Message> {
         column![grid_line(header)],
         |list, (index, interface)| {
             list.push(
-                container(grid_line(cells(traffic, interface)))
-                    .style(theme::stripe(index % 2 == 1)),
+                container(grid_line(cells(snmp, interface))).style(theme::stripe(index % 2 == 1)),
             )
         },
     );
@@ -189,11 +188,8 @@ fn interface_table(traffic: &TrafficState) -> Element<'_, Message> {
         .into()
 }
 
-fn cells<'a>(
-    traffic: &'a TrafficState,
-    interface: &'a Interface,
-) -> Vec<(f32, Element<'a, Message>)> {
-    let rate = traffic.tracker.rate(interface.index);
+fn cells<'a>(traffic: &'a SnmpState, interface: &'a Interface) -> Vec<(f32, Element<'a, Message>)> {
+    let rate = snmp.tracker.rate(interface.index);
     let name: Element<'a, Message> = match &interface.alias {
         Some(alias) => column![
             text(interface.name.as_str()).font(BOLD),
@@ -236,7 +232,7 @@ fn cells<'a>(
         .map(|(_, width)| cell_width(*width))
         .zip(values)
         .collect();
-    cells.push((graph_width(), traffic_graph(traffic, interface.index)));
+    cells.push((graph_width(), traffic_graph(snmp, interface.index)));
     cells
 }
 
@@ -251,8 +247,8 @@ fn utilization_color(percent: f64) -> iced::Color {
 }
 
 /// One bar per reading, as tall as the traffic in and out together.
-fn traffic_graph(traffic: &TrafficState, index: u32) -> Element<'_, Message> {
-    let history = traffic.tracker.history(index);
+fn traffic_graph(snmp: &SnmpState, index: u32) -> Element<'_, Message> {
+    let history = snmp.tracker.history(index);
     let scale = history
         .iter()
         .map(|rate| rate.total_bps())

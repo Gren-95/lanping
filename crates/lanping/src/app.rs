@@ -41,6 +41,7 @@ use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
+use crate::snmp_tab::SnmpState;
 use crate::speed_locations::LocationChoice;
 use crate::speed_tab::{
     Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
@@ -54,7 +55,6 @@ use crate::tabs::Tab;
 use crate::timestamp::format_unix_utc;
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
-use crate::traffic_tab::TrafficState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
 
@@ -240,12 +240,12 @@ pub enum Message {
     LatencyCopySummary,
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
-    TrafficTargetChanged(String),
-    TrafficStart,
-    TrafficStop,
-    TrafficDiscovered(u64, Result<Vec<Interface>, SnmpError>),
-    TrafficPolled(u64, Result<Poll, SnmpError>),
-    TrafficShowAllToggled(bool),
+    SnmpTargetChanged(String),
+    SnmpStart,
+    SnmpStop,
+    SnmpDiscovered(u64, Result<Vec<Interface>, SnmpError>),
+    SnmpPolled(u64, Result<Poll, SnmpError>),
+    SnmpShowAllToggled(bool),
     TlsTargetChanged(String),
     TlsServerNameChanged(String),
     TlsCheck,
@@ -287,7 +287,7 @@ pub struct LanPing {
     pub latency: LatencyState,
     pub dns: DnsState,
     pub tls: TlsState,
-    pub traffic: TrafficState,
+    pub snmp: SnmpState,
     pub speed: SpeedState,
     pub modal: Option<Modal>,
     pub label_draft: String,
@@ -417,7 +417,7 @@ impl LanPing {
             latency: LatencyState::default(),
             dns: DnsState::new(),
             tls: TlsState::new(),
-            traffic: TrafficState::new(),
+            snmp: SnmpState::new(),
             speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
             label_draft: String::new(),
@@ -650,18 +650,18 @@ impl LanPing {
             }
             Message::SpeedServerFailed(message) => self.speed.server_failed(message),
             Message::SpeedServed(stream) => self.speed.served(stream),
-            Message::TrafficTargetChanged(target) => self.traffic.target = target,
-            Message::TrafficStart => {
-                return self.traffic.start(&self.settings.snmp_community);
+            Message::SnmpTargetChanged(target) => self.snmp.target = target,
+            Message::SnmpStart => {
+                return self.snmp.start(&self.settings.snmp_community);
             }
-            Message::TrafficStop => self.traffic.stop(),
-            Message::TrafficDiscovered(generation, result) => {
-                return self.traffic.discovered(generation, result);
+            Message::SnmpStop => self.snmp.stop(),
+            Message::SnmpDiscovered(generation, result) => {
+                return self.snmp.discovered(generation, result);
             }
-            Message::TrafficPolled(generation, result) => {
-                return self.traffic.polled(generation, result);
+            Message::SnmpPolled(generation, result) => {
+                return self.snmp.polled(generation, result);
             }
-            Message::TrafficShowAllToggled(show_all) => self.traffic.show_all = show_all,
+            Message::SnmpShowAllToggled(show_all) => self.snmp.show_all = show_all,
             Message::TlsTargetChanged(target) => self.tls.set_target(target),
             Message::TlsServerNameChanged(name) => self.tls.set_server_name(name),
             Message::TlsCheck => return self.tls.start(),

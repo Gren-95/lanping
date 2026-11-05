@@ -1,4 +1,4 @@
-//! The Traffic tab state: ask a router or switch over SNMP how much each interface carries.
+//! The SNMP tab state: ask a router or switch over SNMP how much each interface carries.
 
 use std::net::Ipv4Addr;
 use std::time::Duration;
@@ -28,7 +28,7 @@ pub enum Status {
     Failed(String),
 }
 
-pub struct TrafficState {
+pub struct SnmpState {
     pub target: String,
     /// The gateway of this network, shown as a hint in the empty address field.
     pub gateway_hint: Option<Ipv4Addr>,
@@ -44,7 +44,7 @@ pub struct TrafficState {
     handle: Option<Handle>,
 }
 
-impl TrafficState {
+impl SnmpState {
     pub fn new() -> Self {
         Self {
             target: String::new(),
@@ -92,7 +92,7 @@ impl TrafficState {
         self.agent = Some(agent.clone());
         let generation = self.generation;
         let (task, handle) = Task::perform(async move { agent.discover().await }, move |result| {
-            Message::TrafficDiscovered(generation, result)
+            Message::SnmpDiscovered(generation, result)
         })
         .abortable();
         self.handle = Some(handle);
@@ -167,10 +167,8 @@ impl TrafficState {
             tokio::time::sleep(delay).await;
             agent.poll(&interfaces).await
         };
-        let (task, handle) = Task::perform(poll, move |result| {
-            Message::TrafficPolled(generation, result)
-        })
-        .abortable();
+        let (task, handle) =
+            Task::perform(poll, move |result| Message::SnmpPolled(generation, result)).abortable();
         self.handle = Some(handle);
         task
     }
@@ -255,8 +253,8 @@ mod tests {
         }
     }
 
-    fn running() -> TrafficState {
-        let mut state = TrafficState::new();
+    fn running() -> SnmpState {
+        let mut state = SnmpState::new();
         state.generation = 1;
         state.status = Status::Running;
         state
@@ -264,7 +262,7 @@ mod tests {
 
     #[test]
     fn a_bad_address_or_a_missing_community_stops_before_asking() {
-        let mut state = TrafficState::new();
+        let mut state = SnmpState::new();
         state.target = "router".to_owned();
         let _ = state.start("public");
         assert!(matches!(state.status, Status::Failed(ref m) if m.contains("IPv4")));
@@ -312,7 +310,7 @@ mod tests {
 
     #[test]
     fn a_failed_listing_shows_why_and_stops() {
-        let mut state = TrafficState::new();
+        let mut state = SnmpState::new();
         state.generation = 1;
         state.status = Status::Connecting;
         let _ = state.discovered(1, Err(SnmpError::NoAnswer));

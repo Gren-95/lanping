@@ -22,7 +22,7 @@ pub enum Tab {
     Speed,
     Dns,
     Tls,
-    Traffic,
+    Snmp,
     Subnet,
     Settings,
 }
@@ -37,7 +37,7 @@ fn bar_tabs() -> [(Tab, Text<'static>, &'static str); 9] {
         (Tab::Speed, lucide::zap(), "Speed"),
         (Tab::Dns, lucide::globe(), "DNS"),
         (Tab::Tls, lucide::shield_check(), "TLS"),
-        (Tab::Traffic, lucide::arrow_down_up(), "Traffic"),
+        (Tab::Snmp, lucide::arrow_down_up(), "SNMP"),
         (Tab::Subnet, lucide::calculator(), "Subnet"),
     ]
 }

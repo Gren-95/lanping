@@ -16,6 +16,7 @@ use crate::modal::overlay;
 use crate::monitor::AutoInterval;
 use crate::results::{pill, results};
 use crate::settings_page::settings_panel;
+use crate::snmp_view::snmp_panel;
 use crate::speed_view::speed_panel;
 use crate::subnet_tab::subnet_panel;
 use crate::tabs::{Tab, tab_bar};
@@ -23,7 +24,6 @@ use crate::theme::Edge;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
 use crate::tls_tab::tls_panel;
 use crate::trace_tab::trace_panel;
-use crate::traffic_view::traffic_panel;
 use crate::wifi_tab::wifi_panel;
 use lanping_core::ScanStage;
 use lanping_core::diff::HostStatus;
@@ -68,7 +68,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Speed => (header(app), speed_panel(app)),
         Tab::Dns => (header(app), dns_panel(app, width)),
         Tab::Tls => (header(app), tls_panel(app, width)),
-        Tab::Traffic => (header(app), traffic_panel(app)),
+        Tab::Snmp => (header(app), snmp_panel(app)),
         Tab::Subnet => (header(app), subnet_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
