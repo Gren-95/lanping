@@ -26,6 +26,7 @@ use lanping_core::throughput::ServedStream;
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::tls::{TlsError, TlsReport};
 use lanping_core::trace::{HopSample, TraceError};
+use lanping_core::upnp::{UpnpError, UpnpReport};
 use lanping_core::whois::{WhoisError, WhoisReport};
 use lanping_core::wifi::{AccessPoint, WifiError};
 use lanping_core::wol::send_wake_packet;
@@ -58,6 +59,7 @@ use crate::tabs::Tab;
 use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
+use crate::upnp_tab::UpnpState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
 
@@ -91,6 +93,7 @@ pub struct LanPing {
     pub dns: DnsState,
     pub tls: TlsState,
     pub ntp: NtpState,
+    pub upnp: UpnpState,
     pub snmp: SnmpState,
     pub speed: SpeedState,
     pub modal: Option<Modal>,
@@ -173,6 +176,7 @@ impl LanPing {
             dns: DnsState::new(),
             tls: TlsState::new(),
             ntp: NtpState::new(),
+            upnp: UpnpState::new(),
             snmp: SnmpState::new(),
             speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
@@ -468,6 +472,8 @@ impl LanPing {
             Message::NtpServerChanged(server) => self.ntp.set_server(server),
             Message::NtpCheck => return self.ntp.start(),
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
+            Message::UpnpRead => return self.upnp.start(),
+            Message::UpnpDone(generation, result) => self.upnp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
             Message::WhoisLookup => return self.dns.whois.start(),

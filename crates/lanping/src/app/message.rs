@@ -191,6 +191,8 @@ pub enum Message {
     NtpServerChanged(String),
     NtpCheck,
     NtpDone(u64, Result<NtpReport, NtpError>),
+    UpnpRead,
+    UpnpDone(u64, Result<UpnpReport, UpnpError>),
     DnsPagePicked(DnsPage),
     WhoisQueryChanged(String),
     WhoisLookup,
