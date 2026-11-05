@@ -34,7 +34,7 @@ fn reverse_name(ip: Ipv4Addr) -> String {
 }
 
 /// Reads a possibly compressed DNS name. Returns it and the offset just after it.
-fn read_name(packet: &[u8], start: usize) -> Option<(String, usize)> {
+pub(crate) fn read_name(packet: &[u8], start: usize) -> Option<(String, usize)> {
     let mut labels: Vec<String> = Vec::new();
     let mut position = start;
     let mut end = None;
@@ -64,7 +64,7 @@ fn read_name(packet: &[u8], start: usize) -> Option<(String, usize)> {
     }
 }
 
-fn read_u16(packet: &[u8], offset: usize) -> Option<u16> {
+pub(crate) fn read_u16(packet: &[u8], offset: usize) -> Option<u16> {
     let bytes = packet.get(offset..offset + 2)?;
     Some(u16::from_be_bytes([bytes[0], bytes[1]]))
 }

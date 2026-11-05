@@ -75,6 +75,10 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A Latency tab probes one host every second, 5 seconds or 30 seconds with ICMP ping (TCP connects when the system does not allow unprivileged ping), shows loss, average, best, worst and jitter with a history graph, and saves the log as CSV
 
+**DNS**
+
+- A DNS tab looks up A, AAAA, MX, TXT, NS, PTR and CNAME records at the resolvers your system uses or at Cloudflare, Google and Quad9, and times all of them side by side. Queries are sent directly over UDP (TCP for long answers), so nothing extra is installed
+
 **Subnet**
 
 - A Subnet tab turns an address with a prefix length or netmask into network, broadcast, host range and host count, for IPv4 and IPv6, and can start a scan of the range

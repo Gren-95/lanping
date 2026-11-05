@@ -6,6 +6,7 @@ use iced::widget::{
 use iced::{Alignment, Element, Font, Length};
 
 use crate::app::{HistoryEntry, LanPing, Message, Notice};
+use crate::dns_tab::dns_panel;
 use crate::export_format::ExportFormat;
 use crate::filter_bar::filter_bar;
 use crate::host_order::SortKey;
@@ -61,6 +62,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Wifi => (header(app), wifi_panel(app, width)),
         Tab::Trace => (header(app), trace_panel(app)),
         Tab::Latency => (header(app), latency_panel(app)),
+        Tab::Dns => (header(app), dns_panel(app, width)),
         Tab::Subnet => (header(app), subnet_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };

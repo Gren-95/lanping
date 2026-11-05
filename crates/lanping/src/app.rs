@@ -9,6 +9,7 @@ use iced::{Subscription, Task, Theme};
 use lanping_core::device_notes::{DeviceNote, DeviceNotes};
 use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
+use lanping_core::dns::{Answer, DnsError, RecordType, ResolverTiming};
 use lanping_core::gateway::default_gateway;
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
@@ -24,6 +25,7 @@ use lanping_core::{Host, ScanEvent, ScanStage};
 
 use crate::actions::{Effect, HostAction};
 use crate::copy_text::rows_as_text;
+use crate::dns_tab::{DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
 use crate::host_order::{SortKey, compare_hosts};
@@ -207,6 +209,14 @@ pub enum Message {
     LatencyCopySummary,
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
+    DnsNameChanged(String),
+    DnsTypePicked(RecordType),
+    DnsResolverPicked(ResolverChoice),
+    DnsLookup,
+    DnsLookupDone(u64, Result<Answer, DnsError>),
+    DnsCompare,
+    DnsComparisonDone(u64, Vec<ResolverTiming>),
+    DnsCopyRecords,
     SubnetInputChanged(String),
     SubnetScanRange(String),
     WifiScanned(Result<Vec<AccessPoint>, WifiError>),
@@ -229,6 +239,7 @@ pub struct LanPing {
     pub trace: TraceState,
     pub subnet: SubnetState,
     pub latency: LatencyState,
+    pub dns: DnsState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -355,6 +366,7 @@ impl LanPing {
             trace: TraceState::default(),
             subnet: SubnetState::default(),
             latency: LatencyState::default(),
+            dns: DnsState::new(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -551,6 +563,22 @@ impl LanPing {
             }
             Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
             Message::LatencyLogPathChosen(None) => {}
+            Message::DnsNameChanged(name) => self.dns.set_name(name),
+            Message::DnsTypePicked(record_type) => self.dns.set_record_type(record_type),
+            Message::DnsResolverPicked(resolver) => self.dns.set_resolver(resolver),
+            Message::DnsLookup => return self.dns.start_lookup(),
+            Message::DnsLookupDone(generation, result) => {
+                self.dns.finish_lookup(generation, result);
+            }
+            Message::DnsCompare => return self.dns.start_comparison(),
+            Message::DnsComparisonDone(generation, timings) => {
+                self.dns.finish_comparison(generation, timings);
+            }
+            Message::DnsCopyRecords => {
+                let (text, count) = self.dns.records_as_text();
+                self.set_notice(Notice::Info, format!("Copied {count} records"));
+                return iced::clipboard::write(text);
+            }
             Message::SubnetInputChanged(input) => self.subnet.set_input(input),
             Message::SubnetScanRange(target) => {
                 self.target = target;

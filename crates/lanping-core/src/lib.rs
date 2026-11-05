@@ -6,6 +6,7 @@ pub mod device_type;
 pub mod diagnostics;
 pub mod diff;
 pub mod discovery;
+pub mod dns;
 pub mod export;
 pub mod gateway;
 pub mod history;

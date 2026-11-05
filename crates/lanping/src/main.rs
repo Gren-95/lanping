@@ -4,6 +4,7 @@
 mod actions;
 mod app;
 mod copy_text;
+mod dns_tab;
 mod export_format;
 mod filter_bar;
 mod host_details;
