@@ -26,20 +26,25 @@ pub fn width_of(count: usize) -> f32 {
 }
 
 pub fn sparkline<'a>(bars: impl IntoIterator<Item = Bar>) -> Element<'a, Message> {
+    chart(bars, HEIGHT)
+}
+
+/// The same bars drawn `height` tall, for a graph that stands on its own.
+pub fn chart<'a>(bars: impl IntoIterator<Item = Bar>, height: f32) -> Element<'a, Message> {
     let bars = bars.into_iter().map(|bar| {
-        let height = bar
+        let bar_height = bar
             .fraction
-            .map_or(GAP_HEIGHT, |fraction| (HEIGHT * fraction).max(GAP_HEIGHT));
+            .map_or(GAP_HEIGHT, |fraction| (height * fraction).max(GAP_HEIGHT));
         container(space::horizontal())
             .width(BAR_WIDTH)
-            .height(height)
+            .height(bar_height)
             .style(bar_style(bar.color))
             .into()
     });
     let bars = LayoutRow::with_children(bars)
         .spacing(BAR_SPACING)
         .align_y(Alignment::End);
-    container(bars).align_bottom(HEIGHT).into()
+    container(bars).align_bottom(height).into()
 }
 
 fn bar_style(color: Color) -> impl Fn(&Theme) -> container::Style {

@@ -12,6 +12,7 @@ use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::gateway::default_gateway;
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
+use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
@@ -27,6 +28,7 @@ use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
 use crate::host_order::{SortKey, compare_hosts};
 use crate::host_rows::Row;
+use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
@@ -196,6 +198,15 @@ pub enum Message {
     TraceStop,
     TraceRound(u64, Result<Vec<HopSample>, TraceError>),
     TraceCopyRows,
+    LatencyTargetChanged(String),
+    LatencyIntervalPicked(Interval),
+    LatencyStart,
+    LatencyStop,
+    LatencyReady(u64, Result<Prober, LatencyError>),
+    LatencySample(u64, Option<f64>),
+    LatencyCopySummary,
+    LatencySaveLog,
+    LatencyLogPathChosen(Option<PathBuf>),
     SubnetInputChanged(String),
     SubnetScanRange(String),
     WifiScanned(Result<Vec<AccessPoint>, WifiError>),
@@ -217,6 +228,7 @@ pub struct LanPing {
     pub wifi: WifiState,
     pub trace: TraceState,
     pub subnet: SubnetState,
+    pub latency: LatencyState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -342,6 +354,7 @@ impl LanPing {
             wifi: WifiState::default(),
             trace: TraceState::default(),
             subnet: SubnetState::default(),
+            latency: LatencyState::default(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -512,6 +525,32 @@ impl LanPing {
             Message::WifiAutoRefreshToggled(on) => self.wifi.set_auto_refresh(on),
             Message::WifiSortBy(key) => self.wifi.sort_by(key),
             Message::WifiFilter(change) => self.wifi.apply_filter(change),
+            Message::LatencyTargetChanged(target) => self.latency.set_target(target),
+            Message::LatencyIntervalPicked(interval) => self.latency.set_interval(interval),
+            Message::LatencyStart => return self.latency.start(),
+            Message::LatencyStop => self.latency.stop(),
+            Message::LatencyReady(generation, result) => {
+                return self.latency.ready(generation, result);
+            }
+            Message::LatencySample(generation, rtt_ms) => {
+                return self.latency.sampled(generation, rtt_ms);
+            }
+            Message::LatencyCopySummary => {
+                self.set_notice(Notice::Info, "Copied latency summary".to_owned());
+                return iced::clipboard::write(self.latency.summary());
+            }
+            Message::LatencySaveLog => {
+                return Task::perform(
+                    ask_save_path(
+                        ExportFormat::Csv,
+                        self.latency.default_log_name(),
+                        export_directory(),
+                    ),
+                    Message::LatencyLogPathChosen,
+                );
+            }
+            Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
+            Message::LatencyLogPathChosen(None) => {}
             Message::SubnetInputChanged(input) => self.subnet.set_input(input),
             Message::SubnetScanRange(target) => {
                 self.target = target;
@@ -830,6 +869,13 @@ impl LanPing {
             ask_save_path(format, file_name, export_directory()),
             move |path| Message::ExportPathChosen(format, path),
         )
+    }
+
+    fn save_latency_log(&mut self, path: &Path) {
+        match fs::write(path, self.latency.log_as_csv()) {
+            Ok(()) => self.set_notice(Notice::Info, format!("Saved {}", path.display())),
+            Err(error) => self.set_notice(Notice::Error, format!("Could not save log: {error}")),
+        }
     }
 
     fn export(&mut self, format: ExportFormat, path: &Path) {

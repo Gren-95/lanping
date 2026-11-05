@@ -3,14 +3,16 @@
 //! Each round runs the system's own traceroute once, so no raw-socket
 //! privileges are needed. Statistics build up over the rounds.
 
-use std::collections::VecDeque;
 use std::fmt;
 use std::net::IpAddr;
+use std::ops::Deref;
 use std::process::Stdio;
 use std::time::Duration;
 
 use tokio::process::Command;
 use tokio::time::timeout;
+
+use crate::rtt_stats::RttStats;
 
 /// Longest one round may run before it is stopped.
 const ROUND_LIMIT: Duration = Duration::from_secs(40);
@@ -236,21 +238,21 @@ fn parse_milliseconds(token: &str) -> Option<f64> {
 }
 
 /// Everything learned about one hop over the rounds so far.
-#[derive(Debug, Clone, Default, PartialEq)]
+/// The round trip statistics are reachable directly: `hop.sent`, `hop.average_ms()`, and so on.
+#[derive(Debug, Clone, PartialEq)]
 pub struct HopStats {
     pub hop: u8,
     /// The router that answered most recently.
     pub address: Option<IpAddr>,
-    pub sent: u32,
-    pub received: u32,
-    pub last_ms: Option<f64>,
-    pub best_ms: Option<f64>,
-    pub worst_ms: Option<f64>,
-    total_ms: f64,
-    previous_ms: Option<f64>,
-    change_total_ms: f64,
-    changes: u32,
-    history: VecDeque<Option<f64>>,
+    rtt: RttStats,
+}
+
+impl Deref for HopStats {
+    type Target = RttStats;
+
+    fn deref(&self) -> &RttStats {
+        &self.rtt
+    }
 }
 
 impl HopStats {
@@ -260,54 +262,16 @@ impl HopStats {
     fn new(hop: u8) -> Self {
         Self {
             hop,
-            ..Self::default()
+            address: None,
+            rtt: RttStats::new(Self::HISTORY_LENGTH),
         }
     }
 
     fn record(&mut self, sample: Option<&HopSample>) {
-        self.sent += 1;
-        let rtt = sample.and_then(|sample| sample.rtt_ms);
         if let Some(address) = sample.and_then(|sample| sample.address) {
             self.address = Some(address);
         }
-        self.last_ms = rtt;
-        if let Some(rtt) = rtt {
-            self.received += 1;
-            self.total_ms += rtt;
-            self.best_ms = Some(self.best_ms.map_or(rtt, |best| best.min(rtt)));
-            self.worst_ms = Some(self.worst_ms.map_or(rtt, |worst| worst.max(rtt)));
-            if let Some(previous) = self.previous_ms {
-                self.change_total_ms += (rtt - previous).abs();
-                self.changes += 1;
-            }
-            self.previous_ms = Some(rtt);
-        }
-        self.history.push_back(rtt);
-        if self.history.len() > Self::HISTORY_LENGTH {
-            self.history.pop_front();
-        }
-    }
-
-    /// Share of rounds this hop did not answer, from 0 to 100.
-    pub fn loss_percent(&self) -> f64 {
-        if self.sent == 0 {
-            return 0.0;
-        }
-        f64::from(self.sent - self.received) * 100.0 / f64::from(self.sent)
-    }
-
-    pub fn average_ms(&self) -> Option<f64> {
-        (self.received > 0).then(|| self.total_ms / f64::from(self.received))
-    }
-
-    /// Mean change between one answer and the next.
-    pub fn jitter_ms(&self) -> Option<f64> {
-        (self.changes > 0).then(|| self.change_total_ms / f64::from(self.changes))
-    }
-
-    /// Recent round trips, oldest first. `None` is a round with no answer.
-    pub fn history(&self) -> Vec<Option<f64>> {
-        self.history.iter().copied().collect()
+        self.rtt.record(sample.and_then(|sample| sample.rtt_ms));
     }
 }
 

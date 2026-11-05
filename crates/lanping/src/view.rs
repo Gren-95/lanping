@@ -10,6 +10,7 @@ use crate::export_format::ExportFormat;
 use crate::filter_bar::filter_bar;
 use crate::host_order::SortKey;
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
+use crate::latency_tab::latency_panel;
 use crate::modal::overlay;
 use crate::monitor::AutoInterval;
 use crate::results::{pill, results};
@@ -59,6 +60,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Scan => (scan_top(app, width), results_panel(app, width)),
         Tab::Wifi => (header(app), wifi_panel(app, width)),
         Tab::Trace => (header(app), trace_panel(app)),
+        Tab::Latency => (header(app), latency_panel(app)),
         Tab::Subnet => (header(app), subnet_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
