@@ -43,6 +43,12 @@ impl Tab {
         Tab::Subnet,
     ];
 
+    /// Whether the tab shows until the user turns it on or off. The tools that most people reach
+    /// for rarely (TLS, SNMP and subnet) start hidden; they are one tick away in Settings.
+    pub fn shown_by_default(self) -> bool {
+        !matches!(self, Self::Tls | Self::Snmp | Self::Subnet)
+    }
+
     pub fn title(self) -> &'static str {
         match self {
             Self::Scan => "Devices",

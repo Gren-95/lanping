@@ -102,7 +102,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays)
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP and Subnet start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run
