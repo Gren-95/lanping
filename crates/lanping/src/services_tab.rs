@@ -16,8 +16,6 @@ use crate::ui::{empty_state, page_header, panel, scrolling};
 
 const CARD_PADDING: f32 = 12.0;
 const GROUP_SPACING: f32 = 8.0;
-/// Text records shown on a line; the rest are left out so a long list stays readable.
-const SHOWN_DETAILS: usize = 8;
 
 enum Lookup {
     Idle,
@@ -97,14 +95,16 @@ pub fn services_panel(app: &LanPing) -> Element<'_, Message> {
 fn results<'a>(entries: &'a [ServiceEntry], hosts: &[Host]) -> Element<'a, Message> {
     groups(entries)
         .into_iter()
-        .fold(column![].spacing(SECTION_SPACING), |page, (kind, group)| {
+        .fold(column![].spacing(SECTION_SPACING), |page, group| {
             let heading = row![
-                text(kind_title(kind)).font(BOLD),
-                text(group.len().to_string()).size(13).color(MUTED)
+                text(group.title).font(BOLD),
+                text(group.entries.len().to_string()).size(13).color(MUTED),
+                text(group.kind).size(12).color(MUTED),
             ]
             .spacing(8)
             .align_y(Alignment::Center);
             let cards = group
+                .entries
                 .into_iter()
                 .fold(column![].spacing(GROUP_SPACING), |list, entry| {
                     list.push(entry_card(entry, hosts))
@@ -114,15 +114,28 @@ fn results<'a>(entries: &'a [ServiceEntry], hosts: &[Host]) -> Element<'a, Messa
         .into()
 }
 
-/// The entries split by kind. They arrive sorted, so a kind is one run.
-fn groups(entries: &[ServiceEntry]) -> Vec<(&str, Vec<&ServiceEntry>)> {
-    let mut groups: Vec<(&str, Vec<&ServiceEntry>)> = Vec::new();
+/// The entries of one kind, under the plain name of that kind.
+struct Group<'a> {
+    kind: &'a str,
+    title: String,
+    entries: Vec<&'a ServiceEntry>,
+}
+
+/// The entries split by kind, with the groups in the order of their plain names. Entries
+/// arrive sorted, so a kind is one run.
+fn groups(entries: &[ServiceEntry]) -> Vec<Group<'_>> {
+    let mut groups: Vec<Group<'_>> = Vec::new();
     for entry in entries {
         match groups.last_mut() {
-            Some((kind, group)) if *kind == entry.kind => group.push(entry),
-            _ => groups.push((&entry.kind, vec![entry])),
+            Some(group) if group.kind == entry.kind => group.entries.push(entry),
+            _ => groups.push(Group {
+                kind: &entry.kind,
+                title: kind_title(&entry.kind),
+                entries: vec![entry],
+            }),
         }
     }
+    groups.sort_by_cached_key(|group| group.title.to_lowercase());
     groups
 }
 
@@ -134,7 +147,7 @@ fn entry_card<'a>(entry: &'a ServiceEntry, hosts: &[Host]) -> Element<'a, Messag
         (None, None) => String::new(),
     };
     let mut title = row![
-        text(entry.name.as_str()).font(BOLD),
+        text(entry.display_name()).font(BOLD),
         text(place.clone()).size(13).color(MUTED)
     ]
     .spacing(10)
@@ -148,22 +161,31 @@ fn entry_card<'a>(entry: &'a ServiceEntry, hosts: &[Host]) -> Element<'a, Messag
             Some(Message::ShowHostDetails(host.device_key())),
         ));
     }
-    let details = entry
-        .details
-        .iter()
-        .take(SHOWN_DETAILS)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("  ·  ");
-    let mut body = column![title].spacing(4);
-    if !details.is_empty() {
-        body = body.push(text(details).size(12).color(MUTED));
+    let mut body = column![title.wrap().vertical_spacing(4)].spacing(4);
+    if let Some(details) = details_line(entry) {
+        body = body.push(text(details).size(12).color(MUTED).width(Length::Fill));
     }
     container(body)
         .padding(CARD_PADDING)
         .width(Length::Fill)
         .style(theme::card)
         .into()
+}
+
+/// The readable text records on one line that wraps, and how many were left out.
+fn details_line(entry: &ServiceEntry) -> Option<String> {
+    let (shown, hidden) = entry.readable_details();
+    if shown.is_empty() && hidden == 0 {
+        return None;
+    }
+    let mut line = shown.join("  ·  ");
+    if hidden > 0 {
+        if !line.is_empty() {
+            line.push_str("  ·  ");
+        }
+        line.push_str(&format!("{hidden} more not shown"));
+    }
+    Some(line)
 }
 
 fn host_at(hosts: &[Host], address: Ipv4Addr) -> Option<&Host> {
@@ -180,6 +202,7 @@ mod tests {
             name: name.to_owned(),
             address: Some(Ipv4Addr::from(address)),
             port: None,
+            host: None,
             details: Vec::new(),
         }
     }
@@ -194,10 +217,25 @@ mod tests {
         let grouped = groups(&entries);
         let shape: Vec<(&str, usize)> = grouped
             .iter()
-            .map(|(kind, group)| (*kind, group.len()))
+            .map(|group| (group.kind, group.entries.len()))
             .collect();
-        assert_eq!(shape, [("_http._tcp", 2), ("_ipp._tcp", 1)]);
+        assert_eq!(
+            shape,
+            [("_ipp._tcp", 1), ("_http._tcp", 2)],
+            "Printers, then Web pages"
+        );
         assert!(groups(&[]).is_empty());
+    }
+
+    #[test]
+    fn the_details_line_lists_what_is_readable_and_counts_the_rest() {
+        let mut found = entry("_x._tcp", "a", [10, 0, 0, 1]);
+        assert_eq!(details_line(&found), None);
+        found.details = vec!["model=Mac16,5".to_owned(), format!("pk={}", "a".repeat(64))];
+        assert_eq!(
+            details_line(&found).as_deref(),
+            Some("model=Mac16,5  ·  1 more not shown")
+        );
     }
 
     #[test]

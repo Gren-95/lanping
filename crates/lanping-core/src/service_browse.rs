@@ -40,6 +40,12 @@ const MAX_TEXT_CHARS: usize = 200;
 const MAX_UPNP_DESCRIPTIONS: usize = 64;
 const SUBTYPE_MARKER: &str = "._sub.";
 const UPNP_KIND_PREFIX: &str = "upnp:";
+const HARDWARE_ADDRESS_DIGITS: usize = 12;
+const UUID_LENGTH: usize = 36;
+const UUID_DASHES: [usize; 4] = [8, 13, 18, 23];
+/// Text records longer than this are keys or hashes, not something to read.
+const MAX_READABLE_CHARS: usize = 40;
+const MAX_READABLE_ENTRIES: usize = 8;
 
 /// One thing found on the network.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,19 +55,87 @@ pub struct ServiceEntry {
     pub name: String,
     pub address: Option<Ipv4Addr>,
     pub port: Option<u16>,
+    /// The host name the device gave for itself, without `.local`.
+    pub host: Option<String>,
     /// The text records, or for UPnP where the description is.
     pub details: Vec<String>,
 }
 
-/// A plain name for a kind, such as `Printers (IPP)` for `_ipp._tcp`. Unknown kinds are
-/// shown as they are.
+impl ServiceEntry {
+    /// A name a person can read. Some devices name their services after a hardware address
+    /// or an identifier; then the host name, or failing that the address, says more.
+    pub fn display_name(&self) -> String {
+        let name = strip_hardware_prefix(&self.name);
+        if !looks_machine_made(name) {
+            return name.to_owned();
+        }
+        self.host
+            .clone()
+            .or_else(|| self.address.map(|address| address.to_string()))
+            .unwrap_or_else(|| name.to_owned())
+    }
+
+    /// The text records worth reading: the short ones with a value. Keys, hashes and
+    /// feature masks are left out. Also how many were left out.
+    pub fn readable_details(&self) -> (Vec<&str>, usize) {
+        let readable = |entry: &&String| {
+            entry
+                .split_once('=')
+                .is_none_or(|(_, value)| !value.is_empty())
+                && entry.chars().count() <= MAX_READABLE_CHARS
+        };
+        let shown: Vec<&str> = self
+            .details
+            .iter()
+            .filter(readable)
+            .map(String::as_str)
+            .take(MAX_READABLE_ENTRIES)
+            .collect();
+        let hidden = self.details.len() - shown.len();
+        (shown, hidden)
+    }
+}
+
+/// `9E74262E9FCB@Living room` becomes `Living room`.
+fn strip_hardware_prefix(name: &str) -> &str {
+    match name.split_once('@') {
+        Some((prefix, rest))
+            if prefix.len() == HARDWARE_ADDRESS_DIGITS
+                && prefix.chars().all(|c| c.is_ascii_hexdigit())
+                && !rest.is_empty() =>
+        {
+            rest
+        }
+        _ => name,
+    }
+}
+
+/// An identifier or a hardware and IPv6 address pair, not a name anyone chose.
+fn looks_machine_made(name: &str) -> bool {
+    name.contains("@fe80") || is_uuid(name)
+}
+
+fn is_uuid(text: &str) -> bool {
+    text.len() == UUID_LENGTH
+        && text.char_indices().all(|(at, c)| {
+            if UUID_DASHES.contains(&at) {
+                c == '-'
+            } else {
+                c.is_ascii_hexdigit()
+            }
+        })
+}
+
+/// A plain name for a kind, such as `Printers` for `_ipp._tcp`. A kind with no plain name is
+/// tidied up: `_apple-mobdev2._tcp` becomes `apple-mobdev2 (tcp)`.
 pub fn kind_title(kind: &str) -> String {
     if let Some(device) = kind.strip_prefix(UPNP_KIND_PREFIX) {
         return format!("UPnP {device}");
     }
     let known = match kind {
         "_ipp._tcp" | "_printer._tcp" | "_pdl-datastream._tcp" => "Printers",
-        "_airplay._tcp" | "_raop._tcp" => "AirPlay",
+        "_airplay._tcp" => "AirPlay",
+        "_raop._tcp" => "AirPlay audio",
         "_googlecast._tcp" => "Chromecast and Google Cast",
         "_smb._tcp" => "File shares (SMB)",
         "_afpovertcp._tcp" => "File shares (AFP)",
@@ -73,9 +147,25 @@ pub fn kind_title(kind: &str) -> String {
         "_spotify-connect._tcp" => "Spotify Connect",
         "_workstation._tcp" => "Computers",
         "_device-info._tcp" => "Device information",
-        _ => return kind.to_owned(),
+        "_apple-mobdev2._tcp" => "iPhone and iPad sync",
+        "_companion-link._tcp" => "Apple device link",
+        "_remotepairing._tcp" => "Apple remote pairing",
+        "_asquic._udp" => "Apple background transfer",
+        "_meshcop._udp" => "Thread border routers",
+        "_glinet._tcp" => "GL.iNet devices",
+        _ => return tidy_kind(kind),
     };
-    format!("{known}  ({kind})")
+    known.to_owned()
+}
+
+fn tidy_kind(kind: &str) -> String {
+    match kind
+        .strip_prefix('_')
+        .and_then(|rest| rest.split_once("._"))
+    {
+        Some((service, protocol)) => format!("{service} ({protocol})"),
+        None => kind.to_owned(),
+    }
 }
 
 enum Data {
@@ -251,6 +341,10 @@ impl Directory {
                     name: clean_text(name.as_bytes()).unwrap_or_default(),
                     address: Some(address),
                     port: service.map(|(port, _)| *port),
+                    host: service.and_then(|(_, host)| {
+                        let bare = host.strip_suffix(LOCAL_SUFFIX).unwrap_or(host);
+                        clean_text(bare.as_bytes())
+                    }),
                     details: self.texts.get(&key).cloned().unwrap_or_default(),
                 }
             })
@@ -330,6 +424,7 @@ async fn browse_upnp() -> Vec<ServiceEntry> {
                     .unwrap_or_else(|| announcement.ip.to_string()),
                 address: Some(announcement.ip),
                 port: announcement.location.as_ref().map(|location| location.port),
+                host: None,
                 details: announcement
                     .location
                     .iter()
@@ -446,6 +541,7 @@ mod tests {
                 name: "Brother HL".to_owned(),
                 address: Some(Ipv4Addr::new(192, 168, 1, 40)),
                 port: Some(631),
+                host: Some("brother".to_owned()),
                 details: vec!["rp=ipp/print".to_owned(), "ty=HL-L2350".to_owned()],
             }]
         );
@@ -582,9 +678,56 @@ mod tests {
     }
 
     #[test]
-    fn kinds_get_plain_titles_and_unknown_ones_stay_as_they_are() {
-        assert_eq!(kind_title("_ipp._tcp"), "Printers  (_ipp._tcp)");
+    fn kinds_get_plain_titles_and_unknown_ones_are_tidied() {
+        assert_eq!(kind_title("_ipp._tcp"), "Printers");
         assert_eq!(kind_title("upnp:MediaServer"), "UPnP MediaServer");
-        assert_eq!(kind_title("_weird._udp"), "_weird._udp");
+        assert_eq!(kind_title("_weird-thing._udp"), "weird-thing (udp)");
+        assert_eq!(kind_title("odd"), "odd");
+    }
+
+    fn entry(name: &str, host: Option<&str>) -> ServiceEntry {
+        ServiceEntry {
+            kind: "_x._tcp".to_owned(),
+            name: name.to_owned(),
+            address: Some(Ipv4Addr::new(10, 0, 0, 7)),
+            port: None,
+            host: host.map(str::to_owned),
+            details: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn names_made_of_hardware_addresses_and_identifiers_give_way_to_the_host() {
+        assert_eq!(
+            entry("9E74262E9FCB@Living room", None).display_name(),
+            "Living room"
+        );
+        assert_eq!(
+            entry("Brother HL", Some("brother")).display_name(),
+            "Brother HL"
+        );
+        let paired = entry(
+            "56:2c:f3:77:6d:46@fe80::542c:f3ff:fe77:6d46-supportsRP-26",
+            Some("iphone"),
+        );
+        assert_eq!(paired.display_name(), "iphone");
+        let id = "7AA58048-275C-4C7E-A1CE-562A160C235F";
+        assert_eq!(entry(id, None).display_name(), "10.0.0.7");
+        assert_eq!(entry("fed-cafe", None).display_name(), "fed-cafe");
+    }
+
+    #[test]
+    fn only_short_texts_with_a_value_are_worth_reading() {
+        let mut shown = entry("x", None);
+        shown.details = vec![
+            "model=Mac16,5".to_owned(),
+            "at=".to_owned(),
+            format!("pk={}", "a".repeat(64)),
+            "flag".to_owned(),
+            "vs=1".to_owned(),
+        ];
+        let (readable, hidden) = shown.readable_details();
+        assert_eq!(readable, ["model=Mac16,5", "flag", "vs=1"]);
+        assert_eq!(hidden, 2);
     }
 }
