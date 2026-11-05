@@ -10,10 +10,10 @@ use lanping_core::speedtest::SERVICE_HOST;
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::sparkline::{Bar, chart};
-use crate::speed_tab::{
-    Phase, Report, Run, ServerStatus, Source, SpeedPage, SpeedService, SpeedState, TestKind,
-    TestLength,
+use crate::speed_model::{
+    Phase, Report, Run, ServerStatus, Source, SpeedPage, SpeedService, TestKind, TestLength,
 };
+use crate::speed_tab::SpeedState;
 use crate::theme::{self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
 use crate::timestamp::format_unix_utc;
 use crate::ui::{note, panel, scrolling};

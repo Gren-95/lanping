@@ -45,9 +45,8 @@ use crate::row_list::{RowInputs, RowList};
 use crate::settings::{Column, Settings, SettingsTab};
 use crate::snmp_tab::SnmpState;
 use crate::speed_locations::LocationChoice;
-use crate::speed_tab::{
-    Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
-};
+use crate::speed_model::{Source, SpeedEvent, SpeedPage, SpeedService, TestKind, TestLength};
+use crate::speed_tab::SpeedState;
 use crate::storage::{
     device_notes_path, export_directory, history_directory, labels_path, load_or_default,
     measurements_directory, migrate_legacy_data, settings_path,

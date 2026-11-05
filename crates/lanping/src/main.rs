@@ -29,6 +29,8 @@ mod snmp_tab;
 mod snmp_view;
 mod sparkline;
 mod speed_locations;
+mod speed_model;
+mod speed_run;
 mod speed_tab;
 mod speed_view;
 mod storage;
