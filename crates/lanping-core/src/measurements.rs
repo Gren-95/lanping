@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::latency::LatencySeries;
+use crate::ping::PingSummary;
 use crate::throughput::ThroughputResult;
 
 /// Files listed at most, newest first.
@@ -53,6 +54,9 @@ pub struct ThroughputRecord {
     pub place: String,
     pub finished_at_unix: u64,
     pub result: ThroughputResult,
+    /// How far away the server is, measured just before the test. Older files have none.
+    #[serde(default)]
+    pub ping: Option<PingSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -93,10 +97,16 @@ impl Measurement {
                     record.loss_percent, record.probes
                 )
             }
-            Self::Throughput(record) => format!(
-                "{:.1} Mbit/s over {:.0} s",
-                record.result.mbps, record.result.seconds
-            ),
+            Self::Throughput(record) => {
+                let speed = format!(
+                    "{:.1} Mbit/s over {:.0} s",
+                    record.result.mbps, record.result.seconds
+                );
+                match &record.ping {
+                    Some(ping) => format!("{speed}, ping {}", ping.describe()),
+                    None => speed,
+                }
+            }
         }
     }
 
@@ -167,6 +177,7 @@ mod tests {
             place: "LAN (10.0.0.2:5252)".to_owned(),
             finished_at_unix,
             result: ThroughputResult::new(Direction::Download, mbps_bytes, 1.0, vec![1.0]),
+            ping: None,
         })
     }
 
@@ -218,6 +229,16 @@ mod tests {
     }
 
     #[test]
+    fn a_record_saved_before_ping_existed_still_loads() {
+        let old = r#"{"kind":"Throughput","place":"LAN (x)","finished_at_unix":5,
+            "result":{"direction":"Download","bytes":1,"seconds":1.0,"mbps":0.0,"samples_mbps":[]}}"#;
+        let Measurement::Throughput(record) = serde_json::from_str(old).unwrap() else {
+            panic!("expected a throughput record");
+        };
+        assert!(record.ping.is_none());
+    }
+
+    #[test]
     fn corrupt_and_foreign_files_are_skipped() {
         let directory = scratch_directory("corrupt");
         save(&directory, &latency(10)).unwrap();
@@ -235,5 +256,15 @@ mod tests {
         let test = throughput(1, 125_000_000);
         assert_eq!(test.title(), "Download, LAN (10.0.0.2:5252)");
         assert_eq!(test.summary(), "1000.0 Mbit/s over 1 s");
+        let Measurement::Throughput(mut record) = test else {
+            panic!("expected a throughput record");
+        };
+        let mut stats = crate::rtt_stats::RttStats::new(3);
+        stats.record(Some(12.0));
+        record.ping = Some(PingSummary::from_stats(&stats));
+        assert_eq!(
+            Measurement::Throughput(record).summary(),
+            "1000.0 Mbit/s over 1 s, ping 12.0 ms"
+        );
     }
 }

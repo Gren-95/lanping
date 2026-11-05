@@ -19,7 +19,7 @@ use lanping_core::ndt7::Server;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
-use lanping_core::throughput::{Direction, ServedStream, ThroughputResult};
+use lanping_core::throughput::ServedStream;
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::tls::{TlsError, TlsReport};
 use lanping_core::trace::{HopSample, TraceError};
@@ -41,7 +41,9 @@ use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
 use crate::speed_locations::LocationChoice;
-use crate::speed_tab::{Source, SpeedPage, SpeedService, SpeedState, TestLength};
+use crate::speed_tab::{
+    Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
+};
 use crate::storage::{
     device_notes_path, export_directory, history_directory, labels_path, measurements_directory,
     migrate_legacy_data, settings_path,
@@ -215,10 +217,10 @@ pub enum Message {
     SpeedServerPicked(Server),
     SpeedLanTargetChanged(String),
     SpeedLengthPicked(TestLength),
-    SpeedStart(Source, Direction),
+    SpeedKindPicked(TestKind),
+    SpeedStart(Source),
     SpeedStop,
-    SpeedProgress(u64, f64),
-    SpeedFinished(u64, Result<ThroughputResult, String>),
+    SpeedEvent(u64, SpeedEvent),
     SpeedServerPortChanged(String),
     SpeedServerStart,
     SpeedServerStop,
@@ -582,7 +584,7 @@ impl LanPing {
                 let finished_run = self.latency.record_for_history();
                 self.latency.stop();
                 if let Some(record) = finished_run {
-                    self.save_measurement(&record);
+                    self.save_measurements(&[record]);
                 }
             }
             Message::LatencyReady(generation, result) => {
@@ -616,15 +618,15 @@ impl LanPing {
             Message::SpeedServerPicked(server) => self.speed.set_server(server),
             Message::SpeedLanTargetChanged(target) => self.speed.lan_target = target,
             Message::SpeedLengthPicked(length) => self.speed.length = length,
-            Message::SpeedStart(source, direction) => {
-                return self.speed.start_test(source, direction);
+            Message::SpeedKindPicked(kind) => self.speed.kind = kind,
+            Message::SpeedStart(source) => return self.speed.start_test(source),
+            Message::SpeedStop => {
+                let finished = self.speed.stop_test();
+                self.save_measurements(&finished);
             }
-            Message::SpeedStop => self.speed.stop_test(),
-            Message::SpeedProgress(generation, mbps) => self.speed.progress(generation, mbps),
-            Message::SpeedFinished(generation, result) => {
-                if let Some(measurement) = self.speed.finish(generation, result) {
-                    self.save_measurement(&measurement);
-                }
+            Message::SpeedEvent(generation, event) => {
+                let finished = self.speed.event(generation, event);
+                self.save_measurements(&finished);
             }
             Message::SpeedServerPortChanged(port) => self.speed.server_port = port,
             Message::SpeedServerStart => return self.speed.start_server(),
@@ -994,17 +996,21 @@ impl LanPing {
         )
     }
 
-    /// Saves a finished test or run next to the saved scans and refreshes the history list.
-    pub(crate) fn save_measurement(&mut self, measurement: &Measurement) {
+    /// Saves finished tests or runs next to the saved scans and refreshes the history list.
+    pub(crate) fn save_measurements(&mut self, measurements: &[Measurement]) {
         let Some(directory) = measurements_directory() else {
             return;
         };
-        match save_measurement(&directory, measurement) {
-            Ok(_) => self.speed.refresh_history(Some(&directory)),
-            Err(error) => {
-                self.set_notice(Notice::Error, format!("Could not save the result: {error}"))
+        if measurements.is_empty() {
+            return;
+        }
+        for measurement in measurements {
+            if let Err(error) = save_measurement(&directory, measurement) {
+                self.set_notice(Notice::Error, format!("Could not save the result: {error}"));
+                return;
             }
         }
+        self.speed.refresh_history(Some(&directory));
     }
 
     fn save_latency_log(&mut self, path: &Path) {

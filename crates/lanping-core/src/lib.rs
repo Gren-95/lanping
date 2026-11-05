@@ -20,6 +20,7 @@ pub mod ndt7;
 pub mod neighbors;
 pub mod netbios;
 pub mod os_guess;
+pub mod ping;
 pub mod plain_service;
 pub mod port_risk;
 pub mod ports;

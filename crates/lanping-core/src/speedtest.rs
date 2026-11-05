@@ -17,6 +17,8 @@ use crate::throughput::{Direction, ThroughputResult, sample};
 
 /// The service the test talks to, shown to the user before they run it.
 pub const SERVICE_HOST: &str = "speed.cloudflare.com";
+/// The port it is reached on.
+pub const SERVICE_PORT: u16 = https::HTTPS_PORT;
 /// Bytes asked for in one download request. The service refuses 100 MB and more.
 const DOWNLOAD_BYTES: u64 = 90_000_000;
 /// Bytes promised in one upload request.

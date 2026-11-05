@@ -9,7 +9,8 @@ use iced::futures::SinkExt;
 use iced::task::Handle;
 use lanping_core::measurements::{Measurement, ThroughputRecord, list};
 use lanping_core::ndt7::{self, Server};
-use lanping_core::speedtest::{self, SERVICE_HOST};
+use lanping_core::ping::{PingSummary, tcp_ping};
+use lanping_core::speedtest::{self, SERVICE_HOST, SERVICE_PORT};
 use lanping_core::throughput::{
     self, DEFAULT_PORT, Direction, ServedStream, ThroughputResult, run_client,
 };
@@ -120,15 +121,119 @@ impl std::fmt::Display for TestLength {
     }
 }
 
+/// The step of a test that is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    Ping,
+    Download,
+    Upload,
+}
+
+impl std::fmt::Display for Phase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Ping => "Measuring ping",
+            Self::Download => "Testing download",
+            Self::Upload => "Testing upload",
+        })
+    }
+}
+
+/// What a run measures after the ping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TestKind {
+    #[default]
+    Both,
+    DownloadOnly,
+    UploadOnly,
+}
+
+impl TestKind {
+    pub const ALL: [Self; 3] = [Self::Both, Self::DownloadOnly, Self::UploadOnly];
+
+    fn directions(self) -> &'static [Direction] {
+        match self {
+            Self::Both => &[Direction::Download, Direction::Upload],
+            Self::DownloadOnly => &[Direction::Download],
+            Self::UploadOnly => &[Direction::Upload],
+        }
+    }
+}
+
+impl std::fmt::Display for TestKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Both => "Download and upload",
+            Self::DownloadOnly => "Download only",
+            Self::UploadOnly => "Upload only",
+        })
+    }
+}
+
+/// What a running test tells the screen, in order.
+#[derive(Debug, Clone)]
+pub enum SpeedEvent {
+    /// The server in use, once it is known.
+    Place(String),
+    Phase(Phase),
+    /// Megabits per second of each finished second of the current step.
+    Progress(f64),
+    Ping(PingSummary),
+    PingFailed(String),
+    Result(ThroughputResult),
+    /// The test stopped early, with the reason.
+    Failed(String),
+    Finished,
+}
+
+/// Everything a test found so far.
+pub struct Report {
+    pub place: String,
+    pub ping: Option<PingSummary>,
+    pub ping_error: Option<String>,
+    pub results: Vec<ThroughputResult>,
+    /// Why the test stopped early.
+    pub error: Option<String>,
+}
+
+impl Report {
+    fn new(place: String) -> Self {
+        Self {
+            place,
+            ping: None,
+            ping_error: None,
+            results: Vec::new(),
+            error: None,
+        }
+    }
+
+    /// One record per finished step, for the history.
+    fn records(&self) -> Vec<Measurement> {
+        let finished_at_unix = unix_seconds();
+        self.results
+            .iter()
+            .map(|result| {
+                Measurement::Throughput(ThroughputRecord {
+                    place: self.place.clone(),
+                    finished_at_unix,
+                    result: result.clone(),
+                    ping: self.ping.clone(),
+                })
+            })
+            .collect()
+    }
+}
+
 pub enum Run {
     Idle,
     Running {
-        place: String,
-        direction: Direction,
-        /// Megabits per second of each finished second so far.
+        phase: Phase,
+        /// Megabits per second of each finished second of the current step.
         samples: Vec<f64>,
+        report: Report,
     },
-    Done(ThroughputRecord),
+    Done(Report),
+    /// The test could not start.
     Failed(String),
 }
 
@@ -160,6 +265,7 @@ pub struct SpeedState {
     locate_generation: u64,
     pub lan_target: String,
     pub length: TestLength,
+    pub kind: TestKind,
     pub run: Run,
     pub server_port: String,
     pub server: ServerStatus,
@@ -227,6 +333,7 @@ impl SpeedState {
             locate_generation: 0,
             lan_target: String::new(),
             length: TestLength::default(),
+            kind: TestKind::default(),
             run: Run::Idle,
             server_port: DEFAULT_PORT.to_string(),
             server: ServerStatus::Stopped,
@@ -303,8 +410,8 @@ impl SpeedState {
         self.selected_server = Some(server);
     }
 
-    /// Starts a test. A missing server or a bad LAN address shows as a failed run.
-    pub fn start_test(&mut self, source: Source, direction: Direction) -> Task<Message> {
+    /// Starts a test of the chosen kind. A missing server or a bad LAN address shows as a failed run.
+    pub fn start_test(&mut self, source: Source) -> Task<Message> {
         if self.running() {
             return Task::none();
         }
@@ -316,7 +423,7 @@ impl SpeedState {
                         location: self.location.location(),
                         machine: server.machine.clone(),
                     },
-                    format!("Internet (M-Lab, {})", server.place()),
+                    mlab_place(server),
                 ),
                 None => {
                     self.run = Run::Failed("Pick an M-Lab server first".to_owned());
@@ -336,63 +443,72 @@ impl SpeedState {
         };
         self.generation += 1;
         self.run = Run::Running {
-            place,
-            direction,
+            phase: Phase::Ping,
             samples: Vec::new(),
+            report: Report::new(place),
         };
-        let stream = test_stream(target, direction, self.length.seconds(), self.generation);
+        let stream = test_stream(target, self.kind, self.length.seconds(), self.generation);
         let (task, handle) = Task::stream(stream).abortable();
         self.handle = Some(handle);
         task
     }
 
-    pub fn stop_test(&mut self) {
+    /// Stops a running test. Steps that had finished come back to be saved.
+    pub fn stop_test(&mut self) -> Vec<Measurement> {
         self.generation += 1;
         if let Some(handle) = self.handle.take() {
             handle.abort();
         }
-        if self.running() {
-            self.run = Run::Idle;
+        match std::mem::replace(&mut self.run, Run::Idle) {
+            Run::Running { report, .. } => report.records(),
+            other => {
+                self.run = other;
+                Vec::new()
+            }
         }
     }
 
-    pub fn progress(&mut self, generation: u64, mbps: f64) {
+    /// Applies one event of the running test. When the test ends, the steps that finished
+    /// come back to be saved.
+    pub fn event(&mut self, generation: u64, event: SpeedEvent) -> Vec<Measurement> {
         if generation != self.generation {
-            return;
+            return Vec::new();
         }
-        if let Run::Running { samples, .. } = &mut self.run {
-            samples.push(mbps);
-        }
-    }
-
-    /// Records the end of a test. A good result comes back as a record to save.
-    pub fn finish(
-        &mut self,
-        generation: u64,
-        result: Result<ThroughputResult, String>,
-    ) -> Option<Measurement> {
-        if generation != self.generation {
-            return None;
-        }
-        self.handle = None;
-        let Run::Running { place, .. } = std::mem::replace(&mut self.run, Run::Idle) else {
-            return None;
+        let Run::Running {
+            phase,
+            samples,
+            report,
+        } = &mut self.run
+        else {
+            return Vec::new();
         };
-        match result {
-            Ok(result) => {
-                let record = ThroughputRecord {
-                    place,
-                    finished_at_unix: unix_seconds(),
-                    result,
-                };
-                self.run = Run::Done(record.clone());
-                Some(Measurement::Throughput(record))
+        match event {
+            SpeedEvent::Place(place) => report.place = place,
+            SpeedEvent::Phase(next) => {
+                *phase = next;
+                samples.clear();
             }
-            Err(message) => {
-                self.run = Run::Failed(message);
-                None
+            SpeedEvent::Progress(mbps) => samples.push(mbps),
+            SpeedEvent::Ping(ping) => report.ping = Some(ping),
+            SpeedEvent::PingFailed(message) => report.ping_error = Some(message),
+            SpeedEvent::Result(result) => report.results.push(result),
+            SpeedEvent::Failed(message) => {
+                report.error = Some(message);
+                return self.finish();
             }
+            SpeedEvent::Finished => return self.finish(),
         }
+        Vec::new()
+    }
+
+    fn finish(&mut self) -> Vec<Measurement> {
+        self.handle = None;
+        let Run::Running { report, .. } = std::mem::replace(&mut self.run, Run::Idle) else {
+            return Vec::new();
+        };
+        let records = report.records();
+        self.run = Run::Done(report);
+        records
     }
 
     pub fn start_server(&mut self) -> Task<Message> {
@@ -456,60 +572,131 @@ impl SpeedState {
     }
 }
 
-/// Runs a test and reports each second, then the result.
+/// Runs a test and reports what happens, step by step.
 fn test_stream(
     target: Target,
-    direction: Direction,
+    kind: TestKind,
     seconds: u8,
     generation: u64,
 ) -> impl iced::futures::Stream<Item = Message> {
     iced::stream::channel(STREAM_BUFFER, async move |mut output| {
-        let (progress, mut ticks) = mpsc::unbounded_channel();
-        let mut run = StopOnDrop(tokio::spawn(async move {
-            match target {
-                Target::Cloudflare => speedtest::run(direction, seconds, Some(progress)).await,
-                Target::Lan { host, port } => {
-                    run_client(&host, port, direction, seconds, Some(progress)).await
-                }
-                Target::Mlab { location, machine } => {
-                    run_mlab(&location, &machine, direction, seconds, progress).await
-                }
-            }
-        }));
-        while let Some(mbps) = ticks.recv().await {
+        let (events, mut incoming) = mpsc::unbounded_channel();
+        let _job = StopOnDrop(tokio::spawn(run_steps(target, kind, seconds, events)));
+        while let Some(event) = incoming.recv().await {
             if output
-                .send(Message::SpeedProgress(generation, mbps))
+                .send(Message::SpeedEvent(generation, event))
                 .await
                 .is_err()
             {
                 return;
             }
         }
-        let result = (&mut run.0)
-            .await
-            .unwrap_or_else(|error| Err(error.to_string()));
-        let _ = output
-            .send(Message::SpeedFinished(generation, result))
-            .await;
     })
 }
 
-/// Asks M-Lab for fresh server addresses, since the ones found earlier expire, and tests
-/// against the chosen machine, or the first one offered if it is gone.
-async fn run_mlab(
-    location: &ndt7::Location,
-    machine: &str,
-    direction: Direction,
+/// A target ready to be measured. For M-Lab that is a server with a fresh address.
+enum Prepared {
+    Cloudflare,
+    Mlab(Server),
+    Lan { host: String, port: u16 },
+}
+
+/// Asks M-Lab for fresh server addresses, since the ones found earlier expire, and picks
+/// the chosen machine, or the first one offered if it is gone.
+async fn prepare(target: Target) -> Result<Prepared, String> {
+    match target {
+        Target::Cloudflare => Ok(Prepared::Cloudflare),
+        Target::Lan { host, port } => Ok(Prepared::Lan { host, port }),
+        Target::Mlab { location, machine } => {
+            let servers = ndt7::locate(&location).await?;
+            servers
+                .iter()
+                .find(|server| server.machine == machine)
+                .or(servers.first())
+                .cloned()
+                .map(Prepared::Mlab)
+                .ok_or_else(|| "M-Lab has no test server there".to_owned())
+        }
+    }
+}
+
+impl Prepared {
+    /// The host and port a ping goes to: where the test connects.
+    fn address(&self) -> Result<(String, u16), String> {
+        match self {
+            Self::Cloudflare => Ok((SERVICE_HOST.to_owned(), SERVICE_PORT)),
+            Self::Mlab(server) => server.address(),
+            Self::Lan { host, port } => Ok((host.clone(), *port)),
+        }
+    }
+
+    async fn measure(
+        &self,
+        direction: Direction,
+        seconds: u8,
+        progress: mpsc::UnboundedSender<f64>,
+    ) -> Result<ThroughputResult, String> {
+        match self {
+            Self::Cloudflare => speedtest::run(direction, seconds, Some(progress)).await,
+            Self::Mlab(server) => ndt7::run(server, direction, seconds, Some(progress)).await,
+            Self::Lan { host, port } => {
+                run_client(host, *port, direction, seconds, Some(progress)).await
+            }
+        }
+    }
+}
+
+fn mlab_place(server: &Server) -> String {
+    format!("Internet (M-Lab, {})", server.place())
+}
+
+/// Ping, then each direction the kind asks for. Always ends with `Finished` or `Failed`.
+async fn run_steps(
+    target: Target,
+    kind: TestKind,
     seconds: u8,
-    progress: mpsc::UnboundedSender<f64>,
-) -> Result<ThroughputResult, String> {
-    let servers = ndt7::locate(location).await?;
-    let server = servers
-        .iter()
-        .find(|server| server.machine == machine)
-        .or(servers.first())
-        .ok_or_else(|| "M-Lab has no test server there".to_owned())?;
-    ndt7::run(server, direction, seconds, Some(progress)).await
+    events: mpsc::UnboundedSender<SpeedEvent>,
+) {
+    let send = |event: SpeedEvent| {
+        let _ = events.send(event);
+    };
+    let prepared = match prepare(target).await {
+        Ok(prepared) => prepared,
+        Err(message) => return send(SpeedEvent::Failed(message)),
+    };
+    if let Prepared::Mlab(server) = &prepared {
+        send(SpeedEvent::Place(mlab_place(server)));
+    }
+    send(SpeedEvent::Phase(Phase::Ping));
+    match prepared.address() {
+        Ok((host, port)) => match tcp_ping(&host, port).await {
+            Ok(ping) => send(SpeedEvent::Ping(ping)),
+            Err(message) => send(SpeedEvent::PingFailed(message)),
+        },
+        Err(message) => send(SpeedEvent::PingFailed(message)),
+    }
+    for &direction in kind.directions() {
+        send(SpeedEvent::Phase(match direction {
+            Direction::Download => Phase::Download,
+            Direction::Upload => Phase::Upload,
+        }));
+        let (progress, mut ticks) = mpsc::unbounded_channel();
+        let forwarder = tokio::spawn({
+            let events = events.clone();
+            async move {
+                while let Some(mbps) = ticks.recv().await {
+                    let _ = events.send(SpeedEvent::Progress(mbps));
+                }
+            }
+        });
+        let result = prepared.measure(direction, seconds, progress).await;
+        let _ = forwarder.await;
+        match result {
+            Ok(result) => send(SpeedEvent::Result(result)),
+            Err(message) => return send(SpeedEvent::Failed(message)),
+        }
+    }
+    send(SpeedEvent::Finished);
 }
 
 /// Listens for tests and reports each stream it serves, until stopped.
@@ -543,20 +730,31 @@ fn server_stream(port: u16) -> impl iced::futures::Stream<Item = Message> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lanping_core::rtt_stats::RttStats;
 
-    fn result() -> ThroughputResult {
-        ThroughputResult::new(Direction::Download, 1_000_000, 1.0, vec![8.0])
+    fn result(direction: Direction) -> ThroughputResult {
+        ThroughputResult::new(direction, 1_000_000, 1.0, vec![8.0])
+    }
+
+    fn ping() -> PingSummary {
+        let mut stats = RttStats::new(3);
+        stats.record(Some(12.0));
+        PingSummary::from_stats(&stats)
     }
 
     fn running_state() -> SpeedState {
         let mut state = SpeedState::new(None);
         state.generation = 1;
         state.run = Run::Running {
-            place: "LAN (x)".to_owned(),
-            direction: Direction::Download,
+            phase: Phase::Ping,
             samples: Vec::new(),
+            report: Report::new("LAN (x)".to_owned()),
         };
         state
+    }
+
+    fn server(machine: &str) -> Server {
+        Server::new(machine, "City", "XX", "wss://h/d", "wss://h/u")
     }
 
     #[test]
@@ -579,43 +777,126 @@ mod tests {
     }
 
     #[test]
+    fn a_test_does_download_and_upload_unless_told_otherwise() {
+        assert_eq!(TestKind::default(), TestKind::Both);
+        assert_eq!(
+            TestKind::Both.directions(),
+            [Direction::Download, Direction::Upload]
+        );
+        assert_eq!(TestKind::DownloadOnly.directions(), [Direction::Download]);
+        assert_eq!(TestKind::UploadOnly.directions(), [Direction::Upload]);
+    }
+
+    #[test]
     fn a_bad_lan_target_is_a_failed_run_not_a_started_test() {
         let mut state = SpeedState::new(None);
-        let _ = state.start_test(Source::Lan, Direction::Download);
+        let _ = state.start_test(Source::Lan);
         assert!(matches!(state.run, Run::Failed(_)));
         assert!(!state.running());
     }
 
     #[test]
-    fn progress_and_the_result_follow_the_running_test() {
+    fn an_mlab_test_needs_a_chosen_server() {
+        let mut state = SpeedState::new(None);
+        let _ = state.start_test(Source::Mlab);
+        assert!(matches!(state.run, Run::Failed(ref message) if message.contains("server")));
+    }
+
+    #[test]
+    fn events_build_up_the_report_step_by_step() {
         let mut state = running_state();
-        state.progress(1, 100.0);
-        state.progress(9, 5.0);
+        assert!(state.event(1, SpeedEvent::Ping(ping())).is_empty());
+        state.event(1, SpeedEvent::Phase(Phase::Download));
+        state.event(1, SpeedEvent::Progress(100.0));
+        state.event(1, SpeedEvent::Progress(120.0));
+        let Run::Running { phase, samples, .. } = &state.run else {
+            panic!("expected a running test");
+        };
+        assert_eq!(*phase, Phase::Download);
+        assert_eq!(samples, &[100.0, 120.0]);
+        state.event(1, SpeedEvent::Result(result(Direction::Download)));
+        state.event(1, SpeedEvent::Phase(Phase::Upload));
         let Run::Running { samples, .. } = &state.run else {
             panic!("expected a running test");
         };
-        assert_eq!(samples, &[100.0]);
-        let saved = state.finish(1, Ok(result()));
-        assert!(matches!(saved, Some(Measurement::Throughput(_))));
-        let Run::Done(record) = &state.run else {
-            panic!("expected a finished test");
+        assert!(samples.is_empty(), "a new step starts a new graph");
+    }
+
+    #[test]
+    fn finishing_saves_one_record_per_direction_with_the_ping() {
+        let mut state = running_state();
+        state.event(1, SpeedEvent::Ping(ping()));
+        state.event(1, SpeedEvent::Result(result(Direction::Download)));
+        state.event(1, SpeedEvent::Result(result(Direction::Upload)));
+        let saved = state.event(1, SpeedEvent::Finished);
+        assert_eq!(saved.len(), 2);
+        for measurement in &saved {
+            let Measurement::Throughput(record) = measurement else {
+                panic!("expected throughput records");
+            };
+            assert_eq!(record.place, "LAN (x)");
+            assert!(record.ping.is_some());
+        }
+        assert!(matches!(state.run, Run::Done(ref report) if report.error.is_none()));
+        assert!(!state.running());
+    }
+
+    #[test]
+    fn a_failure_after_one_step_keeps_and_saves_what_finished() {
+        let mut state = running_state();
+        state.event(1, SpeedEvent::Result(result(Direction::Download)));
+        let saved = state.event(1, SpeedEvent::Failed("the link broke".to_owned()));
+        assert_eq!(saved.len(), 1);
+        let Run::Done(report) = &state.run else {
+            panic!("expected a finished report");
         };
-        assert_eq!(record.place, "LAN (x)");
+        assert_eq!(report.error.as_deref(), Some("the link broke"));
+        assert_eq!(report.results.len(), 1);
     }
 
     #[test]
-    fn an_answer_from_a_stopped_test_is_ignored() {
+    fn the_server_naming_itself_updates_the_place() {
         let mut state = running_state();
-        state.stop_test();
-        assert!(state.finish(1, Ok(result())).is_none());
+        state.event(
+            1,
+            SpeedEvent::Place("Internet (M-Lab, Tokyo, JP)".to_owned()),
+        );
+        let Run::Running { report, .. } = &state.run else {
+            panic!("expected a running test");
+        };
+        assert_eq!(report.place, "Internet (M-Lab, Tokyo, JP)");
+    }
+
+    #[test]
+    fn a_failed_ping_does_not_stop_the_test() {
+        let mut state = running_state();
+        state.event(1, SpeedEvent::PingFailed("no route".to_owned()));
+        assert!(state.running());
+    }
+
+    #[test]
+    fn an_event_from_an_older_test_is_ignored() {
+        let mut state = running_state();
+        assert!(state.event(9, SpeedEvent::Finished).is_empty());
+        assert!(state.running());
+    }
+
+    #[test]
+    fn stopping_returns_only_the_steps_that_finished() {
+        let mut state = running_state();
+        state.event(1, SpeedEvent::Result(result(Direction::Download)));
+        let saved = state.stop_test();
+        assert_eq!(saved.len(), 1);
         assert!(matches!(state.run, Run::Idle));
+        assert!(state.event(1, SpeedEvent::Finished).is_empty());
     }
 
     #[test]
-    fn a_failed_test_shows_its_message_and_saves_nothing() {
-        let mut state = running_state();
-        assert!(state.finish(1, Err("no route".to_owned())).is_none());
-        assert!(matches!(state.run, Run::Failed(ref message) if message == "no route"));
+    fn stopping_when_nothing_runs_changes_nothing() {
+        let mut state = SpeedState::new(None);
+        state.run = Run::Failed("x".to_owned());
+        assert!(state.stop_test().is_empty());
+        assert!(matches!(state.run, Run::Failed(_)));
     }
 
     #[test]
@@ -630,10 +911,6 @@ mod tests {
         state.served(stream(50));
         assert_eq!(state.served.len(), 1);
         assert_eq!(state.served[0].bytes, 150);
-    }
-
-    fn server(machine: &str) -> Server {
-        Server::new(machine, "City", "XX", "wss://h/d", "wss://h/u")
     }
 
     #[test]
@@ -674,13 +951,6 @@ mod tests {
     }
 
     #[test]
-    fn an_mlab_test_needs_a_chosen_server() {
-        let mut state = SpeedState::new(None);
-        let _ = state.start_test(Source::Mlab, Direction::Download);
-        assert!(matches!(state.run, Run::Failed(ref message) if message.contains("server")));
-    }
-
-    #[test]
     fn a_bad_server_port_is_an_error_and_nothing_listens() {
         let mut state = SpeedState::new(None);
         state.server_port = "0".to_owned();
@@ -698,7 +968,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lan_test_runs_against_the_server_stream_and_reports_each_step() {
+    fn a_default_lan_test_pings_then_downloads_then_uploads_and_the_server_sees_both() {
         use iced::futures::StreamExt;
         block_on(async {
             let mut server = Box::pin(server_stream(0));
@@ -709,21 +979,71 @@ mod tests {
                 host: "127.0.0.1".to_owned(),
                 port,
             };
-            let mut test = Box::pin(test_stream(target, Direction::Download, 2, 7));
-            let mut ticks = 0;
-            let result = loop {
-                match test.next().await {
-                    Some(Message::SpeedProgress(7, _)) => ticks += 1,
-                    Some(Message::SpeedFinished(7, result)) => break result,
-                    other => panic!("unexpected message {other:?}"),
+            let mut test = Box::pin(test_stream(target, TestKind::default(), 2, 7));
+            let mut steps = Vec::new();
+            while let Some(message) = test.next().await {
+                let Message::SpeedEvent(7, event) = message else {
+                    panic!("unexpected message {message:?}");
+                };
+                match event {
+                    SpeedEvent::Phase(phase) => steps.push(format!("{phase:?}")),
+                    SpeedEvent::Ping(ping) => {
+                        assert_eq!(ping.answered, ping.probes);
+                        steps.push("ping done".to_owned());
+                    }
+                    SpeedEvent::Result(result) => {
+                        assert!(result.mbps > 0.0);
+                        steps.push(format!("{} done", result.direction));
+                    }
+                    SpeedEvent::Failed(message) => panic!("the test failed: {message}"),
+                    SpeedEvent::Finished => steps.push("finished".to_owned()),
+                    SpeedEvent::Progress(_) | SpeedEvent::Place(_) | SpeedEvent::PingFailed(_) => {}
                 }
+            }
+            assert_eq!(
+                steps,
+                [
+                    "Ping",
+                    "ping done",
+                    "Download",
+                    "Download done",
+                    "Upload",
+                    "Upload done",
+                    "finished"
+                ]
+            );
+            let mut directions = Vec::new();
+            while directions.len() < 2 {
+                let Some(Message::SpeedServed(stream)) = server.next().await else {
+                    panic!("the server should report the streams it served");
+                };
+                if !directions.contains(&stream.direction) {
+                    directions.push(stream.direction);
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn a_download_only_test_skips_the_upload() {
+        use iced::futures::StreamExt;
+        block_on(async {
+            let mut server = Box::pin(server_stream(0));
+            let Some(Message::SpeedServerListening(port, _)) = server.next().await else {
+                panic!("the server should say it is listening first");
             };
-            let result = result.unwrap();
-            assert!(result.mbps > 0.0 && ticks >= 1);
-            let Some(Message::SpeedServed(stream)) = server.next().await else {
-                panic!("the server should report the stream it served");
+            let target = Target::Lan {
+                host: "127.0.0.1".to_owned(),
+                port,
             };
-            assert_eq!(stream.direction, Direction::Download);
+            let mut test = Box::pin(test_stream(target, TestKind::DownloadOnly, 1, 3));
+            let mut results = Vec::new();
+            while let Some(Message::SpeedEvent(_, event)) = test.next().await {
+                if let SpeedEvent::Result(result) = event {
+                    results.push(result.direction);
+                }
+            }
+            assert_eq!(results, [Direction::Download]);
         });
     }
 

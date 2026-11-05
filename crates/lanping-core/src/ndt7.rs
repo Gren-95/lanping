@@ -79,6 +79,11 @@ impl Server {
         }
     }
 
+    /// The host and port a test connects to, which is also what a ping measures.
+    pub fn address(&self) -> Result<(String, u16), String> {
+        split_wss_url(&self.download_url).map(|(host, port, _)| (host, port))
+    }
+
     /// `Tokyo, JP`, or just the country when the city is unknown.
     pub fn place(&self) -> String {
         if self.city.is_empty() {

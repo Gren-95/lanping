@@ -6,15 +6,16 @@ use iced::widget::{
     text_input,
 };
 use iced::{Alignment, Element, Font, Length};
+use lanping_core::ping::PingSummary;
 use lanping_core::speedtest::SERVICE_HOST;
-use lanping_core::throughput::Direction;
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::sparkline::{Bar, chart};
 use crate::speed_locations::LocationChoice;
 use crate::speed_tab::{
-    Run, ServerStatus, Source, SpeedPage, SpeedService, SpeedState, TestLength,
+    Phase, Report, Run, ServerStatus, Source, SpeedPage, SpeedService, SpeedState, TestKind,
+    TestLength,
 };
 use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
 use crate::timestamp::format_unix_utc;
@@ -29,9 +30,10 @@ const SECTION_SPACING: f32 = 14.0;
 const SCROLLBAR_GAP: f32 = 12.0;
 const TEXT_SIZE: u32 = 13;
 const CHART_HEIGHT: f32 = 100.0;
-const TILE_WIDTH: f32 = 150.0;
+const TILE_WIDTH: f32 = 170.0;
 const TILE_PADDING: f32 = 12.0;
 const LENGTH_PICK_WIDTH: f32 = 130.0;
+const KIND_PICK_WIDTH: f32 = 190.0;
 const SERVICE_PICK_WIDTH: f32 = 260.0;
 const LOCATION_PICK_WIDTH: f32 = 230.0;
 const PORT_INPUT_WIDTH: f32 = 110.0;
@@ -162,7 +164,7 @@ fn lan_page(speed: &SpeedState) -> Element<'_, Message> {
     .into()
 }
 
-/// The length choice and the download, upload and stop buttons.
+/// The length and kind choices, and the start and stop buttons.
 fn test_buttons(speed: &SpeedState, source: Source) -> Element<'_, Message> {
     let running = speed.running();
     let length = pick_list(
@@ -174,21 +176,20 @@ fn test_buttons(speed: &SpeedState, source: Source) -> Element<'_, Message> {
     .padding(theme::CONTROL_PADDING)
     .width(LENGTH_PICK_WIDTH)
     .style(theme::pick_at(Edge::Alone));
-    let start = |direction: Direction, icon: iced::widget::Text<'static>| {
-        button(
-            row![icon.size(ICON_SIZE), text(direction.to_string()).size(14)]
-                .spacing(8)
-                .align_y(Alignment::Center),
-        )
-        .on_press_maybe((!running).then_some(Message::SpeedStart(source, direction)))
-        .padding([7.0, 16.0])
-        .style(theme::primary_button)
-    };
-    let mut controls: Vec<Element<'_, Message>> = vec![
-        length.into(),
-        start(Direction::Download, lucide::download()).into(),
-        start(Direction::Upload, lucide::upload()).into(),
-    ];
+    let kind = pick_list(TestKind::ALL, Some(speed.kind), Message::SpeedKindPicked)
+        .text_size(TEXT_SIZE)
+        .padding(theme::CONTROL_PADDING)
+        .width(KIND_PICK_WIDTH)
+        .style(theme::pick_at(Edge::Alone));
+    let start = button(
+        row![lucide::play().size(ICON_SIZE), text("Start test").size(14)]
+            .spacing(8)
+            .align_y(Alignment::Center),
+    )
+    .on_press_maybe((!running).then_some(Message::SpeedStart(source)))
+    .padding([7.0, 16.0])
+    .style(theme::primary_button);
+    let mut controls: Vec<Element<'_, Message>> = vec![length.into(), kind.into(), start.into()];
     if running {
         controls.push(with_tooltip(
             button(lucide::square().size(ICON_SIZE + 2.0))
@@ -211,67 +212,114 @@ fn run_view(run: &Run) -> Element<'_, Message> {
         Run::Idle => space::vertical().height(0).into(),
         Run::Failed(message) => text(message.as_str()).color(BAD).into(),
         Run::Running {
-            place,
-            direction,
+            phase,
             samples,
-        } => {
-            let now = samples
-                .last()
-                .map_or_else(|| "Starting".to_owned(), |mbps| format!("{mbps:.1} Mbit/s"));
-            column![
-                LayoutRow::with_children([
-                    crate::results::pill(format!("{direction} running"), WARN),
-                    text(place.as_str()).size(12).color(MUTED).into(),
-                ])
-                .spacing(8)
-                .align_y(Alignment::Center),
-                text(now).size(28).font(BOLD),
-                samples_chart(samples),
-            ]
-            .spacing(8)
-            .into()
-        }
-        Run::Done(record) => {
-            let result = &record.result;
-            column![
-                LayoutRow::with_children([
-                    crate::results::pill(format!("{} finished", result.direction), GOOD),
-                    text(record.place.as_str()).size(12).color(MUTED).into(),
-                    text("Saved to history").size(12).color(MUTED).into(),
-                ])
-                .spacing(8)
-                .align_y(Alignment::Center),
-                LayoutRow::with_children([
-                    tile("Speed", format!("{:.1} Mbit/s", result.mbps)),
-                    tile(
-                        "Data moved",
-                        format!("{:.0} MB", result.bytes as f64 / BYTES_PER_MEGABYTE)
-                    ),
-                    tile("Time", format!("{:.1} s", result.seconds)),
-                ])
-                .spacing(SECTION_SPACING)
-                .wrap()
-                .vertical_spacing(SECTION_SPACING),
-                samples_chart(&result.samples_mbps),
-            ]
-            .spacing(SECTION_SPACING)
-            .into()
-        }
+            report,
+        } => report_view(report, Some((*phase, samples))),
+        Run::Done(report) => report_view(report, None),
     }
 }
 
-fn tile<'a>(label: &'static str, value: String) -> Element<'a, Message> {
-    container(
-        column![
-            text(label).size(12).color(MUTED),
-            text(value).size(20).font(BOLD),
-        ]
-        .spacing(2),
-    )
-    .padding(TILE_PADDING)
-    .width(TILE_WIDTH)
-    .style(theme::card)
-    .into()
+/// What a test has found: ping, each finished direction, and the step in progress.
+fn report_view<'a>(report: &'a Report, live: Option<(Phase, &'a [f64])>) -> Element<'a, Message> {
+    let status = match (live, &report.error) {
+        (Some((phase, _)), _) => crate::results::pill(phase.to_string(), WARN),
+        (None, Some(_)) => crate::results::pill("Stopped early", WARN),
+        (None, None) => crate::results::pill("Finished", GOOD),
+    };
+    let mut header: Vec<Element<'a, Message>> = vec![
+        status,
+        text(report.place.as_str()).size(12).color(MUTED).into(),
+    ];
+    if live.is_none() && !report.results.is_empty() {
+        header.push(text("Saved to history").size(12).color(MUTED).into());
+    }
+    let mut tiles: Vec<Element<'a, Message>> = Vec::new();
+    if let Some(ping) = &report.ping {
+        tiles.push(ping_tile(ping));
+    }
+    for result in &report.results {
+        tiles.push(tile(
+            &result.direction.to_string(),
+            format!("{:.1} Mbit/s", result.mbps),
+            Some(format!(
+                "{:.0} MB in {:.1} s",
+                result.bytes as f64 / BYTES_PER_MEGABYTE,
+                result.seconds
+            )),
+        ));
+    }
+    let mut content = column![
+        LayoutRow::with_children(header)
+            .spacing(8)
+            .align_y(Alignment::Center),
+    ]
+    .spacing(SECTION_SPACING);
+    if !tiles.is_empty() {
+        content = content.push(
+            LayoutRow::with_children(tiles)
+                .spacing(SECTION_SPACING)
+                .wrap()
+                .vertical_spacing(SECTION_SPACING),
+        );
+    }
+    if let Some(message) = &report.ping_error {
+        content = content.push(
+            text(format!("Ping failed: {message}"))
+                .size(13)
+                .color(MUTED),
+        );
+    }
+    if let Some((phase, samples)) = live
+        && phase != Phase::Ping
+    {
+        let now = samples
+            .last()
+            .map_or_else(|| "Starting".to_owned(), |mbps| format!("{mbps:.1} Mbit/s"));
+        content = content.push(text(now).size(28).font(BOLD));
+        content = content.push(samples_chart(samples));
+    }
+    for result in &report.results {
+        content = content.push(
+            column![
+                text(result.direction.to_string()).size(13).color(MUTED),
+                samples_chart(&result.samples_mbps),
+            ]
+            .spacing(4),
+        );
+    }
+    if let Some(message) = &report.error {
+        content = content.push(text(message.as_str()).color(BAD));
+    }
+    content.into()
+}
+
+fn ping_tile<'a>(ping: &PingSummary) -> Element<'a, Message> {
+    let detail = match (ping.jitter_ms, ping.answered == ping.probes) {
+        (Some(jitter), true) => Some(format!("jitter {jitter:.1} ms")),
+        (Some(jitter), false) => Some(format!(
+            "jitter {jitter:.1} ms, {} of {} answered",
+            ping.answered, ping.probes
+        )),
+        (None, _) => Some(format!("{} of {} answered", ping.answered, ping.probes)),
+    };
+    tile("Ping", ping.describe(), detail)
+}
+
+fn tile<'a>(label: &str, value: String, detail: Option<String>) -> Element<'a, Message> {
+    let mut lines = column![
+        text(label.to_owned()).size(12).color(MUTED),
+        text(value).size(20).font(BOLD),
+    ]
+    .spacing(2);
+    if let Some(detail) = detail {
+        lines = lines.push(text(detail).size(11).color(MUTED));
+    }
+    container(lines)
+        .padding(TILE_PADDING)
+        .width(TILE_WIDTH)
+        .style(theme::card)
+        .into()
 }
 
 /// One bar per second, as tall as that second's speed against the fastest second.
