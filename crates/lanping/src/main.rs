@@ -24,6 +24,8 @@ mod scan_flow;
 mod settings;
 mod settings_page;
 mod sparkline;
+mod speed_tab;
+mod speed_view;
 mod storage;
 mod subnet_tab;
 mod summary_dialog;
