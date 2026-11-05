@@ -117,12 +117,16 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A My network tab shows what people look up constantly: this computer's addresses per interface (IPv4 and IPv6, with link-local ones marked), the gateway, the DNS servers and the Wi-Fi name, each with a copy button. Those are read from this computer only. A separate button checks the public address, whether IPv6 works and whether a sign-in page is in the way; it says up front that it contacts Cloudflare and sends nothing unless pressed
 
+**Web and email**
+
+- A Web tab has two pages. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names, each with what it means in plain words. Both make ordinary requests and ask ordinary DNS questions
+
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU and My network start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU, My network and Web start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run

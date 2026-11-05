@@ -49,6 +49,8 @@ mod trace_tab;
 mod ui;
 mod upnp_tab;
 mod view;
+mod web_tab;
+mod web_view;
 mod whois_page;
 mod wifi_channels;
 mod wifi_list;

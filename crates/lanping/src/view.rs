@@ -30,6 +30,7 @@ use crate::theme::{
 use crate::tls_tab::tls_panel;
 use crate::trace_tab::trace_panel;
 use crate::upnp_tab::upnp_panel;
+use crate::web_view::web_panel;
 use crate::wifi_tab::wifi_panel;
 use lanping_core::ScanStage;
 use lanping_core::diff::HostStatus;
@@ -74,6 +75,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Services => (header(app), services_panel(app)),
         Tab::Mtu => (header(app), mtu_panel(app)),
         Tab::Network => (header(app), network_panel(app)),
+        Tab::Web => (header(app), web_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
     column![top, tab_bar(app), content, status_line(app)]

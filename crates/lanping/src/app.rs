@@ -9,6 +9,7 @@ use lanping_core::device_notes::{DeviceNote, DeviceNotes};
 use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::dns::{Answer, DnsError, RecordType, ResolverTiming};
+use lanping_core::email_check::EmailReport;
 use lanping_core::gateway::default_gateway;
 use lanping_core::history::{
     SavedScan, Sighting, list_scan_summaries, list_scans, load_scan, save_scan, sightings,
@@ -31,6 +32,7 @@ use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::tls::{TlsError, TlsReport};
 use lanping_core::trace::{HopSample, TraceError};
 use lanping_core::upnp::{UpnpError, UpnpReport};
+use lanping_core::website_check::{WebsiteError, WebsiteReport};
 use lanping_core::whois::{WhoisError, WhoisReport};
 use lanping_core::wifi::{AccessPoint, WifiError};
 use lanping_core::wol::send_wake_packet;
@@ -67,6 +69,7 @@ use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
 use crate::upnp_tab::UpnpState;
+use crate::web_tab::{WebPage, WebState};
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
 
@@ -102,6 +105,7 @@ pub struct LanPing {
     pub ntp: NtpState,
     pub mtu: MtuState,
     pub network: NetworkState,
+    pub web: WebState,
     pub upnp: UpnpState,
     pub services: ServicesState,
     pub snmp: SnmpState,
@@ -188,6 +192,7 @@ impl LanPing {
             ntp: NtpState::new(),
             mtu: MtuState::new(),
             network: NetworkState::new(),
+            web: WebState::new(),
             upnp: UpnpState::new(),
             services: ServicesState::new(),
             snmp: SnmpState::new(),
@@ -489,6 +494,13 @@ impl LanPing {
             Message::NtpCheck => return self.ntp.start(),
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::UpnpRead => return self.upnp.start(),
+            Message::WebPagePicked(page) => self.web.page = page,
+            Message::WebAddressChanged(address) => self.web.address = address,
+            Message::WebCheck => return self.web.check_site(),
+            Message::WebDone(generation, result) => self.web.finish_site(generation, result),
+            Message::EmailDomainChanged(domain) => self.web.domain = domain,
+            Message::EmailCheck => return self.web.check_email(),
+            Message::EmailDone(generation, result) => self.web.finish_email(generation, result),
             Message::NetworkRefresh => return self.network.read_local(),
             Message::NetworkLocalDone(generation, facts) => {
                 self.network.finish_local(generation, facts)

@@ -21,7 +21,7 @@ use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{
     self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SECTION_SPACING, WARN, latency_color,
 };
-use crate::ui::{note, panel, scrolling};
+use crate::ui::{note, page_strip, panel, scrolling};
 use crate::view::input_group;
 use crate::whois_page::{WhoisState, whois_view};
 
@@ -72,9 +72,9 @@ pub enum DnsPage {
 }
 
 impl DnsPage {
-    const ALL: [Self; 2] = [Self::Lookup, Self::Whois];
+    pub(crate) const ALL: [Self; 2] = [Self::Lookup, Self::Whois];
 
-    fn title(self) -> &'static str {
+    pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Lookup => "Lookup",
             Self::Whois => "WHOIS",
@@ -211,21 +211,18 @@ pub fn dns_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
         .spacing(SECTION_SPACING * 1.5),
         DnsPage::Whois => column![whois_view(&dns.whois)],
     };
-    let body = column![page_strip(dns.page), body].spacing(SECTION_SPACING);
+    let body = column![
+        page_strip(
+            &DnsPage::ALL,
+            dns.page,
+            DnsPage::title,
+            Message::DnsPagePicked
+        ),
+        body
+    ]
+    .spacing(SECTION_SPACING);
     let page = scrolling(body);
     panel(page)
-}
-
-fn page_strip(selected: DnsPage) -> Element<'static, Message> {
-    LayoutRow::with_children(DnsPage::ALL.into_iter().map(|page| {
-        button(text(page.title()).size(CONTROL_TEXT_SIZE))
-            .on_press(Message::DnsPagePicked(page))
-            .padding([5.0, 14.0])
-            .style(theme::tab_button(page == selected))
-            .into()
-    }))
-    .spacing(8)
-    .into()
 }
 
 fn lookup_controls(dns: &DnsState, wide: bool) -> Element<'_, Message> {
