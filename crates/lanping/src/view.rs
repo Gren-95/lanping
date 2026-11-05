@@ -13,6 +13,7 @@ use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
 use crate::latency_tab::latency_panel;
 use crate::modal::overlay;
 use crate::monitor::AutoInterval;
+use crate::ntp_tab::ntp_panel;
 use crate::results::{pill, results};
 use crate::settings_page::settings_panel;
 use crate::snmp_view::snmp_panel;
@@ -64,6 +65,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Tls => (header(app), tls_panel(app, width)),
         Tab::Snmp => (header(app), snmp_panel(app)),
         Tab::Subnet => (header(app), subnet_panel(app)),
+        Tab::Ntp => (header(app), ntp_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
     column![top, tab_bar(app), content, status_line(app)]

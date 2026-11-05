@@ -25,13 +25,14 @@ pub enum Tab {
     Tls,
     Snmp,
     Subnet,
+    Ntp,
     /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
 }
 
 impl Tab {
     /// The tabs that can be shown, hidden and reordered, in their default order.
-    pub const CONFIGURABLE: [Tab; 9] = [
+    pub const CONFIGURABLE: [Tab; 10] = [
         Tab::Scan,
         Tab::Wifi,
         Tab::Trace,
@@ -41,12 +42,13 @@ impl Tab {
         Tab::Tls,
         Tab::Snmp,
         Tab::Subnet,
+        Tab::Ntp,
     ];
 
     /// Whether the tab shows until the user turns it on or off. The tools that most people reach
-    /// for rarely (TLS, SNMP and subnet) start hidden; they are one tick away in Settings.
+    /// for rarely (TLS, SNMP, subnet and clock) start hidden; they are one tick away in Settings.
     pub fn shown_by_default(self) -> bool {
-        !matches!(self, Self::Tls | Self::Snmp | Self::Subnet)
+        !matches!(self, Self::Tls | Self::Snmp | Self::Subnet | Self::Ntp)
     }
 
     pub fn title(self) -> &'static str {
@@ -60,6 +62,7 @@ impl Tab {
             Self::Tls => "TLS",
             Self::Snmp => "SNMP",
             Self::Subnet => "Subnet",
+            Self::Ntp => "Clock",
             Self::Settings => "Settings",
         }
     }
@@ -75,6 +78,7 @@ impl Tab {
             Self::Tls => lucide::shield_check(),
             Self::Snmp => lucide::arrow_down_up(),
             Self::Subnet => lucide::calculator(),
+            Self::Ntp => lucide::alarm_clock_check(),
             Self::Settings => lucide::settings(),
         }
     }

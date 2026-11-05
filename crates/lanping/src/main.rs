@@ -18,6 +18,7 @@ mod map_dialog;
 mod modal;
 mod monitor;
 mod notify;
+mod ntp_tab;
 mod opener;
 mod presets;
 mod results;
