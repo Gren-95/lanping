@@ -80,6 +80,10 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - A DNS tab looks up A, AAAA, MX, TXT, NS, PTR and CNAME records at the resolvers your system uses or at Cloudflare, Google and Quad9, and times all of them side by side. Queries are sent directly over UDP (TCP for long answers), so nothing extra is installed
 - A WHOIS page in the same tab shows who is behind a domain name or an IP address: registrar, dates and name servers, or network name, organization and range, above the full answer
 
+**TLS**
+
+- A TLS tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, an optional server name lets you check an IP address on a server that hosts several sites, such as Caddy, and an open HTTPS port in the device menu offers a one-click check
+
 **Subnet**
 
 - A Subnet tab turns an address with a prefix length or netmask into network, broadcast, host range and host count, for IPv4 and IPv6, and can start a scan of the range
