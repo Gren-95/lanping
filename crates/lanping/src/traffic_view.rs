@@ -57,8 +57,8 @@ fn controls(app: &LanPing) -> Element<'_, Message> {
     let traffic = &app.traffic;
     let running = traffic.running();
     let hint = traffic.gateway_hint.map_or_else(
-        || "Router or switch address".to_owned(),
-        |ip| format!("Router or switch address, such as {ip}"),
+        || "Router or switch address, with :port if it is not 161".to_owned(),
+        |ip| format!("Router or switch address, such as {ip} (with :port if it is not 161)"),
     );
     let mut target = text_input(&hint, &traffic.target)
         .padding(theme::CONTROL_PADDING)

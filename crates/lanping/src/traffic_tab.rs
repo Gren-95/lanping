@@ -66,11 +66,10 @@ impl TrafficState {
 
     /// Starts over against the typed device, using `community`.
     pub fn start(&mut self, community: &str) -> Task<Message> {
-        let ip = match self.target.trim().parse::<Ipv4Addr>() {
-            Ok(ip) => ip,
-            Err(_) => {
-                self.status =
-                    Status::Failed("Enter the IPv4 address of the router or switch".to_owned());
+        let (ip, port) = match parse_target(&self.target) {
+            Ok(target) => target,
+            Err(message) => {
+                self.status = Status::Failed(message);
                 return Task::none();
             }
         };
@@ -86,7 +85,10 @@ impl TrafficState {
         self.interfaces.clear();
         self.tracker = RateTracker::default();
         self.failures = 0;
-        let agent = Agent::new(ip, SnmpCommunity(community.trim().to_owned()));
+        let mut agent = Agent::new(ip, SnmpCommunity(community.trim().to_owned()));
+        if let Some(port) = port {
+            agent = agent.with_port(port);
+        }
         self.agent = Some(agent.clone());
         let generation = self.generation;
         let (task, handle) = Task::perform(async move { agent.discover().await }, move |result| {
@@ -183,6 +185,29 @@ impl TrafficState {
     }
 }
 
+/// `192.168.0.1`, or `192.168.0.1:1161` for a device that listens on another port than 161.
+pub fn parse_target(text: &str) -> Result<(Ipv4Addr, Option<u16>), String> {
+    let text = text.trim();
+    let (address, port) = match text.split_once(':') {
+        Some((address, port)) => (
+            address,
+            Some(
+                port.parse::<u16>()
+                    .ok()
+                    .filter(|port| *port != 0)
+                    .ok_or_else(|| "The port must be a number from 1 to 65535".to_owned())?,
+            ),
+        ),
+        None => (text, None),
+    };
+    address
+        .parse::<Ipv4Addr>()
+        .map(|ip| (ip, port))
+        .map_err(|_| {
+            "Enter the IPv4 address of the router or switch, with :port if it is not 161".to_owned()
+        })
+}
+
 /// `950 bit/s`, `12.3 kbit/s`, `4.5 Mbit/s`, `1.2 Gbit/s`.
 pub fn format_rate(bits_per_second: f64) -> String {
     const UNITS: [(&str, f64); 3] = [("Gbit/s", 1e9), ("Mbit/s", 1e6), ("kbit/s", 1e3)];
@@ -247,6 +272,28 @@ mod tests {
         let _ = state.start("  ");
         assert!(matches!(state.status, Status::Failed(ref m) if m.contains("community")));
         assert!(!state.running());
+    }
+
+    #[test]
+    fn reads_an_address_with_and_without_a_port() {
+        assert_eq!(
+            parse_target(" 192.168.0.1 "),
+            Ok(("192.168.0.1".parse().unwrap(), None))
+        );
+        assert_eq!(
+            parse_target("127.0.0.1:1161"),
+            Ok(("127.0.0.1".parse().unwrap(), Some(1161)))
+        );
+        for bad in [
+            "",
+            "router",
+            "1.2.3.4:0",
+            "1.2.3.4:x",
+            "1.2.3.4:70000",
+            ":161",
+        ] {
+            assert!(parse_target(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

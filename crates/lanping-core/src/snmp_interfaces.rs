@@ -422,6 +422,12 @@ impl Agent {
         }
     }
 
+    /// Asks on `port` instead of the standard 161, for a device or test agent that listens elsewhere.
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.address.set_port(port);
+        self
+    }
+
     /// Lists the interfaces with their names, speeds and which counters they have.
     pub async fn discover(&self) -> Result<Vec<Interface>, SnmpError> {
         let session = Session::open(self.address, &self.community, self.wait).await?;

@@ -91,7 +91,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Traffic**
 
-- A Traffic tab asks a router or switch over read-only SNMP v2c how much each interface carries: status, link speed, live in and out rates, how full the link is, and a graph. It uses the 64-bit counters where the device has them and copes with counter wraps and device restarts. The community is typed by you and never guessed. SNMP counts per interface, not per device on the network
+- A Traffic tab asks a router or switch over read-only SNMP v2c how much each interface carries: status, link speed, live in and out rates, how full the link is, and a graph. It uses the 64-bit counters where the device has them and copes with counter wraps and device restarts. The community is typed by you and never guessed. SNMP counts per interface, not per device on the network. `docker/snmp-test` has a throwaway SNMP device in a container to try it against
 
 **Subnet**
 

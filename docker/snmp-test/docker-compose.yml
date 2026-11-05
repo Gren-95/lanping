@@ -1,0 +1,21 @@
+# A fake router for LanPing's Traffic tab.
+#
+#   docker compose up --build
+#
+# Then, in the Traffic tab:  address 127.0.0.1:1161   community lanping-test
+services:
+  snmp:
+    build: .
+    # The agent listens on 161 inside; 1161 here, so no root is needed.
+    ports:
+      - "127.0.0.1:1161:161/udp"
+    restart: unless-stopped
+
+  traffic:
+    build: .
+    entrypoint: ["/usr/local/bin/traffic.sh"]
+    environment:
+      TARGET: snmp
+    depends_on:
+      - snmp
+    restart: unless-stopped
