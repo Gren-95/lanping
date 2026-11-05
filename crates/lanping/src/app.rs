@@ -14,9 +14,12 @@ use lanping_core::gateway::default_gateway;
 use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::latency::{LatencyError, Prober};
+use lanping_core::measurements::{Measurement, save as save_measurement};
+use lanping_core::ndt7::Server;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
+use lanping_core::throughput::ServedStream;
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::tls::{TlsError, TlsReport};
 use lanping_core::trace::{HopSample, TraceError};
@@ -37,9 +40,13 @@ use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
+use crate::speed_locations::LocationChoice;
+use crate::speed_tab::{
+    Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
+};
 use crate::storage::{
-    device_notes_path, export_directory, history_directory, labels_path, migrate_legacy_data,
-    settings_path,
+    device_notes_path, export_directory, history_directory, labels_path, measurements_directory,
+    migrate_legacy_data, settings_path,
 };
 use crate::subnet_tab::SubnetState;
 use crate::tabs::Tab;
@@ -203,6 +210,25 @@ pub enum Message {
     TraceStop,
     TraceRound(u64, Result<Vec<HopSample>, TraceError>),
     TraceCopyRows,
+    SpeedPagePicked(SpeedPage),
+    SpeedServicePicked(SpeedService),
+    SpeedLocationPicked(LocationChoice),
+    SpeedCountriesFound(Result<Vec<String>, String>),
+    SpeedServersFound(u64, Result<Vec<Server>, String>),
+    SpeedServerPicked(Server),
+    SpeedServersSearchAgain,
+    SpeedLanTargetChanged(String),
+    SpeedLengthPicked(TestLength),
+    SpeedKindPicked(TestKind),
+    SpeedStart(Source),
+    SpeedStop,
+    SpeedEvent(u64, SpeedEvent),
+    SpeedServerPortChanged(String),
+    SpeedServerStart,
+    SpeedServerStop,
+    SpeedServerListening(u16, Vec<std::net::IpAddr>),
+    SpeedServerFailed(String),
+    SpeedServed(ServedStream),
     LatencyTargetChanged(String),
     LatencyIntervalPicked(Interval),
     LatencyStart,
@@ -253,6 +279,7 @@ pub struct LanPing {
     pub latency: LatencyState,
     pub dns: DnsState,
     pub tls: TlsState,
+    pub speed: SpeedState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -381,6 +408,7 @@ impl LanPing {
             latency: LatencyState::default(),
             dns: DnsState::new(),
             tls: TlsState::new(),
+            speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -554,7 +582,13 @@ impl LanPing {
             Message::LatencyTargetChanged(target) => self.latency.set_target(target),
             Message::LatencyIntervalPicked(interval) => self.latency.set_interval(interval),
             Message::LatencyStart => return self.latency.start(),
-            Message::LatencyStop => self.latency.stop(),
+            Message::LatencyStop => {
+                let finished_run = self.latency.record_for_history();
+                self.latency.stop();
+                if let Some(record) = finished_run {
+                    self.save_measurements(&[record]);
+                }
+            }
             Message::LatencyReady(generation, result) => {
                 return self.latency.ready(generation, result);
             }
@@ -577,6 +611,35 @@ impl LanPing {
             }
             Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
             Message::LatencyLogPathChosen(None) => {}
+            Message::SpeedPagePicked(page) => self.speed.page = page,
+            Message::SpeedServicePicked(service) => return self.speed.set_service(service),
+            Message::SpeedLocationPicked(location) => return self.speed.set_location(location),
+            Message::SpeedCountriesFound(result) => self.speed.countries_found(result),
+            Message::SpeedServersFound(generation, result) => {
+                self.speed.servers_found(generation, result);
+            }
+            Message::SpeedServerPicked(server) => self.speed.set_server(server),
+            Message::SpeedServersSearchAgain => return self.speed.search_again(),
+            Message::SpeedLanTargetChanged(target) => self.speed.lan_target = target,
+            Message::SpeedLengthPicked(length) => self.speed.length = length,
+            Message::SpeedKindPicked(kind) => self.speed.kind = kind,
+            Message::SpeedStart(source) => return self.speed.start_test(source),
+            Message::SpeedStop => {
+                let finished = self.speed.stop_test();
+                self.save_measurements(&finished);
+            }
+            Message::SpeedEvent(generation, event) => {
+                let finished = self.speed.event(generation, event);
+                self.save_measurements(&finished);
+            }
+            Message::SpeedServerPortChanged(port) => self.speed.server_port = port,
+            Message::SpeedServerStart => return self.speed.start_server(),
+            Message::SpeedServerStop => self.speed.stop_server(),
+            Message::SpeedServerListening(port, addresses) => {
+                self.speed.server_listening(port, addresses);
+            }
+            Message::SpeedServerFailed(message) => self.speed.server_failed(message),
+            Message::SpeedServed(stream) => self.speed.served(stream),
             Message::TlsTargetChanged(target) => self.tls.set_target(target),
             Message::TlsServerNameChanged(name) => self.tls.set_server_name(name),
             Message::TlsCheck => return self.tls.start(),
@@ -935,6 +998,23 @@ impl LanPing {
             ask_save_path(format, file_name, export_directory()),
             move |path| Message::ExportPathChosen(format, path),
         )
+    }
+
+    /// Saves finished tests or runs next to the saved scans and refreshes the history list.
+    pub(crate) fn save_measurements(&mut self, measurements: &[Measurement]) {
+        let Some(directory) = measurements_directory() else {
+            return;
+        };
+        if measurements.is_empty() {
+            return;
+        }
+        for measurement in measurements {
+            if let Err(error) = save_measurement(&directory, measurement) {
+                self.set_notice(Notice::Error, format!("Could not save the result: {error}"));
+                return;
+            }
+        }
+        self.speed.refresh_history(Some(&directory));
     }
 
     fn save_latency_log(&mut self, path: &Path) {

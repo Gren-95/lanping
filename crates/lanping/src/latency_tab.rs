@@ -10,6 +10,7 @@ use iced::widget::{
 };
 use iced::{Alignment, Element, Font, Length, Task};
 use lanping_core::latency::{GRAPH_LENGTH, LatencyError, LatencySeries, Prober};
+use lanping_core::measurements::{LatencyRecord, Measurement};
 use lanping_core::trace::validate_target;
 
 use crate::app::{LanPing, Message};
@@ -163,6 +164,23 @@ impl LatencyState {
             Task::perform(probe, move |rtt| Message::LatencySample(generation, rtt)).abortable();
         self.handle = Some(handle);
         task
+    }
+
+    /// The run so far as a record for the history. `None` before the first probe.
+    pub fn record_for_history(&self) -> Option<Measurement> {
+        if self.series.sent == 0 {
+            return None;
+        }
+        let method = self
+            .prober
+            .as_ref()
+            .map_or("unknown", |prober| prober.method());
+        Some(Measurement::Latency(LatencyRecord::new(
+            &self.target,
+            method,
+            unix_seconds(),
+            &self.series,
+        )))
     }
 
     pub fn has_log(&self) -> bool {
@@ -456,6 +474,19 @@ mod tests {
         let _ = state.ready(0, Err(LatencyError::NotFound));
         assert!(!state.running);
         assert_eq!(state.error, Some(LatencyError::NotFound));
+    }
+
+    #[test]
+    fn a_run_with_probes_becomes_a_history_record_and_one_without_does_not() {
+        let mut state = running_state();
+        assert!(state.record_for_history().is_none());
+        let _ = state.sampled(0, Some(4.0));
+        let Some(Measurement::Latency(record)) = state.record_for_history() else {
+            panic!("expected a latency record");
+        };
+        assert_eq!(record.target, "example.com");
+        assert_eq!(record.probes, 1);
+        assert_eq!(record.method, "unknown");
     }
 
     #[test]
