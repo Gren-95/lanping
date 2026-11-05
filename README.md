@@ -80,14 +80,14 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - A Speed tab measures download and upload speed against `speed.cloudflare.com` or against M-Lab's open NDT7 servers around the world (pick the nearest, or a country, and a server), and between two computers that run LanPing: start the test server on one (default port 5252) and run a test against it from the other. A test measures ping first, then download and upload (or only one of them), and shows the speed of each second as a graph. For M-Lab, pick the nearest servers or one of the countries M-Lab actually has a server in (the list comes from M-Lab itself; there is none in Estonia, so use "nearest" there)
 - Finished speed tests and latency runs are saved next to the saved scans and listed on the History page
 
-**DNS**
+**Internet**
 
-- A DNS tab looks up A, AAAA, MX, TXT, NS, PTR and CNAME records at the resolvers your system uses or at Cloudflare, Google and Quad9, and times all of them side by side. Queries are sent directly over UDP (TCP for long answers), so nothing extra is installed
+- The Internet tab (the old DNS tab) starts with a Lookup page that looks up A, AAAA, MX, TXT, NS, PTR and CNAME records at the resolvers your system uses or at Cloudflare, Google and Quad9, and times all of them side by side. Queries are sent directly over UDP (TCP for long answers), so nothing extra is installed
 - A WHOIS page in the same tab shows who is behind a domain name or an IP address: registrar, dates and name servers, or network name, organization and range, above the full answer
 
 **TLS**
 
-- A TLS page in the DNS tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, an optional server name lets you check an IP address on a server that hosts several sites, such as Caddy, and an open HTTPS port in the device menu offers a one-click check
+- A TLS page in the Internet tab reads the certificate chain a server presents on any host and port: subject, issuer, validity dates, days left and the names it is valid for, and says whether this system would trust it. Expired, self-signed and mismatched certificates are shown instead of failing, an optional server name lets you check an IP address on a server that hosts several sites, such as Caddy, and an open HTTPS port in the device menu offers a one-click check
 
 **SNMP**
 
@@ -115,7 +115,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Pages of the tabs**
 
-- The DNS tab has five pages: Lookup, WHOIS, Website, Email records and TLS. The Path tab has three: Trace, Latency and MTU. The Router tab has three: SNMP, UPnP and Syslog. The This computer tab has three: My network, Clock and Subnet. The Devices tab has two: Devices and Services. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
+- The Internet tab has five pages: Lookup, WHOIS, Website, Email records and TLS. The Path tab has three: Trace, Latency and MTU. The Router tab has three: SNMP, UPnP and Syslog. The This computer tab has three: My network, Clock and Subnet. The Devices tab has two: Devices and Services. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
 
 **Syslog**
 
