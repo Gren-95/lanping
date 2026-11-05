@@ -8,6 +8,11 @@ pub fn history_directory() -> Option<PathBuf> {
     ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.data_dir().join("scans"))
 }
 
+/// Saved latency runs and throughput tests, next to the saved scans.
+pub fn measurements_directory() -> Option<PathBuf> {
+    ProjectDirs::from("", "", APP_NAME).map(|dirs| dirs.data_dir().join("measurements"))
+}
+
 pub fn export_directory() -> Option<PathBuf> {
     let dirs = UserDirs::new()?;
     dirs.download_dir()

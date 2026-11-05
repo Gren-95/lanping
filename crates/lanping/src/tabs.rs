@@ -19,6 +19,7 @@ pub enum Tab {
     Wifi,
     Trace,
     Latency,
+    Speed,
     Dns,
     Tls,
     Subnet,
@@ -26,12 +27,13 @@ pub enum Tab {
 }
 
 /// The tabs in the bar, left to right. Settings has its own button on the right.
-fn bar_tabs() -> [(Tab, Text<'static>, &'static str); 7] {
+fn bar_tabs() -> [(Tab, Text<'static>, &'static str); 8] {
     [
         (Tab::Scan, lucide::scan_search(), "Devices"),
         (Tab::Wifi, lucide::wifi(), "Wi-Fi"),
         (Tab::Trace, lucide::activity(), "Trace"),
         (Tab::Latency, lucide::gauge(), "Latency"),
+        (Tab::Speed, lucide::zap(), "Speed"),
         (Tab::Dns, lucide::globe(), "DNS"),
         (Tab::Tls, lucide::shield_check(), "TLS"),
         (Tab::Subnet, lucide::calculator(), "Subnet"),

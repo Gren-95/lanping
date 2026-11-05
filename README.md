@@ -75,6 +75,11 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A Latency tab probes one host every second, 5 seconds or 30 seconds with ICMP ping (TCP connects when the system does not allow unprivileged ping), shows loss, average, best, worst and jitter with a history graph, and saves the log as CSV
 
+**Speed**
+
+- A Speed tab measures download and upload speed against `speed.cloudflare.com` or against M-Lab's open NDT7 servers around the world (pick the nearest, or a country, and a server), and between two computers that run LanPing: start the test server on one (default port 5252) and run a test against it from the other. A test measures ping first, then download and upload (or only one of them), and shows the speed of each second as a graph. For M-Lab, pick the nearest servers or one of the countries M-Lab actually has a server in (the list comes from M-Lab itself; there is none in Estonia, so use "nearest" there)
+- Finished speed tests and latency runs are saved next to the saved scans and listed on the History page
+
 **DNS**
 
 - A DNS tab looks up A, AAAA, MX, TXT, NS, PTR and CNAME records at the resolvers your system uses or at Cloudflare, Google and Quad9, and times all of them side by side. Queries are sent directly over UDP (TCP for long answers), so nothing extra is installed

@@ -231,7 +231,7 @@ impl ServerCertVerifier for Inspecting {
 }
 
 /// The certificates the system trusts, read once.
-async fn system_roots() -> Arc<RootCertStore> {
+pub(crate) async fn system_roots() -> Arc<RootCertStore> {
     static ROOTS: OnceLock<Arc<RootCertStore>> = OnceLock::new();
     if let Some(roots) = ROOTS.get() {
         return Arc::clone(roots);
