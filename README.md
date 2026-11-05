@@ -133,13 +133,32 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU, My network, Web and Syslog start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
+## Command line
+
+`lanping-cli` runs the same checks without the window, for scripts and cron. Output is a table, or JSON with `--json`.
+
+```bash
+lanping-cli scan 192.168.0.0/24 --ports 22,80,443 --json
+lanping-cli wifi
+lanping-cli dns example.com --type MX --server 1.1.1.1
+lanping-cli tls example.com --days 21     # exit 3 when not trusted or expiring within 21 days
+lanping-cli ntp --warn 0.5                # exit 3 when the clock is off by half a second
+lanping-cli mtu example.com
+lanping-cli web https://example.com
+lanping-cli email example.com             # exit 3 when SPF or DMARC is missing
+lanping-cli upnp
+lanping-cli services
+```
+
+Exit codes: 0 fine, 1 the command could not run to the end, 2 the command line was wrong, 3 a check ran and found a problem. `lanping-cli <command> --help` shows the options of a command. The arguments are read by a small parser of its own, so the command line adds no dependency. It is built from source (`cargo build --release -p lanping-cli`) and is not part of the release downloads yet.
+
 ## Build and run
 
 Needs Rust 1.90 or newer.
 
 ```bash
 cargo run --release -p lanping                                   # GUI
-cargo run --release -p lanping-core --example scan_cli -- 192.168.0.0/24 22,80   # CLI
+cargo run --release -p lanping-cli -- scan 192.168.0.0/24 --ports 22,80   # command line
 cargo test --workspace
 scripts/build-appimage.sh                                          # needs appimagetool on PATH
 ```
