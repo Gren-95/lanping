@@ -23,6 +23,7 @@ pub mod neighbors;
 pub mod netbios;
 pub mod ntp;
 pub mod os_guess;
+pub mod path_mtu;
 pub mod ping;
 pub mod plain_service;
 pub mod port_risk;

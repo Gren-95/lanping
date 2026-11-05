@@ -28,13 +28,14 @@ pub enum Tab {
     Ntp,
     Upnp,
     Services,
+    Mtu,
     /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
 }
 
 impl Tab {
     /// The tabs that can be shown, hidden and reordered, in their default order.
-    pub const CONFIGURABLE: [Tab; 12] = [
+    pub const CONFIGURABLE: [Tab; 13] = [
         Tab::Scan,
         Tab::Wifi,
         Tab::Trace,
@@ -47,14 +48,21 @@ impl Tab {
         Tab::Ntp,
         Tab::Upnp,
         Tab::Services,
+        Tab::Mtu,
     ];
 
     /// Whether the tab shows until the user turns it on or off. The tools that most people reach
-    /// for rarely (TLS, SNMP, subnet, clock, UPnP and services) start hidden; they are one tick away in Settings.
+    /// for rarely (TLS, SNMP, subnet, clock, UPnP, services and MTU) start hidden; they are one tick away in Settings.
     pub fn shown_by_default(self) -> bool {
         !matches!(
             self,
-            Self::Tls | Self::Snmp | Self::Subnet | Self::Ntp | Self::Upnp | Self::Services
+            Self::Tls
+                | Self::Snmp
+                | Self::Subnet
+                | Self::Ntp
+                | Self::Upnp
+                | Self::Services
+                | Self::Mtu
         )
     }
 
@@ -72,6 +80,7 @@ impl Tab {
             Self::Ntp => "Clock",
             Self::Upnp => "UPnP",
             Self::Services => "Services",
+            Self::Mtu => "MTU",
             Self::Settings => "Settings",
         }
     }
@@ -90,6 +99,7 @@ impl Tab {
             Self::Ntp => lucide::alarm_clock_check(),
             Self::Upnp => lucide::network(),
             Self::Services => lucide::radio(),
+            Self::Mtu => lucide::ruler(),
             Self::Settings => lucide::settings(),
         }
     }

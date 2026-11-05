@@ -17,6 +17,7 @@ mod latency_tab;
 mod map_dialog;
 mod modal;
 mod monitor;
+mod mtu_tab;
 mod notify;
 mod ntp_tab;
 mod opener;

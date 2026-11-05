@@ -109,12 +109,16 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A Services tab asks the network what announces itself over multicast DNS and SSDP: printers, Chromecasts, AirPlay, file shares, media servers and more. Results are grouped by kind with name, address, port and text records, and a row links to the device in the Devices tab when its address was scanned. It only listens for what devices say about themselves
 
+**Path MTU**
+
+- An MTU tab finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link. It uses the system `tracepath` where there is one, which also says at which hop the size dropped, and `ping` with the do-not-fragment flag elsewhere. It compares the result with the usual values (1500, 1492, 1480, 1420, 1400) and says what it means. No raw sockets
+
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP and Services start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services and MTU start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run
