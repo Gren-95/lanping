@@ -15,6 +15,7 @@ use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_sca
 use lanping_core::labels::DeviceLabels;
 use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::measurements::{Measurement, save as save_measurement};
+use lanping_core::ndt7::Server;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
@@ -39,7 +40,8 @@ use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
-use crate::speed_tab::{Source, SpeedPage, SpeedState, TestLength};
+use crate::speed_locations::LocationChoice;
+use crate::speed_tab::{Source, SpeedPage, SpeedService, SpeedState, TestLength};
 use crate::storage::{
     device_notes_path, export_directory, history_directory, labels_path, measurements_directory,
     migrate_legacy_data, settings_path,
@@ -207,6 +209,10 @@ pub enum Message {
     TraceRound(u64, Result<Vec<HopSample>, TraceError>),
     TraceCopyRows,
     SpeedPagePicked(SpeedPage),
+    SpeedServicePicked(SpeedService),
+    SpeedLocationPicked(LocationChoice),
+    SpeedServersFound(u64, Result<Vec<Server>, String>),
+    SpeedServerPicked(Server),
     SpeedLanTargetChanged(String),
     SpeedLengthPicked(TestLength),
     SpeedStart(Source, Direction),
@@ -602,6 +608,12 @@ impl LanPing {
             Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
             Message::LatencyLogPathChosen(None) => {}
             Message::SpeedPagePicked(page) => self.speed.page = page,
+            Message::SpeedServicePicked(service) => return self.speed.set_service(service),
+            Message::SpeedLocationPicked(location) => return self.speed.set_location(location),
+            Message::SpeedServersFound(generation, result) => {
+                self.speed.servers_found(generation, result);
+            }
+            Message::SpeedServerPicked(server) => self.speed.set_server(server),
             Message::SpeedLanTargetChanged(target) => self.speed.lan_target = target,
             Message::SpeedLengthPicked(length) => self.speed.length = length,
             Message::SpeedStart(source, direction) => {

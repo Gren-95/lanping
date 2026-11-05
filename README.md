@@ -77,7 +77,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Speed**
 
-- A Speed tab measures download and upload speed against `speed.cloudflare.com`, and between two computers that run LanPing: start the test server on one (default port 5252) and run a test against it from the other. Each test shows the speed per second as a graph
+- A Speed tab measures download and upload speed against `speed.cloudflare.com` or against M-Lab's open NDT7 servers around the world (pick the nearest, or a country, and a server), and between two computers that run LanPing: start the test server on one (default port 5252) and run a test against it from the other. Each test shows the speed per second as a graph
 - Finished speed tests and latency runs are saved next to the saved scans and listed on the History page
 
 **DNS**

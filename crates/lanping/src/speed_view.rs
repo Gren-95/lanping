@@ -12,7 +12,10 @@ use lanping_core::throughput::Direction;
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::sparkline::{Bar, chart};
-use crate::speed_tab::{Run, ServerStatus, Source, SpeedPage, SpeedState, TestLength};
+use crate::speed_locations::LocationChoice;
+use crate::speed_tab::{
+    Run, ServerStatus, Source, SpeedPage, SpeedService, SpeedState, TestLength,
+};
 use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
 use crate::timestamp::format_unix_utc;
 use crate::view::input_group;
@@ -29,6 +32,8 @@ const CHART_HEIGHT: f32 = 100.0;
 const TILE_WIDTH: f32 = 150.0;
 const TILE_PADDING: f32 = 12.0;
 const LENGTH_PICK_WIDTH: f32 = 130.0;
+const SERVICE_PICK_WIDTH: f32 = 260.0;
+const LOCATION_PICK_WIDTH: f32 = 230.0;
 const PORT_INPUT_WIDTH: f32 = 110.0;
 const ROW_PADDING: [f32; 2] = [8.0, 12.0];
 const BYTES_PER_MEGABYTE: f64 = 1_000_000.0;
@@ -72,15 +77,65 @@ fn heading<'a>(title: &'static str) -> Element<'a, Message> {
 }
 
 fn internet_page(speed: &SpeedState) -> Element<'_, Message> {
-    column![
-        note(format!(
-            "Measures against {SERVICE_HOST} over HTTPS. Each test sends real traffic there, and that service can see your IP address."
-        )),
-        test_buttons(speed, Source::Internet),
-        run_view(&speed.run),
-    ]
-    .spacing(SECTION_SPACING)
-    .into()
+    let service = pick_list(
+        SpeedService::ALL,
+        Some(speed.service),
+        Message::SpeedServicePicked,
+    )
+    .text_size(TEXT_SIZE)
+    .padding(theme::CONTROL_PADDING)
+    .width(SERVICE_PICK_WIDTH)
+    .style(theme::pick_at(Edge::Alone));
+    let mut page = column![service].spacing(SECTION_SPACING);
+    match speed.service {
+        SpeedService::Cloudflare => {
+            page = page.push(note(format!(
+                "Measures against {SERVICE_HOST} over HTTPS. Each test sends real traffic there, and that service can see your IP address."
+            )));
+        }
+        SpeedService::Mlab => {
+            page = page
+                .push(note(
+                    "M-Lab runs open measurement servers around the world (the NDT7 protocol). A test lasts at most 10 seconds, and the server can see your IP address.",
+                ))
+                .push(mlab_servers(speed));
+        }
+    }
+    page.push(test_buttons(speed, speed.service.source()))
+        .push(run_view(&speed.run))
+        .into()
+}
+
+/// The location and server pickers for M-Lab.
+fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
+    let location = pick_list(
+        LocationChoice::all(),
+        Some(speed.location),
+        Message::SpeedLocationPicked,
+    )
+    .text_size(TEXT_SIZE)
+    .padding(theme::CONTROL_PADDING)
+    .width(LOCATION_PICK_WIDTH)
+    .style(theme::pick_at(Edge::First));
+    let server = pick_list(
+        speed.servers.clone(),
+        speed.selected_server.clone(),
+        Message::SpeedServerPicked,
+    )
+    .placeholder(if speed.locating {
+        "Looking for servers"
+    } else {
+        "No server"
+    })
+    .text_size(TEXT_SIZE)
+    .padding(theme::CONTROL_PADDING)
+    .width(Length::Fill)
+    .style(theme::pick_at(Edge::Last));
+    let mut section = column![input_group(vec![location.into(), server.into()])].spacing(6);
+    if let Some(error) = &speed.locate_error {
+        section = section.push(text(error.as_str()).size(13).color(BAD));
+    }
+    section.into()
 }
 
 fn lan_page(speed: &SpeedState) -> Element<'_, Message> {

@@ -8,6 +8,7 @@ use iced::Task;
 use iced::futures::SinkExt;
 use iced::task::Handle;
 use lanping_core::measurements::{Measurement, ThroughputRecord, list};
+use lanping_core::ndt7::{self, Server};
 use lanping_core::speedtest::{self, SERVICE_HOST};
 use lanping_core::throughput::{
     self, DEFAULT_PORT, Direction, ServedStream, ThroughputResult, run_client,
@@ -17,6 +18,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::app::Message;
+use crate::speed_locations::LocationChoice;
 
 const STREAM_BUFFER: usize = 64;
 /// Served streams of one test arrive together; ones this close are shown as one test.
@@ -46,8 +48,50 @@ impl SpeedPage {
 /// What a test is measured against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    Internet,
+    Cloudflare,
+    Mlab,
     Lan,
+}
+
+/// The service the Internet page tests against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SpeedService {
+    #[default]
+    Cloudflare,
+    Mlab,
+}
+
+impl SpeedService {
+    pub const ALL: [Self; 2] = [Self::Cloudflare, Self::Mlab];
+
+    pub fn source(self) -> Source {
+        match self {
+            Self::Cloudflare => Source::Cloudflare,
+            Self::Mlab => Source::Mlab,
+        }
+    }
+}
+
+impl std::fmt::Display for SpeedService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Cloudflare => "Cloudflare",
+            Self::Mlab => "M-Lab (servers worldwide)",
+        })
+    }
+}
+
+/// Where a started test runs, with what it needs to get there.
+enum Target {
+    Cloudflare,
+    Mlab {
+        location: ndt7::Location,
+        machine: String,
+    },
+    Lan {
+        host: String,
+        port: u16,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -105,6 +149,15 @@ pub struct ServedTest {
 
 pub struct SpeedState {
     pub page: SpeedPage,
+    pub service: SpeedService,
+    pub location: LocationChoice,
+    /// Servers found for the chosen location. Their addresses carry a token that expires, so a
+    /// test asks again for the chosen server just before it starts.
+    pub servers: Vec<Server>,
+    pub selected_server: Option<Server>,
+    pub locating: bool,
+    pub locate_error: Option<String>,
+    locate_generation: u64,
     pub lan_target: String,
     pub length: TestLength,
     pub run: Run,
@@ -165,6 +218,13 @@ impl SpeedState {
     pub fn new(history_directory: Option<&std::path::Path>) -> Self {
         Self {
             page: SpeedPage::default(),
+            service: SpeedService::default(),
+            location: LocationChoice::default(),
+            servers: Vec::new(),
+            selected_server: None,
+            locating: false,
+            locate_error: None,
+            locate_generation: 0,
             lan_target: String::new(),
             length: TestLength::default(),
             run: Run::Idle,
@@ -186,17 +246,87 @@ impl SpeedState {
         self.history = directory.map(list).unwrap_or_default();
     }
 
-    /// Starts a test. A bad LAN address shows as a failed run.
+    /// Chooses the service. M-Lab looks for servers when none are known yet.
+    pub fn set_service(&mut self, service: SpeedService) -> Task<Message> {
+        self.service = service;
+        if service == SpeedService::Mlab && self.servers.is_empty() && !self.locating {
+            return self.locate();
+        }
+        Task::none()
+    }
+
+    /// Chooses where to look for M-Lab servers, and looks.
+    pub fn set_location(&mut self, location: LocationChoice) -> Task<Message> {
+        self.location = location;
+        self.servers.clear();
+        self.selected_server = None;
+        self.locate()
+    }
+
+    fn locate(&mut self) -> Task<Message> {
+        self.locate_generation += 1;
+        self.locating = true;
+        self.locate_error = None;
+        let generation = self.locate_generation;
+        let location = self.location.location();
+        Task::perform(
+            async move { ndt7::locate(&location).await },
+            move |result| Message::SpeedServersFound(generation, result),
+        )
+    }
+
+    pub fn servers_found(&mut self, generation: u64, result: Result<Vec<Server>, String>) {
+        if generation != self.locate_generation {
+            return;
+        }
+        self.locating = false;
+        match result {
+            Ok(servers) => {
+                let kept = self.selected_server.as_ref().and_then(|chosen| {
+                    servers
+                        .iter()
+                        .find(|server| server.machine == chosen.machine)
+                        .cloned()
+                });
+                self.selected_server = kept.or_else(|| servers.first().cloned());
+                self.servers = servers;
+            }
+            Err(message) => {
+                self.servers.clear();
+                self.selected_server = None;
+                self.locate_error = Some(message);
+            }
+        }
+    }
+
+    pub fn set_server(&mut self, server: Server) {
+        self.selected_server = Some(server);
+    }
+
+    /// Starts a test. A missing server or a bad LAN address shows as a failed run.
     pub fn start_test(&mut self, source: Source, direction: Direction) -> Task<Message> {
         if self.running() {
             return Task::none();
         }
-        let (host, port, place) = match source {
-            Source::Internet => (String::new(), 0, format!("Internet ({SERVICE_HOST})")),
+        let (target, place) = match source {
+            Source::Cloudflare => (Target::Cloudflare, format!("Internet ({SERVICE_HOST})")),
+            Source::Mlab => match &self.selected_server {
+                Some(server) => (
+                    Target::Mlab {
+                        location: self.location.location(),
+                        machine: server.machine.clone(),
+                    },
+                    format!("Internet (M-Lab, {})", server.place()),
+                ),
+                None => {
+                    self.run = Run::Failed("Pick an M-Lab server first".to_owned());
+                    return Task::none();
+                }
+            },
             Source::Lan => match parse_lan_target(&self.lan_target) {
                 Ok((host, port)) => {
                     let place = format!("LAN ({host}:{port})");
-                    (host, port, place)
+                    (Target::Lan { host, port }, place)
                 }
                 Err(message) => {
                     self.run = Run::Failed(message);
@@ -210,14 +340,7 @@ impl SpeedState {
             direction,
             samples: Vec::new(),
         };
-        let stream = test_stream(
-            source,
-            host,
-            port,
-            direction,
-            self.length.seconds(),
-            self.generation,
-        );
+        let stream = test_stream(target, direction, self.length.seconds(), self.generation);
         let (task, handle) = Task::stream(stream).abortable();
         self.handle = Some(handle);
         task
@@ -335,9 +458,7 @@ impl SpeedState {
 
 /// Runs a test and reports each second, then the result.
 fn test_stream(
-    source: Source,
-    host: String,
-    port: u16,
+    target: Target,
     direction: Direction,
     seconds: u8,
     generation: u64,
@@ -345,9 +466,14 @@ fn test_stream(
     iced::stream::channel(STREAM_BUFFER, async move |mut output| {
         let (progress, mut ticks) = mpsc::unbounded_channel();
         let mut run = StopOnDrop(tokio::spawn(async move {
-            match source {
-                Source::Internet => speedtest::run(direction, seconds, Some(progress)).await,
-                Source::Lan => run_client(&host, port, direction, seconds, Some(progress)).await,
+            match target {
+                Target::Cloudflare => speedtest::run(direction, seconds, Some(progress)).await,
+                Target::Lan { host, port } => {
+                    run_client(&host, port, direction, seconds, Some(progress)).await
+                }
+                Target::Mlab { location, machine } => {
+                    run_mlab(&location, &machine, direction, seconds, progress).await
+                }
             }
         }));
         while let Some(mbps) = ticks.recv().await {
@@ -366,6 +492,24 @@ fn test_stream(
             .send(Message::SpeedFinished(generation, result))
             .await;
     })
+}
+
+/// Asks M-Lab for fresh server addresses, since the ones found earlier expire, and tests
+/// against the chosen machine, or the first one offered if it is gone.
+async fn run_mlab(
+    location: &ndt7::Location,
+    machine: &str,
+    direction: Direction,
+    seconds: u8,
+    progress: mpsc::UnboundedSender<f64>,
+) -> Result<ThroughputResult, String> {
+    let servers = ndt7::locate(location).await?;
+    let server = servers
+        .iter()
+        .find(|server| server.machine == machine)
+        .or(servers.first())
+        .ok_or_else(|| "M-Lab has no test server there".to_owned())?;
+    ndt7::run(server, direction, seconds, Some(progress)).await
 }
 
 /// Listens for tests and reports each stream it serves, until stopped.
@@ -488,6 +632,54 @@ mod tests {
         assert_eq!(state.served[0].bytes, 150);
     }
 
+    fn server(machine: &str) -> Server {
+        Server::new(machine, "City", "XX", "wss://h/d", "wss://h/u")
+    }
+
+    #[test]
+    fn found_servers_select_the_first_and_keep_a_still_listed_choice() {
+        let mut state = SpeedState::new(None);
+        state.locate_generation = 1;
+        state.servers_found(1, Ok(vec![server("a.example"), server("b.example")]));
+        assert_eq!(state.selected_server.as_ref().unwrap().machine, "a.example");
+        state.set_server(server("b.example"));
+        state.locate_generation = 2;
+        state.servers_found(2, Ok(vec![server("a.example"), server("b.example")]));
+        assert_eq!(state.selected_server.as_ref().unwrap().machine, "b.example");
+        state.locate_generation = 3;
+        state.servers_found(3, Ok(vec![server("c.example")]));
+        assert_eq!(state.selected_server.as_ref().unwrap().machine, "c.example");
+    }
+
+    #[test]
+    fn a_failed_search_clears_the_servers_and_keeps_the_reason() {
+        let mut state = SpeedState::new(None);
+        state.locate_generation = 1;
+        state.servers_found(1, Ok(vec![server("a.example")]));
+        state.locate_generation = 2;
+        state.servers_found(2, Err("M-Lab has no test server there".to_owned()));
+        assert!(state.servers.is_empty() && state.selected_server.is_none());
+        assert_eq!(
+            state.locate_error.as_deref(),
+            Some("M-Lab has no test server there")
+        );
+    }
+
+    #[test]
+    fn an_answer_for_an_older_search_is_ignored() {
+        let mut state = SpeedState::new(None);
+        state.locate_generation = 5;
+        state.servers_found(4, Ok(vec![server("old.example")]));
+        assert!(state.servers.is_empty());
+    }
+
+    #[test]
+    fn an_mlab_test_needs_a_chosen_server() {
+        let mut state = SpeedState::new(None);
+        let _ = state.start_test(Source::Mlab, Direction::Download);
+        assert!(matches!(state.run, Run::Failed(ref message) if message.contains("server")));
+    }
+
     #[test]
     fn a_bad_server_port_is_an_error_and_nothing_listens() {
         let mut state = SpeedState::new(None);
@@ -513,14 +705,11 @@ mod tests {
             let Some(Message::SpeedServerListening(port, _)) = server.next().await else {
                 panic!("the server should say it is listening first");
             };
-            let mut test = Box::pin(test_stream(
-                Source::Lan,
-                "127.0.0.1".to_owned(),
+            let target = Target::Lan {
+                host: "127.0.0.1".to_owned(),
                 port,
-                Direction::Download,
-                2,
-                7,
-            ));
+            };
+            let mut test = Box::pin(test_stream(target, Direction::Download, 2, 7));
             let mut ticks = 0;
             let result = loop {
                 match test.next().await {

@@ -63,6 +63,22 @@ pub struct Server {
 }
 
 impl Server {
+    pub fn new(
+        machine: &str,
+        city: &str,
+        country: &str,
+        download_url: &str,
+        upload_url: &str,
+    ) -> Self {
+        Self {
+            machine: machine.to_owned(),
+            city: city.to_owned(),
+            country: country.to_owned(),
+            download_url: download_url.to_owned(),
+            upload_url: upload_url.to_owned(),
+        }
+    }
+
     /// `Tokyo, JP`, or just the country when the city is unknown.
     pub fn place(&self) -> String {
         if self.city.is_empty() {
