@@ -40,7 +40,9 @@ use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
 
 use crate::actions::{Effect, HostAction};
+use crate::computer_tab::ComputerPage;
 use crate::copy_text::rows_as_text;
+use crate::devices_tab::DevicesPage;
 use crate::dns_tab::{DnsPage, DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
@@ -106,6 +108,8 @@ pub struct LanPing {
     pub latency: LatencyState,
     pub dns: DnsState,
     pub path_page: PathPage,
+    pub devices_page: DevicesPage,
+    pub computer_page: ComputerPage,
     pub router_page: RouterPage,
     pub tls: TlsState,
     pub ntp: NtpState,
@@ -196,6 +200,8 @@ impl LanPing {
             latency: LatencyState::default(),
             dns: DnsState::new(),
             path_page: PathPage::default(),
+            devices_page: DevicesPage::default(),
+            computer_page: ComputerPage::default(),
             router_page: RouterPage::default(),
             tls: TlsState::new(),
             ntp: NtpState::new(),
@@ -545,6 +551,8 @@ impl LanPing {
             Message::UpnpDone(generation, result) => self.upnp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
             Message::PathPagePicked(page) => self.path_page = page,
+            Message::DevicesPagePicked(page) => self.devices_page = page,
+            Message::ComputerPagePicked(page) => self.computer_page = page,
             Message::RouterPagePicked(page) => self.router_page = page,
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
             Message::WhoisLookup => return self.dns.whois.start(),

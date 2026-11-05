@@ -5,6 +5,8 @@ use iced::widget::{
 use iced::{Alignment, Element, Length};
 
 use crate::app::{HistoryEntry, LanPing, Message, Notice};
+use crate::computer_tab::computer_panel;
+use crate::devices_tab::{DevicesPage, devices_strip};
 use crate::dns_tab::dns_panel;
 use crate::export_format::ExportFormat;
 use crate::filter_bar::filter_bar;
@@ -12,20 +14,18 @@ use crate::host_order::SortKey;
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
 use crate::modal::overlay;
 use crate::monitor::AutoInterval;
-use crate::network_tab::network_panel;
-use crate::ntp_tab::ntp_panel;
 use crate::path_tab::path_panel;
 use crate::results::{pill, results};
 use crate::router_tab::router_panel;
-use crate::services_tab::services_panel;
+use crate::services_tab::services_page;
 use crate::settings_page::settings_panel;
 use crate::speed_view::speed_panel;
-use crate::subnet_tab::subnet_panel;
 use crate::tabs::{Tab, tab_bar};
 use crate::theme::Edge;
 use crate::theme::{
     self, ACCENT, BAD, BOLD, GOOD, ITEM_SPACING, MUTED, PANEL_PADDING, SECTION_SPACING, TEXT,
 };
+use crate::ui::tabbed_panel;
 use crate::wifi_tab::wifi_panel;
 use lanping_core::ScanStage;
 use lanping_core::diff::HostStatus;
@@ -56,16 +56,17 @@ pub fn view(app: &LanPing) -> Element<'_, Message> {
 
 fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
     let (top, content) = match app.tab {
+        Tab::Scan if app.devices_page == DevicesPage::Services => (
+            header(app),
+            tabbed_panel(devices_strip(app.devices_page), services_page(app)),
+        ),
         Tab::Scan => (scan_top(app, width), results_panel(app, width)),
         Tab::Wifi => (header(app), wifi_panel(app, width)),
         Tab::Path => (header(app), path_panel(app)),
         Tab::Speed => (header(app), speed_panel(app)),
         Tab::Dns => (header(app), dns_panel(app, width)),
         Tab::Router => (header(app), router_panel(app)),
-        Tab::Subnet => (header(app), subnet_panel(app)),
-        Tab::Ntp => (header(app), ntp_panel(app)),
-        Tab::Services => (header(app), services_panel(app)),
-        Tab::Network => (header(app), network_panel(app)),
+        Tab::Network => (header(app), computer_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
     column![top, tab_bar(app), content, status_line(app)]
@@ -222,9 +223,13 @@ fn progress_row(app: &LanPing) -> Element<'_, Message> {
 }
 
 fn results_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
-    let content = column![toolbar(app, width >= TOOLBAR_ROW_WIDTH), results(app)]
-        .spacing(ITEM_SPACING)
-        .height(Length::Fill);
+    let content = column![
+        devices_strip(app.devices_page),
+        toolbar(app, width >= TOOLBAR_ROW_WIDTH),
+        results(app)
+    ]
+    .spacing(ITEM_SPACING)
+    .height(Length::Fill);
     container(
         container(content)
             .padding(PANEL_PADDING)

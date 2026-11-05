@@ -13,7 +13,7 @@ use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
 use crate::job::Job;
 use crate::settings_page::small_button;
 use crate::theme::{self, BOLD, MUTED, SECTION_SPACING};
-use crate::ui::{empty_state, page_header, panel, scrolling};
+use crate::ui::{empty_state, page_header, scrolling};
 
 const CARD_PADDING: f32 = 12.0;
 const GROUP_SPACING: f32 = 8.0;
@@ -65,7 +65,7 @@ impl ServicesState {
     }
 }
 
-pub fn services_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn services_page(app: &LanPing) -> Element<'_, Message> {
     let busy = matches!(app.services.lookup, Lookup::Running);
     let browse_button = with_tooltip(
         button(
@@ -100,11 +100,10 @@ pub fn services_panel(app: &LanPing) -> Element<'_, Message> {
             scrolling(results(entries, &app.hosts, &app.services.expanded)).into()
         }
     };
-    panel(
-        column![header, content]
-            .spacing(SECTION_SPACING)
-            .height(Length::Fill),
-    )
+    column![header, content]
+        .spacing(SECTION_SPACING)
+        .height(Length::Fill)
+        .into()
 }
 
 fn results<'a>(

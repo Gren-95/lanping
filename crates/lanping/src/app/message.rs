@@ -223,6 +223,8 @@ pub enum Message {
     UpnpDone(u64, Result<UpnpReport, UpnpError>),
     DnsPagePicked(DnsPage),
     PathPagePicked(PathPage),
+    DevicesPagePicked(DevicesPage),
+    ComputerPagePicked(ComputerPage),
     RouterPagePicked(RouterPage),
     WhoisQueryChanged(String),
     WhoisLookup,

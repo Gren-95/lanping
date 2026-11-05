@@ -3,7 +3,9 @@
 
 mod actions;
 mod app;
+mod computer_tab;
 mod copy_text;
+mod devices_tab;
 mod dns_tab;
 mod export_format;
 mod filter_bar;

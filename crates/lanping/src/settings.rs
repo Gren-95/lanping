@@ -385,7 +385,10 @@ mod tests {
             {"tab":"Latency","visible":true},
             {"tab":"Snmp","visible":false},
             {"tab":"Upnp","visible":false},
-            {"tab":"Tls","visible":true}]}"#;
+            {"tab":"Tls","visible":true},
+            {"tab":"Subnet","visible":false},
+            {"tab":"Ntp","visible":true},
+            {"tab":"Services","visible":false}]}"#;
         let path = std::env::temp_dir().join(format!("lanping-folded-{}.json", std::process::id()));
         std::fs::write(&path, json).unwrap();
         let settings = Settings::load(&path).unwrap();
@@ -402,6 +405,14 @@ mod tests {
         assert!(
             !settings.tabs[find(Tab::Router)].visible,
             "none of the router tabs was shown"
+        );
+        assert!(
+            settings.tabs[find(Tab::Network)].visible,
+            "the clock tab was shown"
+        );
+        assert!(
+            settings.tabs[find(Tab::Scan)].visible,
+            "Services folds into Devices, which always shows"
         );
     }
 

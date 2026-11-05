@@ -22,9 +22,6 @@ pub enum Tab {
     Speed,
     Dns,
     Router,
-    Subnet,
-    Ntp,
-    Services,
     Network,
     /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
@@ -32,16 +29,13 @@ pub enum Tab {
 
 impl Tab {
     /// The tabs that can be shown, hidden and reordered, in their default order.
-    pub const CONFIGURABLE: [Tab; 10] = [
+    pub const CONFIGURABLE: [Tab; 7] = [
         Tab::Scan,
         Tab::Wifi,
         Tab::Path,
         Tab::Speed,
         Tab::Dns,
         Tab::Router,
-        Tab::Subnet,
-        Tab::Ntp,
-        Tab::Services,
         Tab::Network,
     ];
 
@@ -60,6 +54,8 @@ impl Tab {
             "Trace" | "Latency" => Some(Self::Path),
             "Snmp" | "Upnp" | "Syslog" => Some(Self::Router),
             "Tls" => Some(Self::Dns),
+            "Subnet" | "Ntp" => Some(Self::Network),
+            "Services" => Some(Self::Scan),
             _ => None,
         }
     }
@@ -72,10 +68,7 @@ impl Tab {
             Self::Speed => "Speed",
             Self::Dns => "DNS",
             Self::Router => "Router",
-            Self::Subnet => "Subnet",
-            Self::Ntp => "Clock",
-            Self::Services => "Services",
-            Self::Network => "My network",
+            Self::Network => "This computer",
             Self::Settings => "Settings",
         }
     }
@@ -88,9 +81,6 @@ impl Tab {
             Self::Speed => lucide::zap(),
             Self::Dns => lucide::globe(),
             Self::Router => lucide::router(),
-            Self::Subnet => lucide::calculator(),
-            Self::Ntp => lucide::alarm_clock_check(),
-            Self::Services => lucide::radio(),
             Self::Network => lucide::house(),
             Self::Settings => lucide::settings(),
         }

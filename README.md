@@ -95,11 +95,11 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Subnet**
 
-- A Subnet tab turns an address with a prefix length or netmask into network, broadcast, host range and host count, for IPv4 and IPv6, and can start a scan of the range
+- A Subnet page in the This computer tab turns an address with a prefix length or netmask into network, broadcast, host range and host count, for IPv4 and IPv6, and can start a scan of the range
 
 **Clock**
 
-- A Clock tab asks a time server over SNTP how far this computer's clock is ahead or behind, and how long the round trip took. It offers a few well-known servers or any you type, and warns when the clock is off by a second or more. Nothing on this computer is changed
+- A Clock page in the This computer tab asks a time server over SNTP how far this computer's clock is ahead or behind, and how long the round trip took. It offers a few well-known servers or any you type, and warns when the clock is off by a second or more. Nothing on this computer is changed
 
 **UPnP**
 
@@ -107,15 +107,15 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 **Services**
 
-- A Services tab asks the network what announces itself over multicast DNS and SSDP: printers, Chromecasts, AirPlay, file shares, media servers and more. Results are grouped by kind with name, address, port and text records, and a row links to the device in the Devices tab when its address was scanned. It only listens for what devices say about themselves
+- A Services page in the Devices tab asks the network what announces itself over multicast DNS and SSDP: printers, Chromecasts, AirPlay, file shares, media servers and more. Results are grouped by kind with name, address, port and text records, and a row links to the device in the Devices tab when its address was scanned. It only listens for what devices say about themselves
 
 **My network**
 
-- A My network tab shows what people look up constantly: this computer's addresses per interface (IPv4 and IPv6, with link-local ones marked), the gateway, the DNS servers and the Wi-Fi name, each with a copy button. Those are read from this computer only. A separate button checks the public address, whether IPv6 works and whether a sign-in page is in the way; it says up front that it contacts Cloudflare and sends nothing unless pressed
+- A My network page in the This computer tab shows what people look up constantly: this computer's addresses per interface (IPv4 and IPv6, with link-local ones marked), the gateway, the DNS servers and the Wi-Fi name, each with a copy button. Those are read from this computer only. A separate button checks the public address, whether IPv6 works and whether a sign-in page is in the way; it says up front that it contacts Cloudflare and sends nothing unless pressed
 
-**Pages of the DNS, Path and Router tabs**
+**Pages of the tabs**
 
-- The DNS tab has five pages: Lookup, WHOIS, Website, Email records and TLS. The Path tab has three: Trace, Latency and MTU. The Router tab has three: SNMP, UPnP and Syslog. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
+- The DNS tab has five pages: Lookup, WHOIS, Website, Email records and TLS. The Path tab has three: Trace, Latency and MTU. The Router tab has three: SNMP, UPnP and Syslog. The This computer tab has three: My network, Clock and Subnet. The Devices tab has two: Devices and Services. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
 
 **Syslog**
 
@@ -126,7 +126,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). Router, Subnet, Clock, Services and My network start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). Router and This computer start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Command line
