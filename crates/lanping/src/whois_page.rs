@@ -7,6 +7,7 @@ use lanping_core::whois::{WhoisError, WhoisReport, whois};
 
 use crate::app::Message;
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::theme::{self, BAD, Edge, MUTED};
 use crate::view::input_group;
 
@@ -31,8 +32,7 @@ enum Lookup {
 pub struct WhoisState {
     query: String,
     lookup: Lookup,
-    /// Counts lookups, so an answer that was overtaken is ignored.
-    generation: u64,
+    job: Job,
 }
 
 impl WhoisState {
@@ -40,7 +40,7 @@ impl WhoisState {
         Self {
             query: String::new(),
             lookup: Lookup::Idle,
-            generation: 0,
+            job: Job::default(),
         }
     }
 
@@ -49,19 +49,17 @@ impl WhoisState {
     }
 
     pub fn start(&mut self) -> Task<Message> {
-        self.generation += 1;
         self.lookup = Lookup::Running;
         let query = self.query.clone();
-        let generation = self.generation;
-        Task::perform(async move { whois(&query).await }, move |result| {
-            Message::WhoisDone(generation, result)
-        })
+        self.job
+            .spawn(async move { whois(&query).await }, Message::WhoisDone)
     }
 
     pub fn finish(&mut self, generation: u64, result: Result<WhoisReport, WhoisError>) {
-        if generation != self.generation {
+        if !self.job.is_current(generation) {
             return;
         }
+        self.job.finished();
         self.lookup = match result {
             Ok(report) => Lookup::Done(report),
             Err(error) => Lookup::Failed(error),

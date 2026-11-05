@@ -1,15 +1,16 @@
 //! The SNMP tab state: ask a router or switch over SNMP how much each interface carries.
 
 use std::net::Ipv4Addr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use iced::Task;
-use iced::task::Handle;
 use lanping_core::gateway::default_gateway;
 use lanping_core::snmp::SnmpCommunity;
 use lanping_core::snmp_interfaces::{Agent, Interface, Poll, RateTracker, SnmpError};
 
 use crate::app::Message;
+use crate::job::Job;
 
 /// Time between two readings. Short enough that 32-bit counters, which wrap in about 34
 /// seconds at 1 Gbit/s, are read before they wrap twice.
@@ -39,9 +40,9 @@ pub struct SnmpState {
     /// Readings that failed since the last good one.
     pub failures: u8,
     agent: Option<Agent>,
-    /// Counts starts and stops, so an answer from a stopped monitor is ignored.
-    generation: u64,
-    handle: Option<Handle>,
+    /// The interfaces a reading asks about, shared with every poll.
+    poll_plan: Arc<[Interface]>,
+    job: Job,
 }
 
 impl SnmpState {
@@ -55,8 +56,8 @@ impl SnmpState {
             tracker: RateTracker::default(),
             failures: 0,
             agent: None,
-            generation: 0,
-            handle: None,
+            poll_plan: Arc::from([]),
+            job: Job::default(),
         }
     }
 
@@ -80,7 +81,6 @@ impl SnmpState {
             return Task::none();
         }
         self.stop();
-        self.generation += 1;
         self.status = Status::Connecting;
         self.interfaces.clear();
         self.tracker = RateTracker::default();
@@ -90,20 +90,14 @@ impl SnmpState {
             agent = agent.with_port(port);
         }
         self.agent = Some(agent.clone());
-        let generation = self.generation;
-        let (task, handle) = Task::perform(async move { agent.discover().await }, move |result| {
-            Message::SnmpDiscovered(generation, result)
-        })
-        .abortable();
-        self.handle = Some(handle);
-        task
+        self.job.spawn(
+            async move { agent.discover().await },
+            Message::SnmpDiscovered,
+        )
     }
 
     pub fn stop(&mut self) {
-        self.generation += 1;
-        if let Some(handle) = self.handle.take() {
-            handle.abort();
-        }
+        self.job.cancel();
         if self.running() {
             self.status = Status::Idle;
         }
@@ -114,25 +108,28 @@ impl SnmpState {
         generation: u64,
         result: Result<Vec<Interface>, SnmpError>,
     ) -> Task<Message> {
-        if generation != self.generation || !matches!(self.status, Status::Connecting) {
+        if !self.job.is_current(generation) || !matches!(self.status, Status::Connecting) {
             return Task::none();
         }
         match result {
             Ok(interfaces) => {
+                // What a reading asks about never changes, so it is made once and shared
+                // with every poll instead of copied each time.
+                self.poll_plan = interfaces.clone().into();
                 self.interfaces = interfaces;
                 self.status = Status::Running;
                 self.next_poll(Duration::ZERO)
             }
             Err(error) => {
                 self.status = Status::Failed(error.to_string());
-                self.handle = None;
+                self.job.finished();
                 Task::none()
             }
         }
     }
 
     pub fn polled(&mut self, generation: u64, result: Result<Poll, SnmpError>) -> Task<Message> {
-        if generation != self.generation || !matches!(self.status, Status::Running) {
+        if !self.job.is_current(generation) || !matches!(self.status, Status::Running) {
             return Task::none();
         }
         match result {
@@ -149,7 +146,7 @@ impl SnmpState {
                 self.failures += 1;
                 if self.failures >= MAX_FAILURES {
                     self.status = Status::Failed(error.to_string());
-                    self.handle = None;
+                    self.job.finished();
                     return Task::none();
                 }
             }
@@ -161,16 +158,12 @@ impl SnmpState {
         let Some(agent) = self.agent.clone() else {
             return Task::none();
         };
-        let interfaces = self.interfaces.clone();
-        let generation = self.generation;
+        let plan = Arc::clone(&self.poll_plan);
         let poll = async move {
             tokio::time::sleep(delay).await;
-            agent.poll(&interfaces).await
+            agent.poll(&plan).await
         };
-        let (task, handle) =
-            Task::perform(poll, move |result| Message::SnmpPolled(generation, result)).abortable();
-        self.handle = Some(handle);
-        task
+        self.job.spawn_next(poll, Message::SnmpPolled)
     }
 
     /// The interfaces to list: the ones that are up, unless all are asked for. Loopbacks only
@@ -255,7 +248,7 @@ mod tests {
 
     fn running() -> SnmpState {
         let mut state = SnmpState::new();
-        state.generation = 1;
+        state.job.cancel();
         state.status = Status::Running;
         state
     }
@@ -311,7 +304,7 @@ mod tests {
     #[test]
     fn a_failed_listing_shows_why_and_stops() {
         let mut state = SnmpState::new();
-        state.generation = 1;
+        state.job.cancel();
         state.status = Status::Connecting;
         let _ = state.discovered(1, Err(SnmpError::NoAnswer));
         assert!(matches!(state.status, Status::Failed(ref m) if m.contains("community")));

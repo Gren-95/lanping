@@ -4,7 +4,6 @@ use std::fmt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use iced::font::Weight;
-use iced::task::Handle;
 use iced::widget::{
     Row as LayoutRow, button, column, container, pick_list, space, text, text_input,
 };
@@ -15,6 +14,7 @@ use lanping_core::trace::validate_target;
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::results::pill;
 use crate::sparkline::{Bar, chart};
 use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
@@ -75,9 +75,7 @@ pub struct LatencyState {
     prober: Option<Prober>,
     running: bool,
     error: Option<LatencyError>,
-    /// Counts starts and stops, so an answer from a stopped run is ignored.
-    generation: u64,
-    handle: Option<Handle>,
+    job: Job,
 }
 
 impl LatencyState {
@@ -101,22 +99,15 @@ impl LatencyState {
         self.error = None;
         self.running = true;
         let target = self.target.clone();
-        let generation = self.generation;
-        let (task, handle) = Task::perform(
+        self.job.spawn(
             async move { Prober::connect(&target).await },
-            move |result| Message::LatencyReady(generation, result),
+            Message::LatencyReady,
         )
-        .abortable();
-        self.handle = Some(handle);
-        task
     }
 
     pub fn stop(&mut self) {
         self.running = false;
-        self.generation += 1;
-        if let Some(handle) = self.handle.take() {
-            handle.abort();
-        }
+        self.job.cancel();
     }
 
     /// The target resolved: remember how to probe it and send the first probe.
@@ -125,7 +116,7 @@ impl LatencyState {
         generation: u64,
         result: Result<Prober, LatencyError>,
     ) -> Task<Message> {
-        if generation != self.generation || !self.running {
+        if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
         match result {
@@ -136,7 +127,7 @@ impl LatencyState {
             Err(error) => {
                 self.error = Some(error);
                 self.running = false;
-                self.handle = None;
+                self.job.finished();
                 Task::none()
             }
         }
@@ -144,7 +135,7 @@ impl LatencyState {
 
     /// Records a probe and schedules the next one.
     pub fn sampled(&mut self, generation: u64, rtt_ms: Option<f64>) -> Task<Message> {
-        if generation != self.generation || !self.running {
+        if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
         self.series.record(unix_seconds(), rtt_ms);
@@ -155,15 +146,11 @@ impl LatencyState {
         let Some(prober) = self.prober.clone() else {
             return Task::none();
         };
-        let generation = self.generation;
         let probe = async move {
             tokio::time::sleep(delay).await;
             prober.sample().await
         };
-        let (task, handle) =
-            Task::perform(probe, move |rtt| Message::LatencySample(generation, rtt)).abortable();
-        self.handle = Some(handle);
-        task
+        self.job.spawn_next(probe, Message::LatencySample)
     }
 
     /// The run so far as a record for the history. `None` before the first probe.

@@ -36,12 +36,13 @@ use crate::copy_text::rows_as_text;
 use crate::dns_tab::{DnsPage, DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
-use crate::host_order::{SortKey, compare_hosts};
+use crate::host_order::SortKey;
 use crate::host_rows::Row;
 use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
+use crate::row_list::{RowInputs, RowList};
 use crate::settings::{Column, Settings, SettingsTab};
 use crate::snmp_tab::SnmpState;
 use crate::speed_locations::LocationChoice;
@@ -313,6 +314,7 @@ pub struct LanPing {
     /// Tab being dragged in the tab list of the settings.
     pub tab_drag: Option<Tab>,
     pub hosts: Vec<Host>,
+    pub row_list: RowList,
     pub diff: ScanDiff,
     pub sort_key: SortKey,
     pub sort_ascending: bool,
@@ -440,6 +442,7 @@ impl LanPing {
             column_drag: None,
             tab_drag: None,
             hosts: Vec::new(),
+            row_list: RowList::default(),
             diff: ScanDiff::default(),
             sort_key: SortKey::Address,
             sort_ascending: true,
@@ -458,6 +461,7 @@ impl LanPing {
         if let Some(path) = std::env::args_os().nth(1) {
             app.open_scan_file(PathBuf::from(path));
         }
+        app.refresh_rows();
         let first_scan = if app.settings.scan_on_startup {
             Task::done(Message::StartScan)
         } else {
@@ -497,6 +501,16 @@ impl LanPing {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.handle(message);
+        // The rows only show on the devices tab. Going back to it is a message too, so they are
+        // up to date by the time they are drawn.
+        if self.tab == Tab::Scan {
+            self.refresh_rows();
+        }
+        task
+    }
+
+    fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FocusSearch => return iced::widget::operation::focus(SEARCH_INPUT_ID),
             Message::CopyText(text, label) => {
@@ -910,36 +924,23 @@ impl LanPing {
             .find(|host| host.device_key() == key)
     }
 
-    /// Live hosts followed by gone ones, filtered and ordered for display.
+    /// Live hosts followed by gone ones, filtered and ordered for display. The list is worked
+    /// out after each message, so drawing it costs no sorting or filtering.
     pub fn visible_rows(&self) -> Vec<Row<'_>> {
-        let live = self
-            .hosts
-            .iter()
-            .map(|host| (host, self.diff.status(host.ip).into()));
-        let gone = self.diff.gone.iter().map(|host| (host, RowStatus::Gone));
-        let mut rows: Vec<Row<'_>> = live
-            .chain(gone)
-            .map(|(host, status)| Row {
-                host,
-                status,
-                label: self.labels.get(&host.device_key()),
-            })
-            .filter(|row| {
-                let note = self.notes.get(&row.host.device_key());
-                self.filter.matches(row.host, row.label, note, row.status)
-            })
-            .collect();
-        rows.sort_by(|a, b| {
-            let gone_last = (a.status == RowStatus::Gone).cmp(&(b.status == RowStatus::Gone));
-            let order = compare_hosts(a.host, b.host, self.sort_key);
-            let order = if self.sort_ascending {
-                order
-            } else {
-                order.reverse()
-            };
-            gone_last.then(order)
+        self.row_list.rows(&self.hosts, &self.diff.gone)
+    }
+
+    /// Works the row list out again from the hosts, filter, order, names and notes.
+    fn refresh_rows(&mut self) {
+        self.row_list.rebuild(&RowInputs {
+            hosts: &self.hosts,
+            diff: &self.diff,
+            labels: &self.labels,
+            notes: &self.notes,
+            filter: &self.filter,
+            sort_key: self.sort_key,
+            ascending: self.sort_ascending,
         });
-        rows
     }
 
     fn open_url(&mut self, url: &str) {

@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use crate::text::contains_ignore_case;
 use serde::{Deserialize, Serialize};
 
 const MAX_FIELD_CHARS: usize = 200;
@@ -58,7 +59,7 @@ impl DeviceNote {
         [&self.owner, &self.location, &self.notes]
             .into_iter()
             .chain(&self.tags)
-            .any(|field| field.to_lowercase().contains(needle))
+            .any(|field| contains_ignore_case(field, needle))
     }
 }
 

@@ -110,8 +110,8 @@ fn internet_page(speed: &SpeedState) -> Element<'_, Message> {
 /// The location and server pickers for M-Lab.
 fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
     let location = pick_list(
-        speed.countries.clone(),
-        Some(speed.location.clone()),
+        speed.countries.as_slice(),
+        Some(&speed.location),
         Message::SpeedLocationPicked,
     )
     .text_size(TEXT_SIZE)
@@ -119,8 +119,8 @@ fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
     .width(LOCATION_PICK_WIDTH)
     .style(theme::pick_at(Edge::First));
     let server = pick_list(
-        speed.servers.clone(),
-        speed.selected_server.clone(),
+        speed.servers.as_slice(),
+        speed.selected_server.as_ref(),
         Message::SpeedServerPicked,
     )
     .placeholder(if speed.locating {

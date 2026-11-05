@@ -16,6 +16,7 @@ use lanping_core::dns::{
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::results::pill;
 use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
@@ -110,8 +111,9 @@ pub struct DnsState {
     resolver: ResolverChoice,
     lookup: Lookup,
     comparison: Comparison,
-    /// Counts lookups and comparisons, so an answer that was overtaken is ignored.
-    generation: u64,
+    /// The lookup and the comparison are separate runs, so one does not drop the other's answer.
+    lookup_job: Job,
+    comparison_job: Job,
 }
 
 impl DnsState {
@@ -128,7 +130,8 @@ impl DnsState {
             resolver,
             lookup: Lookup::Idle,
             comparison: Comparison::Idle,
-            generation: 0,
+            lookup_job: Job::default(),
+            comparison_job: Job::default(),
         }
     }
 
@@ -149,21 +152,20 @@ impl DnsState {
     }
 
     pub fn start_lookup(&mut self) -> Task<Message> {
-        self.generation += 1;
         self.lookup = Lookup::Running;
         let (server, name, record_type) =
             (self.resolver.address, self.name.clone(), self.record_type);
-        let generation = self.generation;
-        Task::perform(
+        self.lookup_job.spawn(
             async move { lookup(server, &name, record_type).await },
-            move |result| Message::DnsLookupDone(generation, result),
+            Message::DnsLookupDone,
         )
     }
 
     pub fn finish_lookup(&mut self, generation: u64, result: Result<Answer, DnsError>) {
-        if generation != self.generation {
+        if !self.lookup_job.is_current(generation) {
             return;
         }
+        self.lookup_job.finished();
         self.lookup = match result {
             Ok(answer) => Lookup::Done(answer),
             Err(error) => Lookup::Failed(error),
@@ -171,7 +173,6 @@ impl DnsState {
     }
 
     pub fn start_comparison(&mut self) -> Task<Message> {
-        self.generation += 1;
         self.comparison = Comparison::Running;
         let resolvers: Vec<(String, IpAddr)> = self
             .choices
@@ -179,15 +180,15 @@ impl DnsState {
             .map(|choice| (choice.label.clone(), choice.address))
             .collect();
         let name = self.name.clone();
-        let generation = self.generation;
-        Task::perform(
+        self.comparison_job.spawn(
             async move { benchmark(resolvers, &name).await },
-            move |timings| Message::DnsComparisonDone(generation, timings),
+            Message::DnsComparisonDone,
         )
     }
 
     pub fn finish_comparison(&mut self, generation: u64, timings: Vec<ResolverTiming>) {
-        if generation == self.generation {
+        if self.comparison_job.is_current(generation) {
+            self.comparison_job.finished();
             self.comparison = Comparison::Done(timings);
         }
     }
@@ -263,8 +264,8 @@ fn lookup_controls(dns: &DnsState, wide: bool) -> Element<'_, Message> {
     .width(TYPE_PICK_WIDTH)
     .style(theme::pick_at(type_edge));
     let resolver = pick_list(
-        dns.choices.clone(),
-        Some(dns.resolver.clone()),
+        dns.choices.as_slice(),
+        Some(&dns.resolver),
         Message::DnsResolverPicked,
     )
     .text_size(CONTROL_TEXT_SIZE)
@@ -484,6 +485,17 @@ mod tests {
         assert!(matches!(state.lookup, Lookup::Running));
         state.finish_lookup(2, Err(DnsError::Timeout));
         assert!(matches!(state.lookup, Lookup::Failed(DnsError::Timeout)));
+    }
+
+    #[test]
+    fn a_comparison_started_during_a_lookup_does_not_drop_the_lookup_answer() {
+        let mut state = DnsState::new();
+        let _ = state.start_lookup();
+        let _ = state.start_comparison();
+        state.finish_lookup(1, Err(DnsError::Timeout));
+        assert!(matches!(state.lookup, Lookup::Failed(DnsError::Timeout)));
+        state.finish_comparison(1, Vec::new());
+        assert!(matches!(state.comparison, Comparison::Done(_)));
     }
 
     #[test]

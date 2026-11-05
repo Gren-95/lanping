@@ -38,6 +38,7 @@ pub mod ssdp;
 pub mod subnet;
 pub mod summary;
 pub mod tailnet;
+pub mod text;
 pub mod throughput;
 pub mod timeline;
 pub mod tls;

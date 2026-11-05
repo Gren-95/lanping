@@ -8,6 +8,7 @@ use lanping_core::device_notes::DeviceNote;
 use lanping_core::device_type::{DeviceType, guess_device_type};
 use lanping_core::diff::HostStatus;
 use lanping_core::ports::format_ports;
+use lanping_core::text::contains_ignore_case;
 use serde::{Deserialize, Serialize};
 
 pub const FAST_LATENCY_MS: f64 = 40.0;
@@ -245,12 +246,32 @@ impl HostFilter {
         .count()
     }
 
+    /// The search text as it is compared: trimmed and lowercase. Make it once for a whole list
+    /// and pass it to [`HostFilter::matches_with`].
+    pub fn needle(&self) -> String {
+        self.text.trim().to_lowercase()
+    }
+
+    /// [`HostFilter::matches_with`] for one host, making the needle itself.
+    #[cfg(test)]
     pub fn matches(
         &self,
         host: &Host,
         label: Option<&str>,
         note: Option<&DeviceNote>,
         status: RowStatus,
+    ) -> bool {
+        self.matches_with(host, label, note, status, &self.needle())
+    }
+
+    /// [`HostFilter::matches`] with the needle made beforehand.
+    pub fn matches_with(
+        &self,
+        host: &Host,
+        label: Option<&str>,
+        note: Option<&DeviceNote>,
+        status: RowStatus,
+        needle: &str,
     ) -> bool {
         self.latency.contains(host.latency)
             && self.status.is_none_or(|wanted| wanted == status)
@@ -263,7 +284,7 @@ impl HostFilter {
             && self
                 .device_type
                 .is_none_or(|wanted| guess_device_type(host) == wanted)
-            && text_matches(host, label, note, &self.text.trim().to_lowercase())
+            && text_matches(host, label, note, needle)
     }
 }
 
@@ -271,34 +292,31 @@ fn text_matches(host: &Host, label: Option<&str>, note: Option<&DeviceNote>, nee
     if needle.is_empty() || note.is_some_and(|note| note.contains(needle)) {
         return true;
     }
-    let ports = format_ports(&host.open_ports);
-    let ipv6 = host
-        .ipv6
-        .iter()
-        .map(ToString::to_string)
-        .collect::<Vec<_>>()
-        .join(" ");
-    [
-        Some(host.ip.to_string()),
-        label.map(str::to_owned),
-        host.hostname.clone(),
-        host.discovery.name.clone(),
-        host.snmp.name.clone(),
-        host.snmp.description.clone(),
-        host.snmp.model.clone(),
-        host.snmp.serial.clone(),
-        host.snmp.location.clone(),
-        host.discovery.manufacturer.clone(),
-        host.discovery.model.clone(),
-        Some(host.discovery.services.join(" ")),
-        host.mac.clone(),
-        host.vendor.clone(),
-        Some(ports),
-        Some(ipv6),
-    ]
-    .into_iter()
-    .flatten()
-    .any(|field| field.to_lowercase().contains(needle))
+    let found = |field: Option<&str>| field.is_some_and(|text| contains_ignore_case(text, needle));
+    let snmp = &host.snmp;
+    let discovery = &host.discovery;
+    found(label)
+        || found(host.hostname.as_deref())
+        || found(discovery.name.as_deref())
+        || found(snmp.name.as_deref())
+        || found(snmp.description.as_deref())
+        || found(snmp.model.as_deref())
+        || found(snmp.serial.as_deref())
+        || found(snmp.location.as_deref())
+        || found(discovery.manufacturer.as_deref())
+        || found(discovery.model.as_deref())
+        || found(host.mac.as_deref())
+        || found(host.vendor.as_deref())
+        || discovery
+            .services
+            .iter()
+            .any(|service| found(Some(service)))
+        || found(Some(&host.ip.to_string()))
+        || found(Some(&format_ports(&host.open_ports)))
+        || host
+            .ipv6
+            .iter()
+            .any(|address| found(Some(&address.to_string())))
 }
 
 /// Distinct vendors in `hosts`, sorted, for the vendor dropdown.
@@ -307,7 +325,8 @@ pub fn vendor_choices(hosts: &[Host]) -> Vec<Choice<String>> {
         .iter()
         .filter_map(|host| host.vendor.as_ref())
         .collect();
-    vendors.sort_by_key(|vendor| vendor.to_lowercase());
+    // Equal names that differ only in case sit next to each other, so every copy is found.
+    vendors.sort_by_cached_key(|vendor| (vendor.to_lowercase(), vendor.to_string()));
     vendors.dedup();
     std::iter::once(Choice::Any)
         .chain(vendors.into_iter().cloned().map(Choice::Only))

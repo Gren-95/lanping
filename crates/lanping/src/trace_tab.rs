@@ -3,7 +3,6 @@
 use std::time::Duration;
 
 use iced::font::Weight;
-use iced::task::Handle;
 use iced::widget::{
     Row as LayoutRow, button, column, container, row, scrollable, space, text, text_input,
 };
@@ -14,6 +13,7 @@ use lanping_core::trace::{
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::results::pill;
 use crate::sparkline::{Bar, sparkline, width_of};
 use crate::table_grid::{cell_width, grid_line};
@@ -37,6 +37,12 @@ const UNKNOWN_ADDRESS: &str = "???";
 /// Smallest scale of the graph, so a 1 ms hop does not fill the whole bar.
 const MIN_GRAPH_SCALE_MS: f64 = 10.0;
 
+/// One round after a rest.
+async fn round(target: String, pause: Duration) -> Result<Vec<HopSample>, TraceError> {
+    tokio::time::sleep(pause).await;
+    run_round(&target).await
+}
+
 /// What the running or finished trace knows.
 #[derive(Debug, Default)]
 pub struct TraceState {
@@ -46,9 +52,7 @@ pub struct TraceState {
     stats: TraceStats,
     running: bool,
     error: Option<TraceError>,
-    /// Counts starts and stops, so an answer from a stopped trace is ignored.
-    generation: u64,
-    handle: Option<Handle>,
+    job: Job,
 }
 
 impl TraceState {
@@ -70,15 +74,15 @@ impl TraceState {
         self.stats = TraceStats::default();
         self.error = None;
         self.running = true;
-        self.next_round(Duration::ZERO)
+        self.job.spawn(
+            round(self.traced.clone(), Duration::ZERO),
+            Message::TraceRound,
+        )
     }
 
     pub fn stop(&mut self) {
         self.running = false;
-        self.generation += 1;
-        if let Some(handle) = self.handle.take() {
-            handle.abort();
-        }
+        self.job.cancel();
     }
 
     /// Records a finished round and starts the next one.
@@ -87,34 +91,22 @@ impl TraceState {
         generation: u64,
         result: Result<Vec<HopSample>, TraceError>,
     ) -> Task<Message> {
-        if generation != self.generation || !self.running {
+        if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
         match result {
             Ok(samples) => {
                 self.stats.record_round(&samples);
-                self.next_round(ROUND_PAUSE)
+                self.job
+                    .spawn_next(round(self.traced.clone(), ROUND_PAUSE), Message::TraceRound)
             }
             Err(error) => {
                 self.error = Some(error);
                 self.running = false;
-                self.handle = None;
+                self.job.finished();
                 Task::none()
             }
         }
-    }
-
-    fn next_round(&mut self, pause: Duration) -> Task<Message> {
-        let target = self.traced.clone();
-        let generation = self.generation;
-        let round = async move {
-            tokio::time::sleep(pause).await;
-            run_round(&target).await
-        };
-        let (task, handle) =
-            Task::perform(round, move |result| Message::TraceRound(generation, result)).abortable();
-        self.handle = Some(handle);
-        task
     }
 
     /// The statistics as tab-separated text, and how many hops there are.

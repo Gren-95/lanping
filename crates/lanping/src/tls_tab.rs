@@ -9,6 +9,7 @@ use lanping_core::tls::{CertInfo, TlsError, TlsReport, Trust, check};
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::results::pill;
 use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
 use crate::timestamp::format_unix_utc;
@@ -39,8 +40,7 @@ pub struct TlsState {
     /// The host name to ask for when it differs from the address. Empty for none.
     server_name: String,
     lookup: Lookup,
-    /// Counts checks, so an answer that was overtaken is ignored.
-    generation: u64,
+    job: Job,
 }
 
 impl TlsState {
@@ -49,7 +49,7 @@ impl TlsState {
             target: String::new(),
             server_name: String::new(),
             lookup: Lookup::Idle,
-            generation: 0,
+            job: Job::default(),
         }
     }
 
@@ -62,21 +62,20 @@ impl TlsState {
     }
 
     pub fn start(&mut self) -> Task<Message> {
-        self.generation += 1;
         self.lookup = Lookup::Running;
         let target = self.target.clone();
         let server_name = self.server_name.clone();
-        let generation = self.generation;
-        Task::perform(
+        self.job.spawn(
             async move { check(&target, Some(&server_name)).await },
-            move |result| Message::TlsDone(generation, result),
+            Message::TlsDone,
         )
     }
 
     pub fn finish(&mut self, generation: u64, result: Result<TlsReport, TlsError>) {
-        if generation != self.generation {
+        if !self.job.is_current(generation) {
             return;
         }
+        self.job.finished();
         self.lookup = match result {
             Ok(report) => Lookup::Done(report),
             Err(error) => Lookup::Failed(error),
