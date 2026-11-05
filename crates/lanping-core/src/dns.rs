@@ -192,7 +192,7 @@ pub fn reverse_name(address: IpAddr) -> String {
 
 /// The name to ask for: the reverse name when a PTR is asked for an address, otherwise the
 /// typed name without a trailing dot.
-fn question_name(input: &str, record_type: RecordType) -> Result<String, DnsError> {
+pub(crate) fn question_name(input: &str, record_type: RecordType) -> Result<String, DnsError> {
     let input = input.trim();
     if record_type == RecordType::Ptr
         && let Ok(address) = input.parse::<IpAddr>()

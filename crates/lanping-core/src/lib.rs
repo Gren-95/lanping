@@ -33,6 +33,7 @@ pub mod tailnet;
 pub mod timeline;
 pub mod trace;
 pub mod vendor;
+pub mod whois;
 pub mod wifi;
 pub mod wol;
 

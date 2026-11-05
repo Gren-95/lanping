@@ -33,6 +33,7 @@ mod theme;
 mod timestamp;
 mod trace_tab;
 mod view;
+mod whois_page;
 mod wifi_channels;
 mod wifi_list;
 mod wifi_tab;

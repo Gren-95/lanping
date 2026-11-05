@@ -19,13 +19,14 @@ use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::trace::{HopSample, TraceError};
+use lanping_core::whois::{WhoisError, WhoisReport};
 use lanping_core::wifi::{AccessPoint, WifiError};
 use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
 
 use crate::actions::{Effect, HostAction};
 use crate::copy_text::rows_as_text;
-use crate::dns_tab::{DnsState, ResolverChoice};
+use crate::dns_tab::{DnsPage, DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
 use crate::host_order::{SortKey, compare_hosts};
@@ -209,6 +210,11 @@ pub enum Message {
     LatencyCopySummary,
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
+    DnsPagePicked(DnsPage),
+    WhoisQueryChanged(String),
+    WhoisLookup,
+    WhoisDone(u64, Result<WhoisReport, WhoisError>),
+    WhoisCopy,
     DnsNameChanged(String),
     DnsTypePicked(RecordType),
     DnsResolverPicked(ResolverChoice),
@@ -563,6 +569,17 @@ impl LanPing {
             }
             Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
             Message::LatencyLogPathChosen(None) => {}
+            Message::DnsPagePicked(page) => self.dns.set_page(page),
+            Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
+            Message::WhoisLookup => return self.dns.whois.start(),
+            Message::WhoisDone(generation, result) => self.dns.whois.finish(generation, result),
+            Message::WhoisCopy => {
+                if let Some(answer) = self.dns.whois.answer_text() {
+                    let answer = answer.to_owned();
+                    self.set_notice(Notice::Info, "Copied the WHOIS answer".to_owned());
+                    return iced::clipboard::write(answer);
+                }
+            }
             Message::DnsNameChanged(name) => self.dns.set_name(name),
             Message::DnsTypePicked(record_type) => self.dns.set_record_type(record_type),
             Message::DnsResolverPicked(resolver) => self.dns.set_resolver(resolver),

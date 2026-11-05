@@ -20,6 +20,7 @@ use crate::results::pill;
 use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
 use crate::view::input_group;
+use crate::whois_page::{WhoisState, whois_view};
 
 const BOLD: Font = Font {
     weight: Weight::Bold,
@@ -67,6 +68,25 @@ fn resolver_choices() -> Vec<ResolverChoice> {
     system.chain(public).collect()
 }
 
+/// The pages of the tab.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum DnsPage {
+    #[default]
+    Lookup,
+    Whois,
+}
+
+impl DnsPage {
+    const ALL: [Self; 2] = [Self::Lookup, Self::Whois];
+
+    fn title(self) -> &'static str {
+        match self {
+            Self::Lookup => "Lookup",
+            Self::Whois => "WHOIS",
+        }
+    }
+}
+
 enum Lookup {
     Idle,
     Running,
@@ -82,6 +102,8 @@ enum Comparison {
 
 /// What is typed and chosen, and what the last lookup and comparison found.
 pub struct DnsState {
+    page: DnsPage,
+    pub whois: WhoisState,
     name: String,
     record_type: RecordType,
     choices: Vec<ResolverChoice>,
@@ -98,6 +120,8 @@ impl DnsState {
         // The public resolvers are always listed, so there is always a first choice.
         let resolver = choices[0].clone();
         Self {
+            page: DnsPage::default(),
+            whois: WhoisState::new(),
             name: String::new(),
             record_type: RecordType::A,
             choices,
@@ -106,6 +130,10 @@ impl DnsState {
             comparison: Comparison::Idle,
             generation: 0,
         }
+    }
+
+    pub fn set_page(&mut self, page: DnsPage) {
+        self.page = page;
     }
 
     pub fn set_name(&mut self, name: String) {
@@ -179,12 +207,16 @@ impl DnsState {
 
 pub fn dns_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
     let dns = &app.dns;
-    let body = column![
-        lookup_controls(dns, width >= WIDE_WIDTH),
-        lookup_result(dns),
-        comparison_section(dns),
-    ]
-    .spacing(SECTION_SPACING * 1.5);
+    let body = match dns.page {
+        DnsPage::Lookup => column![
+            lookup_controls(dns, width >= WIDE_WIDTH),
+            lookup_result(dns),
+            comparison_section(dns),
+        ]
+        .spacing(SECTION_SPACING * 1.5),
+        DnsPage::Whois => column![whois_view(&dns.whois)],
+    };
+    let body = column![page_strip(dns.page), body].spacing(SECTION_SPACING);
     let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
         .width(Length::Fill)
         .height(Length::Fill);
@@ -193,6 +225,18 @@ pub fn dns_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
         .width(Length::Fill)
         .height(Length::Fill)
         .into()
+}
+
+fn page_strip(selected: DnsPage) -> Element<'static, Message> {
+    LayoutRow::with_children(DnsPage::ALL.into_iter().map(|page| {
+        button(text(page.title()).size(CONTROL_TEXT_SIZE))
+            .on_press(Message::DnsPagePicked(page))
+            .padding([5.0, 14.0])
+            .style(theme::tab_button(page == selected))
+            .into()
+    }))
+    .spacing(8)
+    .into()
 }
 
 fn lookup_controls(dns: &DnsState, wide: bool) -> Element<'_, Message> {
