@@ -24,6 +24,7 @@ mod presets;
 mod results;
 mod row_list;
 mod scan_flow;
+mod services_tab;
 mod settings;
 mod settings_page;
 mod snmp_tab;

@@ -20,6 +20,7 @@ use lanping_core::ndt7::Server;
 use lanping_core::ntp::{NtpError, NtpReport};
 use lanping_core::range::{LocalNetwork, detect_local_networks};
 use lanping_core::report::ReportInput;
+use lanping_core::service_browse::ServiceEntry;
 use lanping_core::snmp_interfaces::{Interface, Poll, SnmpError};
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::throughput::ServedStream;
@@ -45,6 +46,7 @@ use crate::ntp_tab::NtpState;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::row_list::{RowInputs, RowList};
+use crate::services_tab::ServicesState;
 use crate::settings::{Column, Settings, SettingsTab};
 use crate::snmp_tab::SnmpState;
 use crate::speed_locations::LocationChoice;
@@ -94,6 +96,7 @@ pub struct LanPing {
     pub tls: TlsState,
     pub ntp: NtpState,
     pub upnp: UpnpState,
+    pub services: ServicesState,
     pub snmp: SnmpState,
     pub speed: SpeedState,
     pub modal: Option<Modal>,
@@ -177,6 +180,7 @@ impl LanPing {
             tls: TlsState::new(),
             ntp: NtpState::new(),
             upnp: UpnpState::new(),
+            services: ServicesState::new(),
             snmp: SnmpState::new(),
             speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
@@ -473,6 +477,9 @@ impl LanPing {
             Message::NtpCheck => return self.ntp.start(),
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::UpnpRead => return self.upnp.start(),
+            Message::ServicesBrowse => return self.services.start(),
+            Message::ServicesToggle(key) => self.services.toggle(key),
+            Message::ServicesDone(generation, entries) => self.services.finish(generation, entries),
             Message::UpnpDone(generation, result) => self.upnp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),

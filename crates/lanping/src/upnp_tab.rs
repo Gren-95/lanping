@@ -10,8 +10,8 @@ use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::snmp_tab::format_uptime;
-use crate::theme::{self, ACCENT, BAD, BOLD, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{note, panel, scrolling};
+use crate::theme::{self, ACCENT, BOLD, GOOD, MUTED, SECTION_SPACING, WARN};
+use crate::ui::{empty_state, note, page_header, panel, scrolling};
 
 const CARD_PADDING: f32 = 12.0;
 
@@ -70,16 +70,25 @@ pub fn upnp_panel(app: &LanPing) -> Element<'_, Message> {
         .style(theme::primary_button),
         "Ask the router which ports it forwards. Nothing is changed.",
     );
-    let result: Element<'_, Message> = match &app.upnp.lookup {
-        Lookup::Idle => note(
-            "Lists the ports your router forwards to devices on this network, as programs asked it \
-             to over UPnP. Read-only: nothing is added or removed.",
+    let header = page_header(
+        "Port forwards",
+        "The ports your router has open to the internet, as programs asked for them over UPnP.",
+        Some(read),
+    );
+    let content: Element<'_, Message> = match &app.upnp.lookup {
+        Lookup::Idle => empty_state(
+            "Nothing read yet",
+            "Press Read port forwards. This only looks; nothing is added or removed.",
         ),
-        Lookup::Running => note("Asking the router."),
-        Lookup::Failed(error) => text(error.to_string()).color(BAD).into(),
-        Lookup::Done(report) => report_view(report, &app.hosts),
+        Lookup::Running => empty_state("Asking the router", "This takes a few seconds."),
+        Lookup::Failed(error) => empty_state("Cannot read port forwards", error.to_string()),
+        Lookup::Done(report) => scrolling(report_view(report, &app.hosts)).into(),
     };
-    panel(scrolling(column![read, result].spacing(SECTION_SPACING)))
+    panel(
+        column![header, content]
+            .spacing(SECTION_SPACING)
+            .height(Length::Fill),
+    )
 }
 
 fn report_view<'a>(report: &'a UpnpReport, hosts: &[Host]) -> Element<'a, Message> {

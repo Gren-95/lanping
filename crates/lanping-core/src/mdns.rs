@@ -8,15 +8,15 @@ use tokio::time::timeout;
 
 use crate::socket_budget::socket_permit;
 
-const MDNS_PORT: u16 = 5353;
-const SERVICE_LIST_NAME: &str = "_services._dns-sd._udp.local";
-const LOCAL_SUFFIX: &str = ".local";
-const RECORD_PTR: u16 = 12;
+pub(crate) const MDNS_PORT: u16 = 5353;
+pub(crate) const SERVICE_LIST_NAME: &str = "_services._dns-sd._udp.local";
+pub(crate) const LOCAL_SUFFIX: &str = ".local";
+pub(crate) const RECORD_PTR: u16 = 12;
 const CLASS_IN: u16 = 1;
-const HEADER_LENGTH: usize = 12;
+pub(crate) const HEADER_LENGTH: usize = 12;
 const MAX_NAME_JUMPS: usize = 16;
 
-fn query_packet(name: &str) -> Vec<u8> {
+pub(crate) fn query_packet(name: &str) -> Vec<u8> {
     let mut packet = vec![0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0];
     for label in name.split('.') {
         packet.push(label.len() as u8);

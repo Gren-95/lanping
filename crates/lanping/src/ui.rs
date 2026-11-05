@@ -1,6 +1,6 @@
 //! Small widgets that several pages build the same way.
 
-use iced::widget::{Scrollable, column, container, scrollable, text};
+use iced::widget::{Scrollable, column, container, row, scrollable, space, text};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::app::Message;
@@ -49,4 +49,24 @@ pub fn scrolling<'a>(body: impl Into<Element<'a, Message>>) -> Scrollable<'a, Me
     scrollable(container(body).padding(Padding::ZERO.right(SCROLLBAR_GAP)))
         .width(Length::Fill)
         .height(Length::Fill)
+}
+
+const HEADER_TITLE_SIZE: u32 = 20;
+
+/// The top of a tool page: what it is and what it does, with its main action on the right.
+pub fn page_header<'a>(
+    title: &'static str,
+    detail: &'static str,
+    action: Option<Element<'a, Message>>,
+) -> Element<'a, Message> {
+    let words = column![
+        text(title).size(HEADER_TITLE_SIZE).font(BOLD),
+        text(detail).size(EMPTY_STATE_DETAIL_SIZE).color(MUTED),
+    ]
+    .spacing(2);
+    let mut header = row![words, space::horizontal()].align_y(Alignment::Center);
+    if let Some(action) = action {
+        header = header.push(action);
+    }
+    header.into()
 }

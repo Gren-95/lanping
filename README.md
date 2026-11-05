@@ -105,12 +105,16 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A UPnP tab lists the port forwards the router has open, as programs asked it to over UPnP IGD: protocol, outside port, inside address and port, description and lease. It flags forwards that point at a device the last scan did not find, and says so clearly when the router has UPnP turned off. Read-only: it only lists, and never adds or removes a forward
 
+**Services**
+
+- A Services tab asks the network what announces itself over multicast DNS and SSDP: printers, Chromecasts, AirPlay, file shares, media servers and more. Results are grouped by kind with name, address, port and text records, and a row links to the device in the Devices tab when its address was scanned. It only listens for what devices say about themselves
+
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock and UPnP start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP and Services start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run
