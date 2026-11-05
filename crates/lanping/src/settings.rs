@@ -152,7 +152,10 @@ impl Default for Settings {
                 .collect(),
             tabs: Tab::CONFIGURABLE
                 .iter()
-                .map(|&tab| TabSetting { tab, visible: true })
+                .map(|&tab| TabSetting {
+                    tab,
+                    visible: tab.shown_by_default(),
+                })
                 .collect(),
         }
     }
@@ -254,7 +257,10 @@ impl Settings {
         });
         for tab in Tab::CONFIGURABLE {
             if !seen.contains(&tab) {
-                self.tabs.push(TabSetting { tab, visible: true });
+                self.tabs.push(TabSetting {
+                    tab,
+                    visible: tab.shown_by_default(),
+                });
             }
         }
         if let Some(devices) = self
@@ -315,9 +321,25 @@ mod tests {
     use lanping_core::ports::COMMON_SERVICES;
 
     #[test]
-    fn every_tab_shows_in_the_default_order_by_default() {
+    fn the_default_layout_shows_the_six_main_tabs_and_keeps_the_others_one_tick_away() {
         let settings = Settings::default();
-        assert_eq!(settings.visible_tabs(), Tab::CONFIGURABLE);
+        assert_eq!(
+            settings.visible_tabs(),
+            [
+                Tab::Scan,
+                Tab::Wifi,
+                Tab::Trace,
+                Tab::Latency,
+                Tab::Speed,
+                Tab::Dns
+            ]
+        );
+        let all: Vec<Tab> = settings.tabs.iter().map(|setting| setting.tab).collect();
+        assert_eq!(
+            all,
+            Tab::CONFIGURABLE,
+            "hidden tabs are still in the list, in order"
+        );
         assert!(!settings.visible_tabs().contains(&Tab::Settings));
     }
 
@@ -335,14 +357,18 @@ mod tests {
 
     #[test]
     fn moving_a_tab_shifts_the_ones_in_between() {
+        let order = |settings: &Settings| -> Vec<Tab> {
+            settings.tabs.iter().map(|setting| setting.tab).collect()
+        };
         let mut settings = Settings::default();
-        settings.move_tab_to(Tab::Subnet, Tab::Wifi);
+        settings.move_tab_to(Tab::Dns, Tab::Wifi);
+        assert_eq!(&order(&settings)[..3], [Tab::Scan, Tab::Dns, Tab::Wifi]);
         assert_eq!(
             &settings.visible_tabs()[..3],
-            [Tab::Scan, Tab::Subnet, Tab::Wifi]
+            [Tab::Scan, Tab::Dns, Tab::Wifi]
         );
-        settings.move_tab_to(Tab::Scan, Tab::Subnet);
-        assert_eq!(settings.visible_tabs()[0], Tab::Subnet);
+        settings.move_tab_to(Tab::Scan, Tab::Dns);
+        assert_eq!(order(&settings)[0], Tab::Dns);
         settings.move_tab_to(Tab::Wifi, Tab::Wifi);
         settings.move_tab_to(Tab::Settings, Tab::Wifi);
         assert_eq!(settings.tabs.len(), Tab::CONFIGURABLE.len());
@@ -364,7 +390,8 @@ mod tests {
     #[test]
     fn an_old_file_without_tabs_gets_them_all_and_new_ones_are_appended() {
         let older: Settings = serde_json::from_str(r#"{"grab_banners":true}"#).unwrap();
-        assert_eq!(older.visible_tabs(), Tab::CONFIGURABLE);
+        assert_eq!(older.visible_tabs(), Settings::default().visible_tabs());
+        assert_eq!(older.tabs.len(), Tab::CONFIGURABLE.len());
         let mut partial: Settings = serde_json::from_str(
             r#"{"tabs":[{"tab":"Dns","visible":true},{"tab":"Dns","visible":false},{"tab":"Settings","visible":true},{"tab":"Scan","visible":false}]}"#,
         )
@@ -382,6 +409,9 @@ mod tests {
             Tab::CONFIGURABLE.len(),
             "the missing tabs were appended"
         );
+        let shown = |tab: Tab| partial.tabs.iter().find(|s| s.tab == tab).unwrap().visible;
+        assert!(shown(Tab::Wifi), "a main tab is appended shown");
+        assert!(!shown(Tab::Tls), "a tool tab is appended hidden");
         assert!(
             partial.visible_tabs().contains(&Tab::Scan),
             "devices cannot stay hidden"
