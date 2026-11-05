@@ -5,6 +5,7 @@
 //! `airport` tool is gone and SSIDs are hidden without location permission.
 
 use std::cmp::Ordering;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 /// Longest a scan may run before it is stopped.
@@ -378,6 +379,53 @@ fn interferes(band: Band, channel: u16, candidate: u16) -> bool {
     }
 }
 
+/// Signal strength of each access point over the last scans.
+///
+/// Every scan adds one sample per known access point, so the samples of all of them
+/// line up in time. A scan that did not see an access point leaves a gap (`None`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SignalHistory {
+    samples: HashMap<String, VecDeque<Option<u8>>>,
+    scans: usize,
+}
+
+impl SignalHistory {
+    /// Samples kept per access point; older ones are dropped.
+    pub const LENGTH: usize = 40;
+
+    /// Adds one scan. Access points seen for the first time start with gaps.
+    pub fn record(&mut self, access_points: &[AccessPoint]) {
+        let earlier_scans = self.scans.min(Self::LENGTH);
+        for access_point in access_points {
+            self.samples
+                .entry(access_point.bssid.clone())
+                .or_insert_with(|| VecDeque::from(vec![None; earlier_scans]));
+        }
+        for (bssid, samples) in &mut self.samples {
+            let signal = access_points
+                .iter()
+                .find(|access_point| access_point.bssid == *bssid)
+                .map(|access_point| access_point.signal_percent);
+            samples.push_back(signal);
+            if samples.len() > Self::LENGTH {
+                samples.pop_front();
+            }
+        }
+        // An access point that has been out of range for the whole window is forgotten.
+        self.samples
+            .retain(|_, samples| samples.iter().any(Option::is_some));
+        self.scans = (self.scans + 1).min(Self::LENGTH);
+    }
+
+    /// Oldest sample first. Empty for an access point that was never seen.
+    pub fn samples(&self, bssid: &str) -> Vec<Option<u8>> {
+        self.samples
+            .get(bssid)
+            .map(|samples| samples.iter().copied().collect())
+            .unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -538,5 +586,47 @@ SSID 2 : CoffeeShop
         assert_eq!(Band::from_frequency(5180), Some(Band::Ghz5));
         assert_eq!(Band::from_frequency(5955), Some(Band::Ghz6));
         assert_eq!(Band::from_frequency(900), None);
+    }
+
+    #[test]
+    fn history_lines_up_samples_of_every_access_point() {
+        let mut history = SignalHistory::default();
+        let first = access_point(Band::Ghz2_4, 6, 80);
+        let mut second = access_point(Band::Ghz5, 36, 50);
+        second.bssid = "11:22:33:44:55:66".to_owned();
+        history.record(std::slice::from_ref(&first));
+        history.record(&[first.clone(), second.clone()]);
+        history.record(std::slice::from_ref(&second));
+        assert_eq!(history.samples(&first.bssid), [Some(80), Some(80), None]);
+        assert_eq!(history.samples(&second.bssid), [None, Some(50), Some(50)]);
+    }
+
+    #[test]
+    fn history_keeps_only_the_latest_samples() {
+        let mut history = SignalHistory::default();
+        let access_point = access_point(Band::Ghz2_4, 6, 80);
+        for _ in 0..SignalHistory::LENGTH + 5 {
+            history.record(std::slice::from_ref(&access_point));
+        }
+        assert_eq!(
+            history.samples(&access_point.bssid).len(),
+            SignalHistory::LENGTH
+        );
+    }
+
+    #[test]
+    fn history_forgets_access_points_gone_for_the_whole_window() {
+        let mut history = SignalHistory::default();
+        let gone = access_point(Band::Ghz2_4, 6, 80);
+        history.record(std::slice::from_ref(&gone));
+        for _ in 0..SignalHistory::LENGTH {
+            history.record(&[]);
+        }
+        assert!(history.samples(&gone.bssid).is_empty());
+    }
+
+    #[test]
+    fn history_of_an_unknown_access_point_is_empty() {
+        assert!(SignalHistory::default().samples("nope").is_empty());
     }
 }

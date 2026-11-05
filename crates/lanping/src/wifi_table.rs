@@ -1,10 +1,10 @@
 //! The sortable access point table on the Wi-Fi tab.
 
 use iced::font::Weight;
-use iced::widget::{Row as LayoutRow, button, column, container, row, scrollable, text};
-use iced::{Alignment, Color, Element, Font, Length};
+use iced::widget::{Row as LayoutRow, button, column, container, row, scrollable, space, text};
+use iced::{Alignment, Background, Color, Element, Font, Length, Theme, border};
 use lanping_core::vendor::lookup_vendor;
-use lanping_core::wifi::AccessPoint;
+use lanping_core::wifi::{AccessPoint, SignalHistory};
 
 use crate::app::Message;
 use crate::icons::copy_button;
@@ -23,6 +23,15 @@ const SCROLLBAR_GAP: f32 = 12.0;
 const STRONG_SIGNAL: u8 = 67;
 const FAIR_SIGNAL: u8 = 34;
 const NO_VALUE: &str = "-";
+const TREND_TITLE: &str = "Trend";
+/// The trend column sits right after Signal.
+const TREND_POSITION: usize = 6;
+const TREND_WIDTH: f32 = 230.0;
+const TREND_HEIGHT: f32 = 24.0;
+const TREND_BAR_WIDTH: f32 = 4.0;
+const TREND_BAR_SPACING: f32 = 1.0;
+/// Height of the dash that stands in for a scan that did not see the access point.
+const TREND_GAP_HEIGHT: f32 = 2.0;
 
 fn column_width(key: WifiSortKey) -> f32 {
     match key {
@@ -42,19 +51,24 @@ pub fn access_point_table<'a>(
     rows: &[&'a AccessPoint],
     sort_key: WifiSortKey,
     ascending: bool,
+    history: &SignalHistory,
 ) -> Element<'a, Message> {
-    let header = grid_line(
-        WifiSortKey::ALL
-            .into_iter()
-            .map(|key| (key, sort_header(key, sort_key, ascending)))
-            .collect(),
+    let mut header_cells: Vec<(f32, Element<'a, Message>)> = WifiSortKey::ALL
+        .into_iter()
+        .map(|key| (column_width(key), sort_header(key, sort_key, ascending)))
+        .collect();
+    header_cells.insert(
+        TREND_POSITION,
+        (TREND_WIDTH, text(TREND_TITLE).size(13).into()),
     );
+    let header = grid_line(header_cells);
     let lines = rows
         .iter()
         .enumerate()
         .fold(column![header], |list, (index, access_point)| {
             list.push(
-                container(grid_line(cells(access_point))).style(theme::stripe(index % 2 == 1)),
+                container(grid_line(cells(access_point, history)))
+                    .style(theme::stripe(index % 2 == 1)),
             )
         });
     scrollable(container(lines).padding(iced::Padding::ZERO.bottom(SCROLLBAR_GAP)))
@@ -82,7 +96,10 @@ fn sort_header<'a>(
         .into()
 }
 
-fn cells(access_point: &AccessPoint) -> Vec<(WifiSortKey, Element<'_, Message>)> {
+fn cells<'a>(
+    access_point: &'a AccessPoint,
+    history: &SignalHistory,
+) -> Vec<(f32, Element<'a, Message>)> {
     let name: Element<'_, Message> = if access_point.ssid.is_empty() {
         text("(hidden)").color(MUTED).into()
     } else {
@@ -114,22 +131,58 @@ fn cells(access_point: &AccessPoint) -> Vec<(WifiSortKey, Element<'_, Message>)>
         format!("{}%", access_point.signal_percent),
         signal_color(access_point.signal_percent),
     );
-    vec![
-        (WifiSortKey::Network, name),
-        (WifiSortKey::Bssid, bssid),
-        (WifiSortKey::Vendor, vendor),
-        (
+    let sized = |key: WifiSortKey, cell: Element<'a, Message>| (column_width(key), cell);
+    let mut cells = vec![
+        sized(WifiSortKey::Network, name),
+        sized(WifiSortKey::Bssid, bssid),
+        sized(WifiSortKey::Vendor, vendor),
+        sized(
             WifiSortKey::Channel,
             text(access_point.channel.to_string()).into(),
         ),
-        (
+        sized(
             WifiSortKey::Band,
             text(access_point.band.to_string()).into(),
         ),
-        (WifiSortKey::Signal, signal),
-        (WifiSortKey::Security, security),
-        (WifiSortKey::Rate, rate),
-    ]
+        sized(WifiSortKey::Signal, signal),
+        sized(WifiSortKey::Security, security),
+        sized(WifiSortKey::Rate, rate),
+    ];
+    cells.insert(
+        TREND_POSITION,
+        (TREND_WIDTH, trend(&history.samples(&access_point.bssid))),
+    );
+    cells
+}
+
+/// One bar per recent scan, as tall as the signal was. A dash marks a scan that missed it.
+fn trend<'a>(samples: &[Option<u8>]) -> Element<'a, Message> {
+    let bars = samples.iter().map(|sample| {
+        let (height, color) = match sample {
+            Some(percent) => (
+                (TREND_HEIGHT * f32::from(*percent) / 100.0).max(TREND_GAP_HEIGHT),
+                signal_color(*percent),
+            ),
+            None => (TREND_GAP_HEIGHT, MUTED),
+        };
+        container(space::horizontal())
+            .width(TREND_BAR_WIDTH)
+            .height(height)
+            .style(bar_style(color))
+            .into()
+    });
+    let bars = LayoutRow::with_children(bars)
+        .spacing(TREND_BAR_SPACING)
+        .align_y(Alignment::End);
+    container(bars).align_bottom(TREND_HEIGHT).into()
+}
+
+fn bar_style(color: Color) -> impl Fn(&Theme) -> container::Style {
+    move |_theme| container::Style {
+        background: Some(Background::Color(color)),
+        border: border::rounded(1),
+        ..container::Style::default()
+    }
 }
 
 /// `content` followed by a button that copies `value`.
@@ -152,10 +205,10 @@ fn signal_color(percent: u8) -> Color {
     }
 }
 
-fn grid_line<'a>(cells: Vec<(WifiSortKey, Element<'a, Message>)>) -> LayoutRow<'a, Message> {
-    LayoutRow::with_children(cells.into_iter().map(|(key, cell)| {
+fn grid_line<'a>(cells: Vec<(f32, Element<'a, Message>)>) -> LayoutRow<'a, Message> {
+    LayoutRow::with_children(cells.into_iter().map(|(width, cell)| {
         container(cell)
-            .width(Length::Fixed(column_width(key)))
+            .width(Length::Fixed(width))
             .padding([CELL_PADDING, CELL_SIDE_PADDING])
             .into()
     }))

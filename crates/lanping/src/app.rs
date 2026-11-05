@@ -40,6 +40,8 @@ use crate::wifi_tab::{Tab, WifiState};
 
 /// How often the interface list is read while "scan when the network changes" is on.
 const NETWORK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
+/// How often the Wi-Fi tab scans while "Auto refresh" is on.
+const WIFI_REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 const FALLBACK_TARGET: &str = "192.168.0.0/24";
 /// Widget id of the results search box, so Ctrl+F can focus it.
 pub const SEARCH_INPUT_ID: &str = "search";
@@ -181,6 +183,7 @@ pub enum Message {
     OpenUrl(String),
     TabSelected(Tab),
     WifiRefresh,
+    WifiAutoRefreshToggled(bool),
     WifiSortBy(WifiSortKey),
     WifiFilter(WifiFilterChange),
     WifiCopyRows,
@@ -377,9 +380,15 @@ impl LanPing {
         } else {
             Subscription::none()
         };
+        let wifi_refresh = if self.tab == Tab::Wifi && self.wifi.auto_refresh() {
+            iced::time::every(WIFI_REFRESH_INTERVAL).map(|_| Message::WifiRefresh)
+        } else {
+            Subscription::none()
+        };
         Subscription::batch([
             rescan,
             network_watch,
+            wifi_refresh,
             iced::event::listen_with(shortcut_message),
             iced::window::resize_events().map(|(_, size)| Message::WindowResized(size)),
             iced::window::close_requests().map(|_| Message::CloseRequested),
@@ -485,6 +494,7 @@ impl LanPing {
                 }
             }
             Message::WifiRefresh => return self.wifi.start(),
+            Message::WifiAutoRefreshToggled(on) => self.wifi.set_auto_refresh(on),
             Message::WifiSortBy(key) => self.wifi.sort_by(key),
             Message::WifiFilter(change) => self.wifi.apply_filter(change),
             Message::WifiCopyRows => {

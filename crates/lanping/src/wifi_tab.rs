@@ -2,11 +2,11 @@
 
 use iced::font::Weight;
 use iced::widget::{
-    Row as LayoutRow, button, column, container, pick_list, row, scrollable, space, text,
+    Row as LayoutRow, button, checkbox, column, container, pick_list, row, scrollable, space, text,
     text_input,
 };
 use iced::{Alignment, Element, Font, Length, Task};
-use lanping_core::wifi::{AccessPoint, WifiError, scan_access_points};
+use lanping_core::wifi::{AccessPoint, SignalHistory, WifiError, scan_access_points};
 
 use crate::app::{LanPing, Message, SEARCH_INPUT_ID};
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
@@ -49,6 +49,8 @@ pub struct WifiState {
     scanning: bool,
     error: Option<WifiError>,
     has_scanned: bool,
+    history: SignalHistory,
+    auto_refresh: bool,
     filter: WifiFilter,
     sort_key: WifiSortKey,
     /// Strongest signal first until a header is clicked.
@@ -74,6 +76,7 @@ impl WifiState {
         self.has_scanned = true;
         match result {
             Ok(access_points) => {
+                self.history.record(&access_points);
                 self.access_points = access_points;
                 self.error = None;
             }
@@ -82,6 +85,14 @@ impl WifiState {
                 self.error = Some(error);
             }
         }
+    }
+
+    pub fn auto_refresh(&self) -> bool {
+        self.auto_refresh
+    }
+
+    pub fn set_auto_refresh(&mut self, on: bool) {
+        self.auto_refresh = on;
     }
 
     /// Sorts by `key`; choosing the same key again flips the direction.
@@ -183,7 +194,13 @@ fn toolbar(wifi: &WifiState, shown: usize, wide: bool) -> Element<'_, Message> {
         (shown > 0).then_some(Message::WifiCopyRows),
         Edge::Alone,
     );
-    let mut items: Vec<Element<'_, Message>> = vec![with_tooltip(refresh, "Scan again")];
+    let auto = checkbox(wifi.auto_refresh)
+        .label("Auto refresh")
+        .size(16)
+        .text_size(CONTROL_TEXT_SIZE)
+        .on_toggle(Message::WifiAutoRefreshToggled);
+    let mut items: Vec<Element<'_, Message>> =
+        vec![with_tooltip(refresh, "Scan again"), auto.into()];
     if wifi.scanning {
         items.push(pill("Scanning", WARN));
     }
@@ -267,7 +284,7 @@ fn results<'a>(wifi: &'a WifiState, rows: &[&'a AccessPoint]) -> Element<'a, Mes
             .color(MUTED)
             .into()
     } else {
-        access_point_table(rows, wifi.sort_key, wifi.sort_ascending)
+        access_point_table(rows, wifi.sort_key, wifi.sort_ascending, &wifi.history)
     };
     let body = column![channel_section(&wifi.access_points), table].spacing(SECTION_SPACING * 1.5);
     scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
@@ -311,6 +328,23 @@ mod tests {
         let mut state = WifiState::default();
         state.finish(Ok(Vec::new()));
         state
+    }
+
+    #[test]
+    fn each_good_scan_is_added_to_the_signal_history() {
+        let mut state = WifiState::default();
+        state.finish(Ok(vec![AccessPoint {
+            ssid: String::new(),
+            bssid: "02:00:00:00:00:01".to_owned(),
+            channel: 6,
+            frequency_mhz: 2437,
+            band: lanping_core::wifi::Band::Ghz2_4,
+            signal_percent: 70,
+            security: String::new(),
+            rate_mbps: None,
+        }]));
+        state.finish(Err(WifiError::TimedOut));
+        assert_eq!(state.history.samples("02:00:00:00:00:01"), [Some(70)]);
     }
 
     #[test]
