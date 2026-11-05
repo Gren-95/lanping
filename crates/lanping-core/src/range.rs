@@ -167,7 +167,12 @@ fn interface_networks() -> Vec<LocalNetwork> {
             if !v4.ip.is_private() {
                 return None;
             }
-            let prefix = u32::from(v4.netmask).count_ones() as u8;
+            // A mask with gaps, such as 255.0.255.0, does not describe a range of addresses.
+            let mask = u32::from(v4.netmask);
+            if mask.leading_ones() + mask.trailing_zeros() != u32::BITS {
+                return None;
+            }
+            let prefix = mask.leading_ones() as u8;
             let net = Ipv4Net::new(v4.ip, prefix).ok()?.trunc();
             let host_count = net.hosts().count();
             if !(2..=MAX_TARGETS).contains(&host_count) {
