@@ -22,6 +22,7 @@ use crate::settings_page::settings_panel;
 use crate::snmp_view::snmp_panel;
 use crate::speed_view::speed_panel;
 use crate::subnet_tab::subnet_panel;
+use crate::syslog_view::syslog_panel;
 use crate::tabs::{Tab, tab_bar};
 use crate::theme::Edge;
 use crate::theme::{
@@ -76,6 +77,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Mtu => (header(app), mtu_panel(app)),
         Tab::Network => (header(app), network_panel(app)),
         Tab::Web => (header(app), web_panel(app)),
+        Tab::Syslog => (header(app), syslog_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
     column![top, tab_bar(app), content, status_line(app)]

@@ -6,9 +6,9 @@ use lanping_core::ping::tcp_ping;
 use lanping_core::speedtest::{self, SERVICE_HOST, SERVICE_PORT};
 use lanping_core::throughput::{self, Direction, ThroughputResult, run_client};
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 
 use crate::app::Message;
+use crate::job::StopOnDrop;
 use crate::speed_model::*;
 
 const STREAM_BUFFER: usize = 64;
@@ -27,15 +27,6 @@ pub(crate) enum Target {
         host: String,
         port: u16,
     },
-}
-
-/// Stops the task it holds when dropped, so a stopped stream does not leave work running.
-pub(crate) struct StopOnDrop<T>(JoinHandle<T>);
-
-impl<T> Drop for StopOnDrop<T> {
-    fn drop(&mut self) {
-        self.0.abort();
-    }
 }
 
 /// Runs a test and reports what happens, step by step.

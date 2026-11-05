@@ -40,6 +40,8 @@ mod speed_view;
 mod storage;
 mod subnet_tab;
 mod summary_dialog;
+mod syslog_tab;
+mod syslog_view;
 mod table_grid;
 mod tabs;
 mod theme;

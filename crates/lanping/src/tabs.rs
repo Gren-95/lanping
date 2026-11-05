@@ -31,13 +31,14 @@ pub enum Tab {
     Mtu,
     Network,
     Web,
+    Syslog,
     /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
 }
 
 impl Tab {
     /// The tabs that can be shown, hidden and reordered, in their default order.
-    pub const CONFIGURABLE: [Tab; 15] = [
+    pub const CONFIGURABLE: [Tab; 16] = [
         Tab::Scan,
         Tab::Wifi,
         Tab::Trace,
@@ -53,6 +54,7 @@ impl Tab {
         Tab::Mtu,
         Tab::Network,
         Tab::Web,
+        Tab::Syslog,
     ];
 
     /// Whether the tab shows until the user turns it on or off. The six main tabs do; every
@@ -81,6 +83,7 @@ impl Tab {
             Self::Mtu => "MTU",
             Self::Network => "My network",
             Self::Web => "Web",
+            Self::Syslog => "Syslog",
             Self::Settings => "Settings",
         }
     }
@@ -102,6 +105,7 @@ impl Tab {
             Self::Mtu => lucide::ruler(),
             Self::Network => lucide::house(),
             Self::Web => lucide::globe_lock(),
+            Self::Syslog => lucide::scroll_text(),
             Self::Settings => lucide::settings(),
         }
     }

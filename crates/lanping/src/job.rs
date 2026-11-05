@@ -8,6 +8,7 @@ use std::future::Future;
 
 use iced::Task;
 use iced::task::Handle;
+use tokio::task::JoinHandle;
 
 use crate::app::Message;
 
@@ -66,6 +67,15 @@ impl Job {
     /// Records that the current run has delivered its answer, so there is nothing to stop.
     pub fn finished(&mut self) {
         self.handle = None;
+    }
+}
+
+/// Stops the task it holds when dropped, so a stopped stream does not leave work running.
+pub(crate) struct StopOnDrop<T>(pub(crate) JoinHandle<T>);
+
+impl<T> Drop for StopOnDrop<T> {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }
 

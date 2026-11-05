@@ -46,6 +46,7 @@ pub mod speedtest;
 pub mod ssdp;
 pub mod subnet;
 pub mod summary;
+pub mod syslog;
 pub mod tailnet;
 pub mod text;
 pub mod throughput;
