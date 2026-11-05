@@ -28,9 +28,7 @@ pub enum Tab {
     Ntp,
     Upnp,
     Services,
-    Mtu,
     Network,
-    Web,
     Syslog,
     /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
@@ -38,7 +36,7 @@ pub enum Tab {
 
 impl Tab {
     /// The tabs that can be shown, hidden and reordered, in their default order.
-    pub const CONFIGURABLE: [Tab; 16] = [
+    pub const CONFIGURABLE: [Tab; 14] = [
         Tab::Scan,
         Tab::Wifi,
         Tab::Trace,
@@ -51,9 +49,7 @@ impl Tab {
         Tab::Ntp,
         Tab::Upnp,
         Tab::Services,
-        Tab::Mtu,
         Tab::Network,
-        Tab::Web,
         Tab::Syslog,
     ];
 
@@ -80,9 +76,7 @@ impl Tab {
             Self::Ntp => "Clock",
             Self::Upnp => "UPnP",
             Self::Services => "Services",
-            Self::Mtu => "MTU",
             Self::Network => "My network",
-            Self::Web => "Web",
             Self::Syslog => "Syslog",
             Self::Settings => "Settings",
         }
@@ -102,9 +96,7 @@ impl Tab {
             Self::Ntp => lucide::alarm_clock_check(),
             Self::Upnp => lucide::network(),
             Self::Services => lucide::radio(),
-            Self::Mtu => lucide::ruler(),
             Self::Network => lucide::house(),
-            Self::Web => lucide::globe_lock(),
             Self::Syslog => lucide::scroll_text(),
             Self::Settings => lucide::settings(),
         }

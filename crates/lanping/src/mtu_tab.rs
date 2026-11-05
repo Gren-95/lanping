@@ -9,7 +9,7 @@ use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::theme::{self, ACCENT, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{card, empty_state, fact_row, note, page_header, panel, scrolling};
+use crate::ui::{card, empty_state, fact_row, note, page_header, scrolling};
 use crate::view::input_group;
 
 const LABEL_WIDTH: f32 = 130.0;
@@ -64,7 +64,8 @@ impl MtuState {
     }
 }
 
-pub fn mtu_panel(app: &LanPing) -> Element<'_, Message> {
+/// The MTU page of the DNS tab.
+pub fn mtu_page(app: &LanPing) -> Element<'_, Message> {
     let mtu = &app.mtu;
     let busy = matches!(mtu.lookup, Lookup::Running);
     let mut target = text_input("Host name or address, such as example.com", &mtu.target)
@@ -104,11 +105,10 @@ pub fn mtu_panel(app: &LanPing) -> Element<'_, Message> {
         Lookup::Failed(error) => empty_state("Cannot measure the path", error.to_string()),
         Lookup::Done(report) => scrolling(report_view(report)).into(),
     };
-    panel(
-        column![header, input_group(vec![target.into(), go]), content]
-            .spacing(SECTION_SPACING)
-            .height(Length::Fill),
-    )
+    column![header, input_group(vec![target.into(), go]), content]
+        .spacing(SECTION_SPACING)
+        .height(Length::Fill)
+        .into()
 }
 
 fn report_view(report: &MtuReport) -> Element<'_, Message> {

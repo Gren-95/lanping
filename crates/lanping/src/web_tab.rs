@@ -1,4 +1,4 @@
-//! The Web tab state: a website's answer and a domain's email records.
+//! The state of the Website and Email records pages of the DNS tab: a website's answer and a domain's email records.
 
 use iced::Task;
 use lanping_core::dns::DnsError;
@@ -7,25 +7,6 @@ use lanping_core::website_check::{self, WebsiteError, WebsiteReport};
 
 use crate::app::Message;
 use crate::job::Job;
-
-/// The pages of the tab.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum WebPage {
-    #[default]
-    Website,
-    Email,
-}
-
-impl WebPage {
-    pub const ALL: [Self; 2] = [Self::Website, Self::Email];
-
-    pub fn title(self) -> &'static str {
-        match self {
-            Self::Website => "Website",
-            Self::Email => "Email records",
-        }
-    }
-}
 
 pub enum Lookup<T, E> {
     Idle,
@@ -49,7 +30,6 @@ impl<T, E> Lookup<T, E> {
 
 /// What is typed, and what the last checks found.
 pub struct WebState {
-    pub page: WebPage,
     pub address: String,
     pub domain: String,
     pub site: Lookup<WebsiteReport, WebsiteError>,
@@ -61,7 +41,6 @@ pub struct WebState {
 impl WebState {
     pub fn new() -> Self {
         Self {
-            page: WebPage::default(),
             address: String::new(),
             domain: String::new(),
             site: Lookup::Idle,
@@ -130,11 +109,5 @@ mod tests {
             "an email answer must not end the site check"
         );
         assert!(matches!(state.email, Lookup::Failed(DnsError::Timeout)));
-    }
-
-    #[test]
-    fn pages_have_titles() {
-        assert_eq!(WebPage::Website.title(), "Website");
-        assert_eq!(WebPage::ALL.len(), 2);
     }
 }

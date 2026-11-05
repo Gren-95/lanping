@@ -71,7 +71,7 @@ use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
 use crate::upnp_tab::UpnpState;
-use crate::web_tab::{WebPage, WebState};
+use crate::web_tab::WebState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
 
@@ -516,7 +516,6 @@ impl LanPing {
                 self.set_notice(Notice::Info, format!("Copied {count} messages"));
                 return iced::clipboard::write(text);
             }
-            Message::WebPagePicked(page) => self.web.page = page,
             Message::WebAddressChanged(address) => self.web.address = address,
             Message::WebCheck => return self.web.check_site(),
             Message::WebDone(generation, result) => self.web.finish_site(generation, result),

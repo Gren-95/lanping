@@ -91,6 +91,29 @@ pub enum SettingsTab {
     Presets,
 }
 
+/// Reads the saved tabs and leaves out any this version does not have, such as one that a
+/// newer version added or that was folded into another tab. One unknown tab must not make the
+/// whole settings file unreadable.
+fn tabs_that_are_known<'de, D>(deserializer: D) -> Result<Vec<TabSetting>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Entry {
+        Known(TabSetting),
+        Unknown(serde::de::IgnoredAny),
+    }
+    let entries = Vec::<Entry>::deserialize(deserializer)?;
+    Ok(entries
+        .into_iter()
+        .filter_map(|entry| match entry {
+            Entry::Known(setting) => Some(setting),
+            Entry::Unknown(_) => None,
+        })
+        .collect())
+}
+
 /// Fields missing from an older settings file take their default value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -103,6 +126,7 @@ pub struct Settings {
     pub snmp_community: String,
     pub columns: Vec<ColumnSetting>,
     /// The tabs of the window, in order, and which of them show.
+    #[serde(deserialize_with = "tabs_that_are_known")]
     pub tabs: Vec<TabSetting>,
     /// Minutes between automatic rescans; `0` turns them off.
     pub auto_rescan_minutes: u32,
@@ -340,6 +364,31 @@ mod tests {
             "hidden tabs are still in the list, in order"
         );
         assert!(!settings.visible_tabs().contains(&Tab::Settings));
+    }
+
+    #[test]
+    fn a_saved_tab_this_version_does_not_have_is_dropped_and_the_rest_is_kept() {
+        let json = r#"{"snmp_community":"keep-me","tabs":[
+            {"tab":"Wifi","visible":false},
+            {"tab":"Web","visible":true},
+            {"tab":"Mtu","visible":true},
+            {"tab":"Dns","visible":true}]}"#;
+        let path = std::env::temp_dir().join(format!("lanping-tabs-{}.json", std::process::id()));
+        std::fs::write(&path, json).unwrap();
+        let settings = Settings::load(&path).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert_eq!(settings.snmp_community, "keep-me", "nothing else is lost");
+        let order: Vec<Tab> = settings.tabs.iter().map(|setting| setting.tab).collect();
+        assert_eq!(
+            order[..2],
+            [Tab::Wifi, Tab::Dns],
+            "the known ones keep their order"
+        );
+        assert_eq!(order.len(), Tab::CONFIGURABLE.len());
+        assert!(
+            !settings.visible_tabs().contains(&Tab::Wifi),
+            "and their choices"
+        );
     }
 
     #[test]

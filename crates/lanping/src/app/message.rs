@@ -204,7 +204,6 @@ pub enum Message {
     SyslogTextFilter(String),
     SyslogSeverityPicked(SeverityChoice),
     SyslogCopyShown,
-    WebPagePicked(WebPage),
     WebAddressChanged(String),
     WebCheck,
     WebDone(u64, Result<WebsiteReport, WebsiteError>),

@@ -109,17 +109,13 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A Services tab asks the network what announces itself over multicast DNS and SSDP: printers, Chromecasts, AirPlay, file shares, media servers and more. Results are grouped by kind with name, address, port and text records, and a row links to the device in the Devices tab when its address was scanned. It only listens for what devices say about themselves
 
-**Path MTU**
-
-- An MTU tab finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link. It uses the system `tracepath` where there is one, which also says at which hop the size dropped, and `ping` with the do-not-fragment flag elsewhere. It compares the result with the usual values (1500, 1492, 1480, 1420, 1400) and says what it means. No raw sockets
-
 **My network**
 
 - A My network tab shows what people look up constantly: this computer's addresses per interface (IPv4 and IPv6, with link-local ones marked), the gateway, the DNS servers and the Wi-Fi name, each with a copy button. Those are read from this computer only. A separate button checks the public address, whether IPv6 works and whether a sign-in page is in the way; it says up front that it contacts Cloudflare and sends nothing unless pressed
 
-**Web and email**
+**More DNS pages**
 
-- A Web tab has two pages. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names, each with what it means in plain words. Both make ordinary requests and ask ordinary DNS questions
+- The DNS tab has five pages: Lookup, WHOIS, Website, Email records and MTU. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names. MTU finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link; it uses the system `tracepath` where there is one (which also says at which hop the size dropped) and `ping` with the do-not-fragment flag elsewhere, and compares the result with the usual values. Each result comes with what it means in plain words, and none of them needs raw sockets
 
 **Syslog**
 
@@ -130,7 +126,7 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU, My network, Web and Syslog start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, My network and Syslog start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Command line
