@@ -105,7 +105,14 @@ Any saved scan file can be opened the same way: `lanping path/to/scan.json`.
 
 ## Releases
 
-Pushing a version tag (`git tag v0.2.0 && git push origin v0.2.0`) builds the Linux AppImage, the Windows `.exe` and the macOS `.dmg` in GitHub Actions and attaches them to a GitHub Release.
+Release builds never run on their own. Push a version tag, then start the workflow on it:
+
+```sh
+git tag v0.2.0 && git push origin v0.2.0
+gh workflow run release.yml --ref v0.2.0
+```
+
+This builds the Linux AppImage, the Windows `.exe` and the macOS `.dmg` in GitHub Actions and attaches them to a GitHub Release. Started on a branch instead, it only builds them and keeps them as workflow artifacts.
 
 ## Layout
 
