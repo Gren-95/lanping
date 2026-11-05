@@ -20,6 +20,7 @@ use crate::subnet_tab::subnet_panel;
 use crate::tabs::{Tab, tab_bar};
 use crate::theme::Edge;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
+use crate::tls_tab::tls_panel;
 use crate::trace_tab::trace_panel;
 use crate::wifi_tab::wifi_panel;
 use lanping_core::ScanStage;
@@ -63,6 +64,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Trace => (header(app), trace_panel(app)),
         Tab::Latency => (header(app), latency_panel(app)),
         Tab::Dns => (header(app), dns_panel(app, width)),
+        Tab::Tls => (header(app), tls_panel(app)),
         Tab::Subnet => (header(app), subnet_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };

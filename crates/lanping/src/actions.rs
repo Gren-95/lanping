@@ -8,10 +8,15 @@ use lanping_core::diagnostics::Diagnostic;
 use crate::opener::share_target;
 
 const WEB_PORTS: [(u16, bool); 4] = [(80, false), (443, true), (8080, false), (8443, true)];
+/// Ports that speak TLS from the first byte and are offered a certificate check when open.
+const TLS_PORTS: [u16; 2] = [443, 8443];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostAction {
-    OpenWeb { https: bool, port: u16 },
+    OpenWeb {
+        https: bool,
+        port: u16,
+    },
     BrowseFiles,
     CopySshCommand,
     CopyAddress,
@@ -20,6 +25,10 @@ pub enum HostAction {
     WakeOnLan,
     Ping,
     Traceroute,
+    /// Read the TLS certificate the host presents on this port.
+    CheckCertificate {
+        port: u16,
+    },
 }
 
 /// A heading in the "Open with" menu.
@@ -52,6 +61,8 @@ pub enum Effect {
     Wake(String),
     /// Run ping or traceroute against this address and show the output.
     Diagnose(Diagnostic, Ipv4Addr),
+    /// Check the TLS certificate at this `address:port`.
+    CheckCertificate(String),
 }
 
 impl HostAction {
@@ -69,13 +80,16 @@ impl HostAction {
             Self::WakeOnLan => "Wake on LAN".to_owned(),
             Self::Ping => "Ping".to_owned(),
             Self::Traceroute => "Traceroute".to_owned(),
+            Self::CheckCertificate { port } => format!("Check TLS certificate (port {port})"),
         }
     }
 
     pub fn group(&self) -> ActionGroup {
         match self {
             Self::OpenWeb { .. } | Self::BrowseFiles => ActionGroup::Open,
-            Self::Ping | Self::Traceroute | Self::WakeOnLan => ActionGroup::Network,
+            Self::Ping | Self::Traceroute | Self::WakeOnLan | Self::CheckCertificate { .. } => {
+                ActionGroup::Network
+            }
             Self::CopySshCommand | Self::CopyAddress | Self::CopyMac | Self::CopyHostname => {
                 ActionGroup::Copy
             }
@@ -86,6 +100,7 @@ impl HostAction {
     pub fn matching_port(&self) -> Option<u16> {
         match self {
             Self::OpenWeb { port, .. } => Some(*port),
+            Self::CheckCertificate { port } => Some(*port),
             Self::BrowseFiles => Some(445),
             Self::CopySshCommand => Some(22),
             _ => None,
@@ -112,6 +127,9 @@ impl HostAction {
             Self::WakeOnLan => host.mac.clone().map(Effect::Wake),
             Self::Ping => Some(Effect::Diagnose(Diagnostic::Ping, host.ip)),
             Self::Traceroute => Some(Effect::Diagnose(Diagnostic::Traceroute, host.ip)),
+            Self::CheckCertificate { port } => {
+                Some(Effect::CheckCertificate(format!("{}:{port}", host.ip)))
+            }
         }
     }
 }
@@ -144,6 +162,12 @@ pub fn actions_for(host: &Host) -> Vec<HostAction> {
     actions.push(HostAction::CopySshCommand);
     actions.push(HostAction::Ping);
     actions.push(HostAction::Traceroute);
+    actions.extend(
+        TLS_PORTS
+            .iter()
+            .filter(|port| host.open_ports.contains(port))
+            .map(|&port| HostAction::CheckCertificate { port }),
+    );
     actions.push(HostAction::CopyAddress);
     if host.mac.is_some() {
         actions.push(HostAction::WakeOnLan);
@@ -233,6 +257,21 @@ mod tests {
         assert_eq!(
             alt.effect(&host()),
             Some(Effect::Open("http://192.168.0.9:8080".into()))
+        );
+    }
+
+    #[test]
+    fn offers_a_certificate_check_only_for_open_tls_ports() {
+        let found = host();
+        assert!(!actions_for(&found).contains(&HostAction::CheckCertificate { port: 443 }));
+        let mut with_tls = host();
+        with_tls.open_ports = vec![443, 8080];
+        let actions = actions_for(&with_tls);
+        assert!(actions.contains(&HostAction::CheckCertificate { port: 443 }));
+        assert!(!actions.contains(&HostAction::CheckCertificate { port: 8443 }));
+        assert_eq!(
+            HostAction::CheckCertificate { port: 443 }.effect(&with_tls),
+            Some(Effect::CheckCertificate("192.168.0.9:443".into()))
         );
     }
 

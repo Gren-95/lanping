@@ -18,6 +18,7 @@ use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
+use lanping_core::tls::{TlsError, TlsReport};
 use lanping_core::trace::{HopSample, TraceError};
 use lanping_core::whois::{WhoisError, WhoisReport};
 use lanping_core::wifi::{AccessPoint, WifiError};
@@ -43,6 +44,7 @@ use crate::storage::{
 use crate::subnet_tab::SubnetState;
 use crate::tabs::Tab;
 use crate::timestamp::format_unix_utc;
+use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
@@ -210,6 +212,9 @@ pub enum Message {
     LatencyCopySummary,
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
+    TlsTargetChanged(String),
+    TlsCheck,
+    TlsDone(u64, Result<TlsReport, TlsError>),
     DnsPagePicked(DnsPage),
     WhoisQueryChanged(String),
     WhoisLookup,
@@ -246,6 +251,7 @@ pub struct LanPing {
     pub subnet: SubnetState,
     pub latency: LatencyState,
     pub dns: DnsState,
+    pub tls: TlsState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -373,6 +379,7 @@ impl LanPing {
             subnet: SubnetState::default(),
             latency: LatencyState::default(),
             dns: DnsState::new(),
+            tls: TlsState::new(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -569,6 +576,9 @@ impl LanPing {
             }
             Message::LatencyLogPathChosen(Some(path)) => self.save_latency_log(&path),
             Message::LatencyLogPathChosen(None) => {}
+            Message::TlsTargetChanged(target) => self.tls.set_target(target),
+            Message::TlsCheck => return self.tls.start(),
+            Message::TlsDone(generation, result) => self.tls.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
             Message::WhoisLookup => return self.dns.whois.start(),
@@ -856,6 +866,11 @@ impl LanPing {
                 Task::perform(run_diagnostic(diagnostic, ip), move |result| {
                     Message::DiagnosticFinished(title.clone(), result)
                 })
+            }
+            Effect::CheckCertificate(target) => {
+                self.tab = Tab::Tls;
+                self.tls.set_target(target);
+                self.tls.start()
             }
             Effect::Wake(mac) => {
                 match send_wake_packet(&mac) {

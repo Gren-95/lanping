@@ -31,6 +31,7 @@ mod table_grid;
 mod tabs;
 mod theme;
 mod timestamp;
+mod tls_tab;
 mod trace_tab;
 mod view;
 mod whois_page;

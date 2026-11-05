@@ -31,6 +31,7 @@ pub mod subnet;
 pub mod summary;
 pub mod tailnet;
 pub mod timeline;
+pub mod tls;
 pub mod trace;
 pub mod vendor;
 pub mod whois;

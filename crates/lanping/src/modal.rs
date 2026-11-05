@@ -234,6 +234,7 @@ fn action_icon(action: &HostAction) -> Text<'static> {
         HostAction::CopyAddress => lucide::hash(),
         HostAction::CopyMac => lucide::fingerprint(),
         HostAction::CopyHostname => lucide::tag(),
+        HostAction::CheckCertificate { .. } => lucide::shield_check(),
     }
 }
 
