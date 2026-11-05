@@ -7,7 +7,7 @@ use lanping_core::summary::Summary;
 
 use crate::app::Message;
 use crate::results::device_type_icon;
-use crate::settings_modal::small_button;
+use crate::settings_page::small_button;
 use crate::theme::MUTED;
 
 const ITEM_SPACING: f32 = 10.0;

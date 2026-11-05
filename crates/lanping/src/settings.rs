@@ -71,8 +71,9 @@ pub struct ColumnSetting {
     pub visible: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SettingsTab {
+    #[default]
     CommonPorts,
     CustomPorts,
     Columns,

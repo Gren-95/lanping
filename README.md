@@ -60,6 +60,17 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - A summary of totals by type, vendor and open port, and a map of devices grouped around the gateway
 - Export to CSV, JSON or a printable HTML report (a browser can save it as a PDF), or copy the visible rows
 
+**Wi-Fi**
+
+- A Wi-Fi tab lists nearby access points with channel, band, signal and security, and shows how crowded each channel is with a suggested channel for your router
+- Sort, search and filter the list, copy names and BSSIDs, and turn on auto refresh to watch each network's signal trend over the last 40 scans
+- Uses `nmcli` on Linux and `netsh` on Windows, so no root is needed; not available on macOS yet
+
+**Trace**
+
+- A Trace tab repeats a traceroute to any host name or IP address and shows loss, latency, jitter and a latency graph for every hop, like MTR
+- Runs the system `traceroute` (or `tracepath`, `tracert` on Windows) once per round, so no root is needed and nothing extra is installed
+
 **Actions**
 
 - Open in a browser or browse an SMB share

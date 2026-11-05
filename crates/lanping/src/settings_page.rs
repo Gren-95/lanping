@@ -1,4 +1,4 @@
-//! The settings dialog and its tabs.
+//! The settings page and its tabs.
 
 use iced::font::Weight;
 use iced::widget::{
@@ -23,17 +23,8 @@ const BOLD: Font = Font {
     ..Font::DEFAULT
 };
 
-pub fn settings_dialog<'a>(app: &'a LanPing, tab: &'a SettingsTab) -> Element<'a, Message> {
-    let header = row![
-        text("Settings").size(22).font(BOLD),
-        space::horizontal(),
-        button(icon_label(lucide::check(), "Done", 14))
-            .on_press(Message::CloseModal)
-            .padding([6.0, 16.0])
-            .style(theme::primary_button),
-    ]
-    .align_y(Alignment::Center);
-
+pub fn settings_panel(app: &LanPing) -> Element<'_, Message> {
+    let tab = &app.settings_tab;
     let content = match tab {
         SettingsTab::CommonPorts => common_ports_tab(app),
         SettingsTab::CustomPorts => custom_ports_tab(app),
@@ -42,24 +33,22 @@ pub fn settings_dialog<'a>(app: &'a LanPing, tab: &'a SettingsTab) -> Element<'a
         SettingsTab::Network => network_tab(app),
         SettingsTab::Presets => presets_tab(app),
     };
-
-    // The dialog has no padding of its own, so the tab band and scrollbar reach its edges.
-    column![
-        container(header).padding(Padding {
-            top: EDGE_PADDING,
-            right: EDGE_PADDING,
-            bottom: 14.0,
-            left: EDGE_PADDING,
-        }),
+    let page = column![
         tab_strip(tab),
         scrollable(container(content).padding(EDGE_PADDING))
             .width(Length::Fill)
             .height(Length::Fill),
-    ]
-    .into()
+    ];
+    // No padding, so the tab band and scrollbar reach the panel edges.
+    container(page)
+        .width(Length::Fill)
+        .height(Length::Fill)
+        .clip(true)
+        .style(theme::panel)
+        .into()
 }
 
-/// One row of connected tabs. The selected tab shares the dialog color, so it joins
+/// One row of connected tabs. The selected tab shares the panel color, so it joins
 /// the page below. A window too narrow for the row scrolls it sideways.
 fn tab_strip(selected: &SettingsTab) -> Element<'_, Message> {
     let tabs = [

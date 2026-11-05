@@ -14,7 +14,7 @@ use crate::icons::{ICON_SIZE, lucide};
 use crate::map_dialog::map_dialog;
 use crate::results::pill;
 use crate::settings::Column;
-use crate::settings_modal::{column_list, settings_dialog, small_button};
+use crate::settings_page::{column_list, small_button};
 use crate::summary_dialog::summary_dialog;
 use crate::theme::{self, ACCENT, MUTED};
 
@@ -32,7 +32,6 @@ const BOLD: Font = Font {
 /// Dims the page and shows `modal` centered on top. Clicking outside closes it.
 pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {
     let (dialog, fill_height) = match modal {
-        Modal::Settings(tab) => (settings_dialog(app, tab), true),
         Modal::HostActions(key) => match app.find_host(key) {
             Some(host) => (host_actions_dialog(app, host), false),
             None => return space::vertical().height(0).into(),
@@ -44,14 +43,8 @@ pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {
         Modal::SavePreset => (save_preset_dialog(app), false),
         Modal::ColumnMenu(column) => (column_menu_dialog(app, *column), false),
     };
-    // Settings lays out its own padding so its tabs and scrollbar reach the edges.
-    let padding = if matches!(modal, Modal::Settings(_)) {
-        0.0
-    } else {
-        DIALOG_PADDING
-    };
     let mut frame = container(dialog)
-        .padding(padding)
+        .padding(DIALOG_PADDING)
         .width(Length::Fill)
         .max_width(DIALOG_MAX_WIDTH)
         .max_height(DIALOG_MAX_HEIGHT)

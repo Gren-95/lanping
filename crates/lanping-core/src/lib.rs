@@ -27,7 +27,9 @@ pub mod ssdp;
 pub mod summary;
 pub mod tailnet;
 pub mod timeline;
+pub mod trace;
 pub mod vendor;
+pub mod wifi;
 pub mod wol;
 
 pub use host::{Host, ServiceBanner};

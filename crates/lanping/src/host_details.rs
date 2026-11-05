@@ -13,7 +13,7 @@ use lanping_core::ports::format_ports;
 use crate::app::{LanPing, Message, NoteField};
 use crate::host_filter::RowStatus;
 use crate::results::pill;
-use crate::settings_modal::small_button;
+use crate::settings_page::small_button;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, WARN};
 use crate::timestamp::format_unix_utc;
 

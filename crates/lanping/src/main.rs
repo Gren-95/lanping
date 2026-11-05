@@ -20,12 +20,19 @@ mod presets;
 mod results;
 mod scan_flow;
 mod settings;
-mod settings_modal;
+mod settings_page;
+mod sparkline;
 mod storage;
 mod summary_dialog;
+mod table_grid;
 mod theme;
 mod timestamp;
+mod trace_tab;
 mod view;
+mod wifi_channels;
+mod wifi_list;
+mod wifi_tab;
+mod wifi_table;
 
 use iced::{Size, window};
 
