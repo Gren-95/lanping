@@ -193,6 +193,7 @@ pub enum Message {
     NtpDone(u64, Result<NtpReport, NtpError>),
     UpnpRead,
     ServicesBrowse,
+    ServicesToggle(String),
     ServicesDone(u64, Vec<ServiceEntry>),
     UpnpDone(u64, Result<UpnpReport, UpnpError>),
     DnsPagePicked(DnsPage),

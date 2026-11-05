@@ -1,5 +1,6 @@
 //! The Services tab: what announces itself on the network, grouped by kind.
 
+use std::collections::HashSet;
 use std::net::Ipv4Addr;
 
 use iced::widget::{button, column, container, row, text};
@@ -16,6 +17,7 @@ use crate::ui::{empty_state, page_header, panel, scrolling};
 
 const CARD_PADDING: f32 = 12.0;
 const GROUP_SPACING: f32 = 8.0;
+const DETAIL_KEY_WIDTH: f32 = 150.0;
 
 enum Lookup {
     Idle,
@@ -26,6 +28,8 @@ enum Lookup {
 /// What the last browse found.
 pub struct ServicesState {
     lookup: Lookup,
+    /// Entries whose text records are open, by [`entry_key`].
+    expanded: HashSet<String>,
     job: Job,
 }
 
@@ -33,12 +37,21 @@ impl ServicesState {
     pub fn new() -> Self {
         Self {
             lookup: Lookup::Idle,
+            expanded: HashSet::new(),
             job: Job::default(),
+        }
+    }
+
+    /// Opens the text records of an entry, or closes them.
+    pub fn toggle(&mut self, key: String) {
+        if !self.expanded.remove(&key) {
+            self.expanded.insert(key);
         }
     }
 
     pub fn start(&mut self) -> Task<Message> {
         self.lookup = Lookup::Running;
+        self.expanded.clear();
         self.job
             .spawn(async { browse().await }, Message::ServicesDone)
     }
@@ -83,7 +96,9 @@ pub fn services_panel(app: &LanPing) -> Element<'_, Message> {
             "Nothing announced itself",
             "Some networks block multicast between devices, especially guest Wi-Fi.",
         ),
-        Lookup::Done(entries) => scrolling(results(entries, &app.hosts)).into(),
+        Lookup::Done(entries) => {
+            scrolling(results(entries, &app.hosts, &app.services.expanded)).into()
+        }
     };
     panel(
         column![header, content]
@@ -92,7 +107,11 @@ pub fn services_panel(app: &LanPing) -> Element<'_, Message> {
     )
 }
 
-fn results<'a>(entries: &'a [ServiceEntry], hosts: &[Host]) -> Element<'a, Message> {
+fn results<'a>(
+    entries: &'a [ServiceEntry],
+    hosts: &[Host],
+    expanded: &HashSet<String>,
+) -> Element<'a, Message> {
     groups(entries)
         .into_iter()
         .fold(column![].spacing(SECTION_SPACING), |page, group| {
@@ -107,7 +126,7 @@ fn results<'a>(entries: &'a [ServiceEntry], hosts: &[Host]) -> Element<'a, Messa
                 .entries
                 .into_iter()
                 .fold(column![].spacing(GROUP_SPACING), |list, entry| {
-                    list.push(entry_card(entry, hosts))
+                    list.push(entry_card(entry, hosts, expanded))
                 });
             page.push(column![heading, cards].spacing(GROUP_SPACING))
         })
@@ -139,7 +158,11 @@ fn groups(entries: &[ServiceEntry]) -> Vec<Group<'_>> {
     groups
 }
 
-fn entry_card<'a>(entry: &'a ServiceEntry, hosts: &[Host]) -> Element<'a, Message> {
+fn entry_card<'a>(
+    entry: &'a ServiceEntry,
+    hosts: &[Host],
+    expanded: &HashSet<String>,
+) -> Element<'a, Message> {
     let place = match (entry.address, entry.port) {
         (Some(address), Some(port)) => format!("{address}:{port}"),
         (Some(address), None) => address.to_string(),
@@ -161,9 +184,17 @@ fn entry_card<'a>(entry: &'a ServiceEntry, hosts: &[Host]) -> Element<'a, Messag
             Some(Message::ShowHostDetails(host.device_key())),
         ));
     }
-    let mut body = column![title.wrap().vertical_spacing(4)].spacing(4);
-    if let Some(details) = details_line(entry) {
-        body = body.push(text(details).size(12).color(MUTED).width(Length::Fill));
+    let key = entry_key(entry);
+    let open = expanded.contains(&key);
+    let mut header = row![container(title.wrap().vertical_spacing(4)).width(Length::Fill)]
+        .spacing(8)
+        .align_y(Alignment::Center);
+    if !entry.details.is_empty() {
+        header = header.push(details_toggle(entry.details.len(), open, key));
+    }
+    let mut body = column![header].spacing(8);
+    if open {
+        body = body.push(details_list(&entry.details));
     }
     container(body)
         .padding(CARD_PADDING)
@@ -172,20 +203,54 @@ fn entry_card<'a>(entry: &'a ServiceEntry, hosts: &[Host]) -> Element<'a, Messag
         .into()
 }
 
-/// The readable text records on one line that wraps, and how many were left out.
-fn details_line(entry: &ServiceEntry) -> Option<String> {
-    let (shown, hidden) = entry.readable_details();
-    if shown.is_empty() && hidden == 0 {
-        return None;
-    }
-    let mut line = shown.join("  ·  ");
-    if hidden > 0 {
-        if !line.is_empty() {
-            line.push_str("  ·  ");
-        }
-        line.push_str(&format!("{hidden} more not shown"));
-    }
-    Some(line)
+/// What tells one entry from another, so its open or closed state survives a redraw.
+fn entry_key(entry: &ServiceEntry) -> String {
+    format!(
+        "{}|{}|{}",
+        entry.kind,
+        entry.name,
+        entry
+            .address
+            .map(|address| address.to_string())
+            .unwrap_or_default()
+    )
+}
+
+fn details_toggle<'a>(count: usize, open: bool, key: String) -> Element<'a, Message> {
+    let chevron = if open {
+        lucide::chevron_down()
+    } else {
+        lucide::chevron_right()
+    };
+    button(
+        row![
+            chevron.size(ICON_SIZE - 3.0).color(MUTED),
+            text(format!("Details ({count})")).size(13)
+        ]
+        .spacing(6)
+        .align_y(Alignment::Center),
+    )
+    .on_press(Message::ServicesToggle(key))
+    .padding([5.0, 12.0])
+    .style(theme::quiet_button)
+    .into()
+}
+
+/// Every text record on its own line, as `key` and `value`.
+fn details_list(details: &[String]) -> Element<'_, Message> {
+    details
+        .iter()
+        .fold(column![].spacing(4), |list, detail| {
+            let (key, value) = detail.split_once('=').unwrap_or(("", detail));
+            list.push(
+                row![
+                    text(key).size(12).color(MUTED).width(DETAIL_KEY_WIDTH),
+                    text(value).size(12).width(Length::Fill),
+                ]
+                .spacing(8),
+            )
+        })
+        .into()
 }
 
 fn host_at(hosts: &[Host], address: Ipv4Addr) -> Option<&Host> {
@@ -228,14 +293,14 @@ mod tests {
     }
 
     #[test]
-    fn the_details_line_lists_what_is_readable_and_counts_the_rest() {
-        let mut found = entry("_x._tcp", "a", [10, 0, 0, 1]);
-        assert_eq!(details_line(&found), None);
-        found.details = vec!["model=Mac16,5".to_owned(), format!("pk={}", "a".repeat(64))];
-        assert_eq!(
-            details_line(&found).as_deref(),
-            Some("model=Mac16,5  ·  1 more not shown")
-        );
+    fn an_entry_opens_and_closes_by_its_key() {
+        let mut state = ServicesState::new();
+        let key = entry_key(&entry("_x._tcp", "a", [10, 0, 0, 1]));
+        state.toggle(key.clone());
+        assert!(state.expanded.contains(&key));
+        state.toggle(key.clone());
+        assert!(!state.expanded.contains(&key));
+        assert_ne!(key, entry_key(&entry("_x._tcp", "a", [10, 0, 0, 2])));
     }
 
     #[test]

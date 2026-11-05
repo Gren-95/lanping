@@ -478,6 +478,7 @@ impl LanPing {
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::UpnpRead => return self.upnp.start(),
             Message::ServicesBrowse => return self.services.start(),
+            Message::ServicesToggle(key) => self.services.toggle(key),
             Message::ServicesDone(generation, entries) => self.services.finish(generation, entries),
             Message::UpnpDone(generation, result) => self.upnp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),

@@ -43,9 +43,6 @@ const UPNP_KIND_PREFIX: &str = "upnp:";
 const HARDWARE_ADDRESS_DIGITS: usize = 12;
 const UUID_LENGTH: usize = 36;
 const UUID_DASHES: [usize; 4] = [8, 13, 18, 23];
-/// Text records longer than this are keys or hashes, not something to read.
-const MAX_READABLE_CHARS: usize = 40;
-const MAX_READABLE_ENTRIES: usize = 8;
 
 /// One thing found on the network.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,26 +70,6 @@ impl ServiceEntry {
             .clone()
             .or_else(|| self.address.map(|address| address.to_string()))
             .unwrap_or_else(|| name.to_owned())
-    }
-
-    /// The text records worth reading: the short ones with a value. Keys, hashes and
-    /// feature masks are left out. Also how many were left out.
-    pub fn readable_details(&self) -> (Vec<&str>, usize) {
-        let readable = |entry: &&String| {
-            entry
-                .split_once('=')
-                .is_none_or(|(_, value)| !value.is_empty())
-                && entry.chars().count() <= MAX_READABLE_CHARS
-        };
-        let shown: Vec<&str> = self
-            .details
-            .iter()
-            .filter(readable)
-            .map(String::as_str)
-            .take(MAX_READABLE_ENTRIES)
-            .collect();
-        let hidden = self.details.len() - shown.len();
-        (shown, hidden)
     }
 }
 
@@ -714,20 +691,5 @@ mod tests {
         let id = "7AA58048-275C-4C7E-A1CE-562A160C235F";
         assert_eq!(entry(id, None).display_name(), "10.0.0.7");
         assert_eq!(entry("fed-cafe", None).display_name(), "fed-cafe");
-    }
-
-    #[test]
-    fn only_short_texts_with_a_value_are_worth_reading() {
-        let mut shown = entry("x", None);
-        shown.details = vec![
-            "model=Mac16,5".to_owned(),
-            "at=".to_owned(),
-            format!("pk={}", "a".repeat(64)),
-            "flag".to_owned(),
-            "vs=1".to_owned(),
-        ];
-        let (readable, hidden) = shown.readable_details();
-        assert_eq!(readable, ["model=Mac16,5", "flag", "vs=1"]);
-        assert_eq!(hidden, 2);
     }
 }
