@@ -13,9 +13,10 @@ use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
 use crate::modal::overlay;
 use crate::monitor::AutoInterval;
 use crate::results::{pill, results};
-use crate::settings::SettingsTab;
+use crate::settings_page::settings_panel;
 use crate::theme::Edge;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
+use crate::wifi_tab::{Tab, tab_bar, wifi_panel};
 use lanping_core::ScanStage;
 use lanping_core::diff::HostStatus;
 use lanping_core::range::LocalNetwork;
@@ -51,7 +52,19 @@ pub fn view(app: &LanPing) -> Element<'_, Message> {
 }
 
 fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
-    let top: Element<'_, Message> = if width >= SPLIT_HEADER_WIDTH {
+    let (top, content) = match app.tab {
+        Tab::Scan => (scan_top(app, width), results_panel(app, width)),
+        Tab::Wifi => (header(app), wifi_panel(app, width)),
+        Tab::Settings => (header(app), settings_panel(app)),
+    };
+    column![top, tab_bar(app), content, status_line(app)]
+        .spacing(SECTION_SPACING)
+        .padding(PAGE_PADDING)
+        .into()
+}
+
+fn scan_top(app: &LanPing, width: f32) -> Element<'_, Message> {
+    if width >= SPLIT_HEADER_WIDTH {
         row![
             container(header(app)).width(HEADER_WIDTH),
             space::horizontal(),
@@ -63,11 +76,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         column![header(app), panel(scan_controls(app))]
             .spacing(SECTION_SPACING)
             .into()
-    };
-    column![top, results_panel(app, width), status_line(app)]
-        .spacing(SECTION_SPACING)
-        .padding(PAGE_PADDING)
-        .into()
+    }
 }
 
 fn header(app: &LanPing) -> Element<'_, Message> {
@@ -79,6 +88,20 @@ fn header(app: &LanPing) -> Element<'_, Message> {
     ]
     .spacing(2);
 
+    if app.tab != Tab::Scan {
+        return title.into();
+    }
+    let stats = Row::with_children(host_stats(app))
+        .spacing(8)
+        .align_y(Alignment::Center)
+        .wrap()
+        .vertical_spacing(8);
+
+    column![title, stats].spacing(ITEM_SPACING).into()
+}
+
+/// Host count, change and scan state pills for the devices tab.
+fn host_stats(app: &LanPing) -> Vec<Element<'_, Message>> {
     let host_count = if app.filter.active_count() > 0 {
         format!("{} of {} hosts", app.visible_rows().len(), app.hosts.len())
     } else {
@@ -98,21 +121,7 @@ fn header(app: &LanPing) -> Element<'_, Message> {
     if app.scanning {
         stats.push(pill("Scanning", theme::WARN));
     }
-    stats.push(with_tooltip(
-        icon_button(
-            lucide::settings().size(ICON_SIZE),
-            Some(Message::ShowSettings(SettingsTab::CommonPorts)),
-            Edge::Alone,
-        ),
-        "Settings",
-    ));
-    let stats = Row::with_children(stats)
-        .spacing(8)
-        .align_y(Alignment::Center)
-        .wrap()
-        .vertical_spacing(8);
-
-    column![title, stats].spacing(ITEM_SPACING).into()
+    stats
 }
 
 /// Scan target, network suggestions and progress. Unframed: the caller decides the backdrop.

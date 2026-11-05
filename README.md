@@ -60,6 +60,11 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - A summary of totals by type, vendor and open port, and a map of devices grouped around the gateway
 - Export to CSV, JSON or a printable HTML report (a browser can save it as a PDF), or copy the visible rows
 
+**Wi-Fi**
+
+- A Wi-Fi tab lists nearby access points with channel, band, signal and security, and shows how crowded each channel is with a suggested channel for your router
+- Uses `nmcli` on Linux and `netsh` on Windows, so no root is needed; not available on macOS yet
+
 **Actions**
 
 - Open in a browser or browse an SMB share

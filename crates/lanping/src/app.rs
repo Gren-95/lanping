@@ -16,6 +16,7 @@ use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
+use lanping_core::wifi::{AccessPoint, WifiError};
 use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
 
@@ -34,6 +35,8 @@ use crate::storage::{
     settings_path,
 };
 use crate::timestamp::format_unix_utc;
+use crate::wifi_list::{WifiFilterChange, WifiSortKey};
+use crate::wifi_tab::{Tab, WifiState};
 
 /// How often the interface list is read while "scan when the network changes" is on.
 const NETWORK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
@@ -94,7 +97,6 @@ impl NoteDraft {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Modal {
-    Settings(SettingsTab),
     /// Menu for one device, identified by [`Host::device_key`].
     HostActions(String),
     SavePreset,
@@ -177,6 +179,12 @@ pub enum Message {
     SaveLabel(String),
     RunHostAction(String, HostAction),
     OpenUrl(String),
+    TabSelected(Tab),
+    WifiRefresh,
+    WifiSortBy(WifiSortKey),
+    WifiFilter(WifiFilterChange),
+    WifiCopyRows,
+    WifiScanned(Result<Vec<AccessPoint>, WifiError>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,6 +198,9 @@ pub struct LanPing {
     pub networks: Vec<LocalNetwork>,
     pub settings: Settings,
     pub labels: DeviceLabels,
+    pub tab: Tab,
+    pub settings_tab: SettingsTab,
+    pub wifi: WifiState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -310,6 +321,9 @@ impl LanPing {
             networks,
             settings,
             labels,
+            tab: Tab::default(),
+            settings_tab: SettingsTab::default(),
+            wifi: WifiState::default(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -413,7 +427,7 @@ impl LanPing {
             }
             Message::EscapePressed => self.escape(),
             Message::EnterPressed => {
-                if self.modal.is_none() && !self.scanning {
+                if self.tab == Tab::Scan && self.modal.is_none() && !self.scanning {
                     return self.start(false);
                 }
             }
@@ -439,7 +453,11 @@ impl LanPing {
             Message::ExportPathChosen(format, Some(path)) => self.export(format, &path),
             Message::ExportPathChosen(_, None) => {}
             Message::HistoryPicked(entry) => self.load_history(&entry),
-            Message::ShowSettings(tab) => self.modal = Some(Modal::Settings(tab)),
+            Message::ShowSettings(tab) => {
+                self.modal = None;
+                self.settings_tab = tab;
+                self.tab = Tab::Settings;
+            }
             Message::ShowHostActions(key) => self.show_host_actions(key),
             Message::ShowColumnMenu(column) => self.modal = Some(Modal::ColumnMenu(column)),
             Message::ColumnDragStarted(column) => self.column_drag = Some(column),
@@ -460,6 +478,21 @@ impl LanPing {
             Message::SaveLabel(key) => self.save_label(&key),
             Message::RunHostAction(key, action) => return self.run_host_action(&key, &action),
             Message::OpenUrl(url) => self.open_url(&url),
+            Message::TabSelected(tab) => {
+                self.tab = tab;
+                if tab == Tab::Wifi && !self.wifi.has_scanned() {
+                    return self.wifi.start();
+                }
+            }
+            Message::WifiRefresh => return self.wifi.start(),
+            Message::WifiSortBy(key) => self.wifi.sort_by(key),
+            Message::WifiFilter(change) => self.wifi.apply_filter(change),
+            Message::WifiCopyRows => {
+                let (text, count) = self.wifi.rows_as_text();
+                self.set_notice(Notice::Info, format!("Copied {count} networks"));
+                return iced::clipboard::write(text);
+            }
+            Message::WifiScanned(result) => self.wifi.finish(result),
             other => self.apply_filter_or_settings_change(other),
         }
         Task::none()
@@ -602,6 +635,8 @@ impl LanPing {
     fn escape(&mut self) {
         if self.modal.is_some() {
             self.modal = None;
+        } else if self.tab == Tab::Wifi {
+            self.wifi.clear_filter();
         } else if self.filter.active_count() > 0 {
             self.filter = HostFilter::default();
         }

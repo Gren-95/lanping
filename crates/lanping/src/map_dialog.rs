@@ -11,7 +11,7 @@ use lanping_core::device_type::{DeviceType, guess_device_type};
 
 use crate::app::{LanPing, Message};
 use crate::results::device_type_icon;
-use crate::settings_modal::small_button;
+use crate::settings_page::small_button;
 use crate::theme::{self, MUTED};
 
 const ITEM_SPACING: f32 = 10.0;
