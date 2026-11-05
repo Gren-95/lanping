@@ -18,6 +18,7 @@ use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::measurements::{Measurement, save as save_measurement};
 use lanping_core::ndt7::Server;
 use lanping_core::ntp::{NtpError, NtpReport};
+use lanping_core::path_mtu::{MtuError, MtuReport};
 use lanping_core::range::{LocalNetwork, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::service_browse::ServiceEntry;
@@ -42,6 +43,7 @@ use crate::host_order::SortKey;
 use crate::host_rows::Row;
 use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
+use crate::mtu_tab::MtuState;
 use crate::ntp_tab::NtpState;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
@@ -95,6 +97,7 @@ pub struct LanPing {
     pub dns: DnsState,
     pub tls: TlsState,
     pub ntp: NtpState,
+    pub mtu: MtuState,
     pub upnp: UpnpState,
     pub services: ServicesState,
     pub snmp: SnmpState,
@@ -179,6 +182,7 @@ impl LanPing {
             dns: DnsState::new(),
             tls: TlsState::new(),
             ntp: NtpState::new(),
+            mtu: MtuState::new(),
             upnp: UpnpState::new(),
             services: ServicesState::new(),
             snmp: SnmpState::new(),
@@ -477,6 +481,9 @@ impl LanPing {
             Message::NtpCheck => return self.ntp.start(),
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::UpnpRead => return self.upnp.start(),
+            Message::MtuTargetChanged(target) => self.mtu.set_target(target),
+            Message::MtuCheck => return self.mtu.start(),
+            Message::MtuDone(generation, result) => self.mtu.finish(generation, result),
             Message::ServicesBrowse => return self.services.start(),
             Message::ServicesToggle(key) => self.services.toggle(key),
             Message::ServicesDone(generation, entries) => self.services.finish(generation, entries),
