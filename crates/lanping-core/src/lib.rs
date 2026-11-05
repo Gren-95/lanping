@@ -51,6 +51,7 @@ pub mod tailnet;
 pub mod text;
 pub mod throughput;
 pub mod timeline;
+pub mod timestamp;
 pub mod tls;
 mod tls_explain;
 pub mod trace;

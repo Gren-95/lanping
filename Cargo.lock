@@ -1669,6 +1669,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lanping-cli"
+version = "0.4.0"
+dependencies = [
+ "lanping-core",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "lanping-core"
 version = "0.4.0"
 dependencies = [
