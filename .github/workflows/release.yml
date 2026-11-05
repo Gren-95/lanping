@@ -1,18 +1,10 @@
 name: Release builds
 
-# Pull requests that touch the packaging build the files without publishing them.
-# A pushed tag such as v0.1.0 also attaches them to a GitHub Release.
+# Runs only when started by hand: Actions tab, or `gh workflow run release.yml`.
+# Started on a branch, it builds the files without publishing them.
+# Started on a version tag (`gh workflow run release.yml --ref v0.4.0`), it also
+# attaches them to a GitHub Release.
 on:
-  push:
-    tags: ["v*"]
-  pull_request:
-    paths:
-      - .github/workflows/release.yml
-      - .github/release-notes.md
-      - scripts/build-appimage.sh
-      - scripts/build-macos-app.sh
-      - packaging/**
-      - crates/lanping/build.rs
   workflow_dispatch:
 
 env:
