@@ -189,6 +189,10 @@ pub enum Message {
     ColumnDragStarted(Column),
     ColumnDraggedOver(Column),
     ColumnDragEnded,
+    TabToggled(Tab, bool),
+    TabDragStarted(Tab),
+    TabDraggedOver(Tab),
+    TabDragEnded,
     AutoRescanPicked(AutoInterval),
     NotifyToggled(bool),
     NotifyPortsToggled(bool),
@@ -304,6 +308,8 @@ pub struct LanPing {
     pub detail_timeline: Vec<TimelineEntry>,
     /// Column being dragged in the column list.
     pub column_drag: Option<Column>,
+    /// Tab being dragged in the tab list of the settings.
+    pub tab_drag: Option<Tab>,
     pub hosts: Vec<Host>,
     pub diff: ScanDiff,
     pub sort_key: SortKey,
@@ -430,6 +436,7 @@ impl LanPing {
             detail_scan_count: 0,
             detail_timeline: Vec::new(),
             column_drag: None,
+            tab_drag: None,
             hosts: Vec::new(),
             diff: ScanDiff::default(),
             sort_key: SortKey::Address,
@@ -565,6 +572,24 @@ impl LanPing {
             Message::ColumnDraggedOver(target) => {
                 if let Some(dragged) = self.column_drag {
                     self.settings.move_column_to(dragged, target);
+                }
+            }
+            Message::TabToggled(tab, visible) => {
+                self.settings.set_tab_visible(tab, visible);
+                if !visible && self.tab == tab {
+                    self.tab = Tab::Scan;
+                }
+                self.save_settings();
+            }
+            Message::TabDragStarted(tab) => self.tab_drag = Some(tab),
+            Message::TabDraggedOver(target) => {
+                if let Some(dragged) = self.tab_drag {
+                    self.settings.move_tab_to(dragged, target);
+                }
+            }
+            Message::TabDragEnded => {
+                if self.tab_drag.take().is_some() {
+                    self.save_settings();
                 }
             }
             Message::ColumnDragEnded => {

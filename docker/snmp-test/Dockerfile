@@ -1,4 +1,4 @@
-# A throwaway SNMP device for trying LanPing's Traffic tab: a real net-snmp agent whose
+# A throwaway SNMP device for trying LanPing's SNMP tab: a real net-snmp agent whose
 # network interface carries traffic. Not for production: the community is public knowledge.
 FROM alpine:3.20
 

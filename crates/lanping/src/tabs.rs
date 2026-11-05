@@ -3,6 +3,7 @@
 use iced::widget::{Row as LayoutRow, Text, button, row, scrollable, text};
 use iced::{Alignment, Element, Length, Padding};
 use iced_fonts::lucide;
+use serde::{Deserialize, Serialize};
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, with_tooltip};
@@ -12,7 +13,7 @@ const TAB_SPACING: f32 = 8.0;
 const TAB_PADDING: [f32; 2] = [7.0, 16.0];
 const GEAR_PADDING: [f32; 2] = [7.0, 12.0];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Tab {
     #[default]
     Scan,
@@ -24,29 +25,60 @@ pub enum Tab {
     Tls,
     Snmp,
     Subnet,
+    /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
 }
 
-/// The tabs in the bar, left to right. Settings has its own button on the right.
-fn bar_tabs() -> [(Tab, Text<'static>, &'static str); 9] {
-    [
-        (Tab::Scan, lucide::scan_search(), "Devices"),
-        (Tab::Wifi, lucide::wifi(), "Wi-Fi"),
-        (Tab::Trace, lucide::activity(), "Trace"),
-        (Tab::Latency, lucide::gauge(), "Latency"),
-        (Tab::Speed, lucide::zap(), "Speed"),
-        (Tab::Dns, lucide::globe(), "DNS"),
-        (Tab::Tls, lucide::shield_check(), "TLS"),
-        (Tab::Snmp, lucide::arrow_down_up(), "SNMP"),
-        (Tab::Subnet, lucide::calculator(), "Subnet"),
-    ]
+impl Tab {
+    /// The tabs that can be shown, hidden and reordered, in their default order.
+    pub const CONFIGURABLE: [Tab; 9] = [
+        Tab::Scan,
+        Tab::Wifi,
+        Tab::Trace,
+        Tab::Latency,
+        Tab::Speed,
+        Tab::Dns,
+        Tab::Tls,
+        Tab::Snmp,
+        Tab::Subnet,
+    ];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::Scan => "Devices",
+            Self::Wifi => "Wi-Fi",
+            Self::Trace => "Trace",
+            Self::Latency => "Latency",
+            Self::Speed => "Speed",
+            Self::Dns => "DNS",
+            Self::Tls => "TLS",
+            Self::Snmp => "SNMP",
+            Self::Subnet => "Subnet",
+            Self::Settings => "Settings",
+        }
+    }
+
+    pub fn icon(self) -> Text<'static> {
+        match self {
+            Self::Scan => lucide::scan_search(),
+            Self::Wifi => lucide::wifi(),
+            Self::Trace => lucide::activity(),
+            Self::Latency => lucide::gauge(),
+            Self::Speed => lucide::zap(),
+            Self::Dns => lucide::globe(),
+            Self::Tls => lucide::shield_check(),
+            Self::Snmp => lucide::arrow_down_up(),
+            Self::Subnet => lucide::calculator(),
+            Self::Settings => lucide::settings(),
+        }
+    }
 }
 
 /// The row of tab buttons above the page. A window too narrow for the row scrolls it sideways.
 pub fn tab_bar(app: &LanPing) -> Element<'_, Message> {
-    let tabs = LayoutRow::with_children(bar_tabs().into_iter().map(|(tab, icon, label)| {
+    let tabs = LayoutRow::with_children(app.settings.visible_tabs().into_iter().map(|tab| {
         button(
-            row![icon.size(ICON_SIZE), text(label).size(14)]
+            row![tab.icon().size(ICON_SIZE), text(tab.title()).size(14)]
                 .spacing(8)
                 .align_y(Alignment::Center),
         )

@@ -1,8 +1,8 @@
-# A fake router for LanPing's Traffic tab.
+# A fake router for LanPing's SNMP tab.
 #
 #   docker compose up --build
 #
-# Then, in the Traffic tab:  address 127.0.0.1:1161   community lanping-test
+# Then, in the SNMP tab:  address 127.0.0.1:1161   community lanping-test
 services:
   snmp:
     build: .

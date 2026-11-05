@@ -1,6 +1,6 @@
 # SNMP test device
 
-A throwaway SNMP agent to try LanPing's **Traffic** tab against, without a real router.
+A throwaway SNMP agent to try LanPing's **SNMP** tab against, without a real router.
 It is a real net-snmp `snmpd` in a container whose `eth0` carries changing traffic, so the
 rates and graphs move.
 
@@ -8,7 +8,7 @@ rates and graphs move.
 docker compose up --build
 ```
 
-In LanPing, open the **Traffic** tab and enter:
+In LanPing, open the **SNMP** tab and enter:
 
 | Field     | Value            |
 |-----------|------------------|

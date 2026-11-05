@@ -188,7 +188,7 @@ fn interface_table(snmp: &SnmpState) -> Element<'_, Message> {
         .into()
 }
 
-fn cells<'a>(traffic: &'a SnmpState, interface: &'a Interface) -> Vec<(f32, Element<'a, Message>)> {
+fn cells<'a>(snmp: &'a SnmpState, interface: &'a Interface) -> Vec<(f32, Element<'a, Message>)> {
     let rate = snmp.tracker.rate(interface.index);
     let name: Element<'a, Message> = match &interface.alias {
         Some(alias) => column![
