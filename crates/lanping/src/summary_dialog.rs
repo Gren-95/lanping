@@ -1,22 +1,16 @@
 //! The summary dialog: totals across the listed devices.
 
-use iced::font::Weight;
 use iced::widget::{Column, Row, column, row, scrollable, space, text};
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Length};
 use lanping_core::summary::Summary;
 
 use crate::app::Message;
 use crate::results::device_type_icon;
 use crate::settings_page::small_button;
-use crate::theme::MUTED;
+use crate::theme::{BOLD, ITEM_SPACING, MUTED};
 
-const ITEM_SPACING: f32 = 10.0;
 const SECTION_WIDTH: f32 = 170.0;
 const ROWS_SHOWN: usize = 8;
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 pub fn summary_dialog(summary: &Summary) -> Element<'_, Message> {
     let by_type = summary

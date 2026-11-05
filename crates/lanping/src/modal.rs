@@ -1,6 +1,5 @@
 //! Modal dialogs: settings and the per-host "Open with" menu.
 
-use iced::font::Weight;
 use iced::widget::{
     Text, button, column, container, mouse_area, opaque, row, scrollable, space, text, text_input,
 };
@@ -16,18 +15,13 @@ use crate::results::pill;
 use crate::settings::Column;
 use crate::settings_page::{column_list, small_button};
 use crate::summary_dialog::summary_dialog;
-use crate::theme::{self, ACCENT, MUTED};
+use crate::theme::{self, ACCENT, BOLD, ITEM_SPACING, MUTED};
 
 const DIALOG_MAX_WIDTH: f32 = 600.0;
 const DIALOG_MAX_HEIGHT: f32 = 620.0;
 const DIAGNOSTIC_HEIGHT: f32 = 320.0;
 const DIALOG_PADDING: f32 = 20.0;
 const DIALOG_MARGIN: f32 = 16.0;
-const ITEM_SPACING: f32 = 10.0;
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 /// Dims the page and shows `modal` centered on top. Clicking outside closes it.
 pub fn overlay<'a>(app: &'a LanPing, modal: &'a Modal) -> Element<'a, Message> {

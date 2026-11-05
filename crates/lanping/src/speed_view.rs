@@ -1,32 +1,24 @@
 //! Drawing of the Speed tab.
 
-use iced::font::Weight;
 use iced::widget::{
-    Row as LayoutRow, button, column, container, pick_list, row, scrollable, space, text,
-    text_input,
+    Row as LayoutRow, button, column, container, pick_list, row, space, text, text_input,
 };
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Length};
 use lanping_core::ping::PingSummary;
 use lanping_core::speedtest::SERVICE_HOST;
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::sparkline::{Bar, chart};
-use crate::speed_tab::{
-    Phase, Report, Run, ServerStatus, Source, SpeedPage, SpeedService, SpeedState, TestKind,
-    TestLength,
+use crate::speed_model::{
+    Phase, Report, Run, ServerStatus, Source, SpeedPage, SpeedService, TestKind, TestLength,
 };
-use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
+use crate::speed_tab::SpeedState;
+use crate::theme::{self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
 use crate::timestamp::format_unix_utc;
+use crate::ui::{note, panel, scrolling};
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
-const SCROLLBAR_GAP: f32 = 12.0;
 const TEXT_SIZE: u32 = 13;
 const CHART_HEIGHT: f32 = 100.0;
 const TILE_WIDTH: f32 = 170.0;
@@ -47,14 +39,8 @@ pub fn speed_panel(app: &LanPing) -> Element<'_, Message> {
         SpeedPage::History => history_page(speed),
     };
     let body = column![page_strip(speed.page), content].spacing(SECTION_SPACING);
-    let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
-        .width(Length::Fill)
-        .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    let page = scrolling(body);
+    panel(page)
 }
 
 fn page_strip(selected: SpeedPage) -> Element<'static, Message> {
@@ -67,10 +53,6 @@ fn page_strip(selected: SpeedPage) -> Element<'static, Message> {
     }))
     .spacing(8)
     .into()
-}
-
-fn note<'a>(message: impl Into<String>) -> Element<'a, Message> {
-    text(message.into()).size(14).color(MUTED).into()
 }
 
 fn heading<'a>(title: &'static str) -> Element<'a, Message> {
@@ -110,8 +92,8 @@ fn internet_page(speed: &SpeedState) -> Element<'_, Message> {
 /// The location and server pickers for M-Lab.
 fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
     let location = pick_list(
-        speed.countries.clone(),
-        Some(speed.location.clone()),
+        speed.countries.as_slice(),
+        Some(&speed.location),
         Message::SpeedLocationPicked,
     )
     .text_size(TEXT_SIZE)
@@ -119,8 +101,8 @@ fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
     .width(LOCATION_PICK_WIDTH)
     .style(theme::pick_at(Edge::First));
     let server = pick_list(
-        speed.servers.clone(),
-        speed.selected_server.clone(),
+        speed.servers.as_slice(),
+        speed.selected_server.as_ref(),
         Message::SpeedServerPicked,
     )
     .placeholder(if speed.locating {

@@ -1,6 +1,5 @@
 //! The device detail dialog: what is known about one host and how it showed up in past scans.
 
-use iced::font::Weight;
 use iced::widget::{Row, column, container, row, scrollable, space, text, text_input};
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
@@ -14,20 +13,14 @@ use crate::app::{LanPing, Message, NoteField};
 use crate::host_filter::RowStatus;
 use crate::results::pill;
 use crate::settings_page::small_button;
-use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, WARN};
+use crate::theme::{self, ACCENT, BAD, BOLD, GOOD, ITEM_SPACING, MUTED, NO_VALUE, WARN};
 use crate::timestamp::format_unix_utc;
 
-const ITEM_SPACING: f32 = 10.0;
 const LABEL_WIDTH: f32 = 90.0;
 const SCROLLBAR_GAP: f32 = 16.0;
 const RECENT_SCANS_SHOWN: usize = 8;
 const CHANGES_SHOWN: usize = 15;
 const SECONDS_PER_DAY: u64 = 86_400;
-const NO_VALUE: &str = "-";
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 /// When a device was first and last seen in the saved scans, and how often.
 #[derive(Debug, PartialEq, Eq)]

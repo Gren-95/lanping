@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use lanping_core::files::write_atomic_private;
 use lanping_core::ports::{PortListError, common_ports, parse_ports};
 use serde::{Deserialize, Serialize};
 
@@ -307,11 +308,9 @@ impl Settings {
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(directory) = path.parent() {
-            fs::create_dir_all(directory)?;
-        }
         let json = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
-        fs::write(path, json)
+        // The file can hold the SNMP community, so only its owner may read it.
+        write_atomic_private(path, &json)
     }
 }
 

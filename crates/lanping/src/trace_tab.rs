@@ -2,40 +2,36 @@
 
 use std::time::Duration;
 
-use iced::font::Weight;
-use iced::task::Handle;
 use iced::widget::{
     Row as LayoutRow, button, column, container, row, scrollable, space, text, text_input,
 };
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::{Alignment, Element, Length, Task};
 use lanping_core::trace::{
     HopSample, HopStats, TraceError, TraceStats, run_round, stats_as_text, validate_target,
 };
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::results::pill;
 use crate::sparkline::{Bar, sparkline, width_of};
 use crate::table_grid::{cell_width, grid_line};
-use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
+use crate::theme::{
+    self, BAD, BOLD, Edge, MIN_GRAPH_SCALE_MS, MUTED, NO_VALUE, SCROLLBAR_GAP, SECTION_SPACING,
+    WARN, latency_color, loss_color,
+};
+use crate::ui::{empty_state, panel};
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
-/// Keeps the scrollbar clear of the last row.
-const SCROLLBAR_GAP: f32 = 12.0;
 /// Rest between two rounds, so a nearby target does not start a process every few milliseconds.
 const ROUND_PAUSE: Duration = Duration::from_secs(1);
-const LOSS_WARN_PERCENT: f64 = 1.0;
-const LOSS_BAD_PERCENT: f64 = 10.0;
-const NO_VALUE: &str = "-";
 const UNKNOWN_ADDRESS: &str = "???";
-/// Smallest scale of the graph, so a 1 ms hop does not fill the whole bar.
-const MIN_GRAPH_SCALE_MS: f64 = 10.0;
+
+/// One round after a rest.
+async fn round(target: String, pause: Duration) -> Result<Vec<HopSample>, TraceError> {
+    tokio::time::sleep(pause).await;
+    run_round(&target).await
+}
 
 /// What the running or finished trace knows.
 #[derive(Debug, Default)]
@@ -46,9 +42,7 @@ pub struct TraceState {
     stats: TraceStats,
     running: bool,
     error: Option<TraceError>,
-    /// Counts starts and stops, so an answer from a stopped trace is ignored.
-    generation: u64,
-    handle: Option<Handle>,
+    job: Job,
 }
 
 impl TraceState {
@@ -70,15 +64,15 @@ impl TraceState {
         self.stats = TraceStats::default();
         self.error = None;
         self.running = true;
-        self.next_round(Duration::ZERO)
+        self.job.spawn(
+            round(self.traced.clone(), Duration::ZERO),
+            Message::TraceRound,
+        )
     }
 
     pub fn stop(&mut self) {
         self.running = false;
-        self.generation += 1;
-        if let Some(handle) = self.handle.take() {
-            handle.abort();
-        }
+        self.job.cancel();
     }
 
     /// Records a finished round and starts the next one.
@@ -87,34 +81,22 @@ impl TraceState {
         generation: u64,
         result: Result<Vec<HopSample>, TraceError>,
     ) -> Task<Message> {
-        if generation != self.generation || !self.running {
+        if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
         match result {
             Ok(samples) => {
                 self.stats.record_round(&samples);
-                self.next_round(ROUND_PAUSE)
+                self.job
+                    .spawn_next(round(self.traced.clone(), ROUND_PAUSE), Message::TraceRound)
             }
             Err(error) => {
                 self.error = Some(error);
                 self.running = false;
-                self.handle = None;
+                self.job.finished();
                 Task::none()
             }
         }
-    }
-
-    fn next_round(&mut self, pause: Duration) -> Task<Message> {
-        let target = self.traced.clone();
-        let generation = self.generation;
-        let round = async move {
-            tokio::time::sleep(pause).await;
-            run_round(&target).await
-        };
-        let (task, handle) =
-            Task::perform(round, move |result| Message::TraceRound(generation, result)).abortable();
-        self.handle = Some(handle);
-        task
     }
 
     /// The statistics as tab-separated text, and how many hops there are.
@@ -139,11 +121,7 @@ pub fn trace_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![toolbar(trace), content]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    panel(page)
 }
 
 fn toolbar(trace: &TraceState) -> Element<'_, Message> {
@@ -200,20 +178,6 @@ fn toolbar(trace: &TraceState) -> Element<'_, Message> {
             .align_y(Alignment::Center),
     ]
     .spacing(8)
-    .into()
-}
-
-fn empty_state<'a>(title: &'static str, detail: String) -> Element<'a, Message> {
-    container(
-        column![
-            text(title).size(20).font(BOLD),
-            text(detail).size(14).color(MUTED),
-        ]
-        .spacing(6)
-        .align_x(Alignment::Center),
-    )
-    .center(Length::Fill)
-    .padding(24)
     .into()
 }
 
@@ -372,16 +336,6 @@ fn latency_graph(hop: &HopStats, scale: f64) -> Element<'_, Message> {
     }))
 }
 
-fn loss_color(percent: f64) -> iced::Color {
-    if percent >= LOSS_BAD_PERCENT {
-        BAD
-    } else if percent >= LOSS_WARN_PERCENT {
-        WARN
-    } else {
-        GOOD
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -400,13 +354,6 @@ mod tests {
             traced: "example.com".to_owned(),
             ..TraceState::default()
         }
-    }
-
-    #[test]
-    fn loss_is_graded_by_size() {
-        assert_eq!(loss_color(0.0), GOOD);
-        assert_eq!(loss_color(5.0), WARN);
-        assert_eq!(loss_color(50.0), BAD);
     }
 
     #[test]

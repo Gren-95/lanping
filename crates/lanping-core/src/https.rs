@@ -4,7 +4,7 @@
 use std::io;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -76,13 +76,19 @@ impl AsyncWrite for Connection {
 
 /// A TLS client that trusts the system's root certificates.
 pub(crate) async fn connector() -> Result<TlsConnector, String> {
+    static CONNECTOR: OnceLock<TlsConnector> = OnceLock::new();
+    if let Some(connector) = CONNECTOR.get() {
+        return Ok(connector.clone());
+    }
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let config = ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(|error| format!("Could not set up TLS: {error}"))?
         .with_root_certificates(system_roots().await)
         .with_no_client_auth();
-    Ok(TlsConnector::from(Arc::new(config)))
+    Ok(CONNECTOR
+        .get_or_init(|| TlsConnector::from(Arc::new(config)))
+        .clone())
 }
 
 /// Opens a verified TLS connection to `host:port`.
@@ -118,6 +124,11 @@ pub(crate) struct Response {
 /// Fetches `https://host{path}` and returns the status, `Retry-After` and body.
 /// HTTP/1.0 is used so the body is never chunked.
 pub(crate) async fn get_response(host: &str, path: &str) -> Result<Response, String> {
+    // The path is written into the request line as it is, so a line break in it would let a
+    // caller add request lines of its own.
+    if path.contains(['\r', '\n', ' ']) {
+        return Err("The request address has a space or line break in it".to_owned());
+    }
     let connector = connector().await?;
     let work = async {
         let mut connection = connect(&connector, host, HTTPS_PORT).await?;
@@ -140,14 +151,14 @@ pub(crate) async fn get_response(host: &str, path: &str) -> Result<Response, Str
         {
             return Err(error.to_string());
         }
-        parse_response(host, &response)
+        parse_response(host, response)
     };
     timeout(GET_WAIT, work)
         .await
         .map_err(|_| format!("{host} did not answer in time"))?
 }
 
-fn parse_response(host: &str, response: &[u8]) -> Result<Response, String> {
+fn parse_response(host: &str, mut response: Vec<u8>) -> Result<Response, String> {
     let end = response
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
@@ -170,7 +181,7 @@ fn parse_response(host: &str, response: &[u8]) -> Result<Response, String> {
     Ok(Response {
         status,
         retry_after,
-        body: response[end + 4..].to_vec(),
+        body: response.split_off(end + 4),
     })
 }
 
@@ -180,7 +191,8 @@ mod tests {
 
     #[test]
     fn reads_status_headers_and_body() {
-        let response = parse_response("h", b"HTTP/1.0 200 OK\r\nX: y\r\n\r\n{\"a\":1}").unwrap();
+        let response =
+            parse_response("h", b"HTTP/1.0 200 OK\r\nX: y\r\n\r\n{\"a\":1}".to_vec()).unwrap();
         assert_eq!(response.status, 200);
         assert_eq!(response.body, b"{\"a\":1}");
         assert_eq!(response.retry_after, None);
@@ -190,16 +202,24 @@ mod tests {
     fn reads_how_long_a_busy_server_asks_to_wait() {
         let response = parse_response(
             "h",
-            b"HTTP/1.0 429 Too Many Requests\r\nRetry-After: 7\r\n\r\n",
+            b"HTTP/1.0 429 Too Many Requests\r\nRetry-After: 7\r\n\r\n".to_vec(),
         )
         .unwrap();
         assert_eq!(response.status, 429);
         assert_eq!(response.retry_after, Some(Duration::from_secs(7)));
     }
 
+    #[tokio::test]
+    async fn an_address_with_a_line_break_is_refused_before_anything_is_sent() {
+        for path in ["/a\r\nHost: evil", "/a b", "/a\n"] {
+            let error = get_response("example.test", path).await.err().unwrap();
+            assert!(error.contains("line break"), "{error}");
+        }
+    }
+
     #[test]
     fn garbage_is_an_error() {
-        assert!(parse_response("h", b"nonsense").is_err());
-        assert!(parse_response("h", b"HTTP/1.0 abc\r\n\r\n").is_err());
+        assert!(parse_response("h", b"nonsense".to_vec()).is_err());
+        assert!(parse_response("h", b"HTTP/1.0 abc\r\n\r\n".to_vec()).is_err());
     }
 }

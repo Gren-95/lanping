@@ -1,9 +1,8 @@
-use iced::font::Weight;
 use iced::widget::{
     Column, Row, button, column, container, pick_list, progress_bar, responsive, row, space, stack,
     text, text_input,
 };
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Length};
 
 use crate::app::{HistoryEntry, LanPing, Message, Notice};
 use crate::dns_tab::dns_panel;
@@ -21,7 +20,9 @@ use crate::speed_view::speed_panel;
 use crate::subnet_tab::subnet_panel;
 use crate::tabs::{Tab, tab_bar};
 use crate::theme::Edge;
-use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
+use crate::theme::{
+    self, ACCENT, BAD, BOLD, GOOD, ITEM_SPACING, MUTED, PANEL_PADDING, SECTION_SPACING, TEXT,
+};
 use crate::tls_tab::tls_panel;
 use crate::trace_tab::trace_panel;
 use crate::wifi_tab::wifi_panel;
@@ -39,13 +40,6 @@ const CONTROL_SPACING: f32 = 8.0;
 /// Joined controls overlap by their border width.
 const GROUP_SPACING: f32 = -1.0;
 const PAGE_PADDING: f32 = 18.0;
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
-pub(crate) const ITEM_SPACING: f32 = 10.0;
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 pub fn view(app: &LanPing) -> Element<'_, Message> {
     let page = responsive(move |size| layout(app, size.width));

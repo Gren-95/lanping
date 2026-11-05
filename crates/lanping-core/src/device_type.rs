@@ -181,6 +181,18 @@ fn words(text: &str) -> impl Iterator<Item = String> + '_ {
         .map(str::to_lowercase)
 }
 
+/// Whether `needle` occurs in `haystack` at the start of a word. A vendor name written as a stem
+/// still matches (`hikvision` in `Hangzhou Hikvision Digital`), but one buried in another word
+/// does not (`axis` in `Galaxis Technology`).
+fn starts_a_word(haystack: &str, needle: &str) -> bool {
+    haystack.match_indices(needle).any(|(start, _)| {
+        haystack[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|before| !before.is_alphanumeric())
+    })
+}
+
 /// Guesses the type. The device's own words count most, then its vendor, then
 /// its open ports. A device with no evidence stays `Unknown`.
 pub fn guess_device_type(host: &Host) -> DeviceType {
@@ -222,7 +234,7 @@ pub fn guess_device_type(host: &Host) -> DeviceType {
     .join(" ");
     let by_vendor = VENDOR_RULES
         .iter()
-        .find(|(_, names)| names.iter().any(|name| vendor.contains(name)));
+        .find(|(_, names)| names.iter().any(|name| starts_a_word(&vendor, name)));
     if let Some((device_type, _)) = by_vendor {
         return *device_type;
     }
@@ -250,6 +262,15 @@ mod tests {
     #[test]
     fn with_no_evidence_it_stays_unknown() {
         assert_eq!(guess_device_type(&host()), DeviceType::Unknown);
+    }
+
+    #[test]
+    fn a_vendor_name_buried_in_another_word_does_not_count() {
+        let mut found = host();
+        found.vendor = Some("Axis Communications AB".into());
+        assert_eq!(guess_device_type(&found), DeviceType::Camera);
+        found.vendor = Some("Galaxis Technology AG".into());
+        assert_eq!(guess_device_type(&found), DeviceType::Unknown);
     }
 
     #[test]

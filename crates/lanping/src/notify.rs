@@ -46,10 +46,9 @@ pub fn send(title: &str, body: &str) -> io::Result<()> {
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn send(_title: &str, _body: &str) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "desktop notifications are not supported on this platform",
-    ))
+    // Results show in the app only. Saying nothing is right: an error here would replace the
+    // notice of every automatic scan.
+    Ok(())
 }
 
 #[cfg(test)]

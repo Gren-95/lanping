@@ -1,16 +1,14 @@
 //! The Wi-Fi tab: nearby access points, channel crowding, and a searchable table.
 
-use iced::font::Weight;
-use iced::widget::{
-    Row as LayoutRow, checkbox, column, container, pick_list, scrollable, space, text, text_input,
-};
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::widget::{Row as LayoutRow, checkbox, column, pick_list, space, text, text_input};
+use iced::{Alignment, Element, Length, Task};
 use lanping_core::wifi::{AccessPoint, SignalHistory, WifiError, scan_access_points};
 
 use crate::app::{LanPing, Message, SEARCH_INPUT_ID};
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
 use crate::results::pill;
-use crate::theme::{self, Edge, MUTED, WARN};
+use crate::theme::{self, Edge, MUTED, SECTION_SPACING, WARN};
+use crate::ui::{empty_state, panel, scrolling};
 use crate::view::input_group;
 use crate::wifi_channels::channel_section;
 use crate::wifi_list::{
@@ -18,14 +16,6 @@ use crate::wifi_list::{
 };
 use crate::wifi_table::access_point_table;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
-/// Keeps the scrollbar clear of the content.
-const SCROLLBAR_GAP: f32 = 12.0;
 /// Windows at least this wide keep the filter controls on one line.
 const WIDE_WIDTH: f32 = 820.0;
 const CONTROL_TEXT_SIZE: u32 = 13;
@@ -136,11 +126,7 @@ pub fn wifi_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
     let page = column![toolbar(wifi, rows.len(), width >= WIDE_WIDTH), content]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    panel(page)
 }
 
 fn toolbar(wifi: &WifiState, shown: usize, wide: bool) -> Element<'_, Message> {
@@ -223,20 +209,6 @@ fn filter_controls(filter: &WifiFilter, wide: bool) -> Element<'_, Message> {
     }
 }
 
-fn empty_state<'a>(title: &'static str, detail: String) -> Element<'a, Message> {
-    container(
-        column![
-            text(title).size(20).font(BOLD),
-            text(detail).size(14).color(MUTED),
-        ]
-        .spacing(6)
-        .align_x(Alignment::Center),
-    )
-    .center(Length::Fill)
-    .padding(24)
-    .into()
-}
-
 fn results<'a>(wifi: &'a WifiState, rows: &[&'a AccessPoint]) -> Element<'a, Message> {
     let table: Element<'a, Message> = if rows.is_empty() {
         text("No network matches the search and filters.")
@@ -247,10 +219,7 @@ fn results<'a>(wifi: &'a WifiState, rows: &[&'a AccessPoint]) -> Element<'a, Mes
         access_point_table(rows, wifi.sort_key, wifi.sort_ascending, &wifi.history)
     };
     let body = column![channel_section(&wifi.access_points), table].spacing(SECTION_SPACING * 1.5);
-    scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    scrolling(body).into()
 }
 
 #[cfg(test)]

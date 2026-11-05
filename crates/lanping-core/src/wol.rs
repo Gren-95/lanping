@@ -11,7 +11,12 @@ pub fn parse_mac(text: &str) -> Option<[u8; 6]> {
     let mut bytes = [0u8; 6];
     let mut parts = text.split([':', '-']);
     for slot in &mut bytes {
-        *slot = u8::from_str_radix(parts.next()?, 16).ok()?;
+        let part = parts.next()?;
+        // Exactly two hex digits: `from_str_radix` alone would also accept a leading `+`.
+        if part.len() != 2 || !part.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return None;
+        }
+        *slot = u8::from_str_radix(part, 16).ok()?;
     }
     parts.next().is_none().then_some(bytes)
 }
@@ -53,6 +58,8 @@ mod tests {
         assert_eq!(parse_mac("aa:bb:cc"), None);
         assert_eq!(parse_mac("aa:bb:cc:dd:ee:ff:00"), None);
         assert_eq!(parse_mac("zz:bb:cc:dd:ee:ff"), None);
+        assert_eq!(parse_mac("+a:bb:cc:dd:ee:ff"), None);
+        assert_eq!(parse_mac("a:bb:cc:dd:ee:ff"), None);
     }
 
     #[test]

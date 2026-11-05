@@ -1,8 +1,7 @@
 use std::fmt;
 use std::fs;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use iced::task::Handle;
 use iced::{Subscription, Task, Theme};
@@ -11,12 +10,14 @@ use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::dns::{Answer, DnsError, RecordType, ResolverTiming};
 use lanping_core::gateway::default_gateway;
-use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
+use lanping_core::history::{
+    SavedScan, Sighting, list_scan_summaries, list_scans, load_scan, save_scan, sightings,
+};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::measurements::{Measurement, save as save_measurement};
 use lanping_core::ndt7::Server;
-use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
+use lanping_core::range::{LocalNetwork, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::snmp_interfaces::{Interface, Poll, SnmpError};
 use lanping_core::summary::{Summary, summarize};
@@ -34,29 +35,37 @@ use crate::copy_text::rows_as_text;
 use crate::dns_tab::{DnsPage, DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
-use crate::host_order::{SortKey, compare_hosts};
+use crate::host_order::SortKey;
 use crate::host_rows::Row;
 use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
+use crate::row_list::{RowInputs, RowList};
 use crate::settings::{Column, Settings, SettingsTab};
 use crate::snmp_tab::SnmpState;
 use crate::speed_locations::LocationChoice;
-use crate::speed_tab::{
-    Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
-};
+use crate::speed_model::{Source, SpeedEvent, SpeedPage, SpeedService, TestKind, TestLength};
+use crate::speed_tab::SpeedState;
 use crate::storage::{
-    device_notes_path, export_directory, history_directory, labels_path, measurements_directory,
-    migrate_legacy_data, settings_path,
+    device_notes_path, export_directory, history_directory, labels_path, load_or_default,
+    measurements_directory, migrate_legacy_data, settings_path,
 };
 use crate::subnet_tab::SubnetState;
 use crate::tabs::Tab;
-use crate::timestamp::format_unix_utc;
+use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
+
+mod files;
+mod host_actions;
+mod message;
+mod network_list;
+mod shortcuts;
+
+pub use message::{HistoryEntry, Message, Modal, NoteDraft, NoteField, Notice};
 
 /// How often the interface list is read while "scan when the network changes" is on.
 const NETWORK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
@@ -65,218 +74,6 @@ const WIFI_REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 const FALLBACK_TARGET: &str = "192.168.0.0/24";
 /// Widget id of the results search box, so Ctrl+F can focus it.
 pub const SEARCH_INPUT_ID: &str = "search";
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HistoryEntry {
-    pub path: PathBuf,
-    pub target: String,
-    pub label: String,
-}
-
-impl fmt::Display for HistoryEntry {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.label)
-    }
-}
-
-/// A field in the device notes form.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NoteField {
-    Owner,
-    Location,
-    Tags,
-    Notes,
-}
-
-/// What is typed in the device notes form, before it is saved.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct NoteDraft {
-    pub owner: String,
-    pub location: String,
-    pub tags: String,
-    pub notes: String,
-}
-
-impl NoteDraft {
-    fn from_note(note: Option<&DeviceNote>) -> Self {
-        note.map_or_else(Self::default, |note| Self {
-            owner: note.owner.clone(),
-            location: note.location.clone(),
-            tags: note.tags_text(),
-            notes: note.notes.clone(),
-        })
-    }
-
-    fn set(&mut self, field: NoteField, text: String) {
-        match field {
-            NoteField::Owner => self.owner = text,
-            NoteField::Location => self.location = text,
-            NoteField::Tags => self.tags = text,
-            NoteField::Notes => self.notes = text,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Modal {
-    /// Menu for one device, identified by [`Host::device_key`].
-    HostActions(String),
-    SavePreset,
-    Summary(Summary),
-    /// Devices around this gateway, when it is known.
-    NetworkMap(Option<std::net::Ipv4Addr>),
-    /// Everything known about one device, identified by [`Host::device_key`].
-    HostDetails(String),
-    /// Output of a ping or traceroute; `output` is empty while it runs.
-    Diagnostic {
-        title: String,
-        output: Option<String>,
-    },
-    /// Move or hide one table column.
-    ColumnMenu(Column),
-}
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    TargetChanged(String),
-    NetworkPicked(LocalNetwork),
-    StartScan,
-    StopScan,
-    AutoRescanTick,
-    Scan(ScanEvent),
-    SortBy(SortKey),
-    SortKeyPicked(SortKey),
-    SortDirectionToggled,
-    ExportPicked(ExportFormat),
-    ExportPathChosen(ExportFormat, Option<PathBuf>),
-    HistoryPicked(HistoryEntry),
-    Filter(FilterChange),
-    FiltersPanelToggled,
-    FocusSearch,
-    ShowNetworkMap,
-    ShowSummary,
-    ShowHostDetails(String),
-    DiagnosticFinished(String, Result<String, String>),
-    ScanOnStartupToggled(bool),
-    ScanOnNetworkChangeToggled(bool),
-    CheckNetworks,
-    NetworksDetected(Vec<LocalNetwork>),
-    WindowResized(iced::Size),
-    CloseRequested,
-    /// Put text on the clipboard; the label names it in the status line.
-    CopyText(String, &'static str),
-    CopyVisibleRows,
-    EscapePressed,
-    EnterPressed,
-    /// Does nothing; lets a text field claim the Enter key.
-    Noop,
-    PresetPicked(PresetChoice),
-    ShowSavePreset,
-    PresetNameChanged(String),
-    SavePreset,
-    DeletePreset(usize),
-    ShowSettings(SettingsTab),
-    ShowHostActions(String),
-    CloseModal,
-    BannersToggled(bool),
-    SnmpCommunityChanged(String),
-    PortToggled(u16, bool),
-    SelectAllPorts,
-    SelectNoPorts,
-    CustomPortsChanged(String),
-    ColumnToggled(Column, bool),
-    ShowColumnMenu(Column),
-    ColumnDragStarted(Column),
-    ColumnDraggedOver(Column),
-    ColumnDragEnded,
-    TabToggled(Tab, bool),
-    TabDragStarted(Tab),
-    TabDraggedOver(Tab),
-    TabDragEnded,
-    AutoRescanPicked(AutoInterval),
-    NotifyToggled(bool),
-    NotifyPortsToggled(bool),
-    NotifyOfflineToggled(bool),
-    IgnoreVirtualToggled(bool),
-    CardViewToggled,
-    LabelDraftChanged(String),
-    NoteDraftChanged(NoteField, String),
-    SaveNote(String),
-    SaveLabel(String),
-    RunHostAction(String, HostAction),
-    OpenUrl(String),
-    TabSelected(Tab),
-    WifiRefresh,
-    WifiAutoRefreshToggled(bool),
-    WifiSortBy(WifiSortKey),
-    WifiFilter(WifiFilterChange),
-    WifiCopyRows,
-    TraceTargetChanged(String),
-    TraceStart,
-    TraceStop,
-    TraceRound(u64, Result<Vec<HopSample>, TraceError>),
-    TraceCopyRows,
-    SpeedPagePicked(SpeedPage),
-    SpeedServicePicked(SpeedService),
-    SpeedLocationPicked(LocationChoice),
-    SpeedCountriesFound(Result<Vec<String>, String>),
-    SpeedServersFound(u64, Result<Vec<Server>, String>),
-    SpeedServerPicked(Server),
-    SpeedServersSearchAgain,
-    SpeedLanTargetChanged(String),
-    SpeedLengthPicked(TestLength),
-    SpeedKindPicked(TestKind),
-    SpeedStart(Source),
-    SpeedStop,
-    SpeedEvent(u64, SpeedEvent),
-    SpeedServerPortChanged(String),
-    SpeedServerStart,
-    SpeedServerStop,
-    SpeedServerListening(u16, Vec<std::net::IpAddr>),
-    SpeedServerFailed(String),
-    SpeedServed(ServedStream),
-    LatencyTargetChanged(String),
-    LatencyIntervalPicked(Interval),
-    LatencyStart,
-    LatencyStop,
-    LatencyReady(u64, Result<Prober, LatencyError>),
-    LatencySample(u64, Option<f64>),
-    LatencyCopySummary,
-    LatencySaveLog,
-    LatencyLogPathChosen(Option<PathBuf>),
-    SnmpTargetChanged(String),
-    SnmpStart,
-    SnmpStop,
-    SnmpDiscovered(u64, Result<Vec<Interface>, SnmpError>),
-    SnmpPolled(u64, Result<Poll, SnmpError>),
-    SnmpShowAllToggled(bool),
-    TlsTargetChanged(String),
-    TlsServerNameChanged(String),
-    TlsCheck,
-    TlsDone(u64, Result<TlsReport, TlsError>),
-    DnsPagePicked(DnsPage),
-    WhoisQueryChanged(String),
-    WhoisLookup,
-    WhoisDone(u64, Result<WhoisReport, WhoisError>),
-    WhoisCopy,
-    DnsNameChanged(String),
-    DnsTypePicked(RecordType),
-    DnsResolverPicked(ResolverChoice),
-    DnsLookup,
-    DnsLookupDone(u64, Result<Answer, DnsError>),
-    DnsCompare,
-    DnsComparisonDone(u64, Vec<ResolverTiming>),
-    DnsCopyRecords,
-    SubnetInputChanged(String),
-    SubnetScanRange(String),
-    WifiScanned(Result<Vec<AccessPoint>, WifiError>),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Notice {
-    Info,
-    Error,
-}
 
 pub struct LanPing {
     pub target: String,
@@ -311,6 +108,9 @@ pub struct LanPing {
     /// Tab being dragged in the tab list of the settings.
     pub tab_drag: Option<Tab>,
     pub hosts: Vec<Host>,
+    pub row_list: RowList,
+    /// Every saved scan, read when first needed and dropped when a scan is saved.
+    saved_scans: Option<Vec<SavedScan>>,
     pub diff: ScanDiff,
     pub sort_key: SortKey,
     pub sort_ascending: bool,
@@ -328,62 +128,8 @@ pub struct LanPing {
     pub(crate) auto_run: bool,
 }
 
-/// Maps Ctrl+F, Enter and Esc to messages. Esc is handled even when a text field
-/// has consumed it, so it also clears the filters from inside the search box.
-fn shortcut_message(
-    event: iced::Event,
-    status: iced::event::Status,
-    _window: iced::window::Id,
-) -> Option<Message> {
-    use iced::keyboard::{Event, Key, key::Named};
-    let iced::Event::Keyboard(Event::KeyPressed { key, modifiers, .. }) = event else {
-        return None;
-    };
-    match key.as_ref() {
-        Key::Named(Named::Escape) => Some(Message::EscapePressed),
-        Key::Character("f") if modifiers.command() => Some(Message::FocusSearch),
-        Key::Named(Named::Enter) if status == iced::event::Status::Ignored => {
-            Some(Message::EnterPressed)
-        }
-        _ => None,
-    }
-}
-
-/// The target of the first listed network in `new` when it differs from the first in `old`.
-fn changed_primary_target(old: &[LocalNetwork], new: &[LocalNetwork]) -> Option<String> {
-    let primary = new.first()?;
-    (old.first() != Some(primary)).then(|| primary.target.clone())
-}
-
-/// Detected networks the picker offers, honoring the virtual adapter setting.
-fn listed_networks(networks: &[LocalNetwork], settings: &Settings) -> Vec<LocalNetwork> {
-    networks
-        .iter()
-        .filter(|network| {
-            !(settings.ignore_virtual_networks && network.kind == NetworkKind::Virtual)
-        })
-        .cloned()
-        .collect()
-}
-
-/// Networks whose range or interface contains `typed`. All of them for an empty field;
-/// none once the field holds exactly one of their targets.
-fn matching_networks(networks: Vec<LocalNetwork>, typed: &str) -> Vec<LocalNetwork> {
-    let typed = typed.trim().to_lowercase();
-    if networks
-        .iter()
-        .any(|network| network.target.to_lowercase() == typed)
-    {
-        return Vec::new();
-    }
-    networks
-        .into_iter()
-        .filter(|network| {
-            network.target.to_lowercase().contains(&typed)
-                || network.interface.to_lowercase().contains(&typed)
-        })
-        .collect()
-}
+use network_list::{changed_primary_target, listed_networks, matching_networks};
+use shortcuts::shortcut_message;
 
 impl LanPing {
     pub fn new() -> (Self, Task<Message>) {
@@ -438,6 +184,8 @@ impl LanPing {
             column_drag: None,
             tab_drag: None,
             hosts: Vec::new(),
+            row_list: RowList::default(),
+            saved_scans: None,
             diff: ScanDiff::default(),
             sort_key: SortKey::Address,
             sort_ascending: true,
@@ -456,6 +204,7 @@ impl LanPing {
         if let Some(path) = std::env::args_os().nth(1) {
             app.open_scan_file(PathBuf::from(path));
         }
+        app.refresh_rows();
         let first_scan = if app.settings.scan_on_startup {
             Task::done(Message::StartScan)
         } else {
@@ -495,6 +244,27 @@ impl LanPing {
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
+        let task = self.handle(message);
+        // The rows only show on the devices tab. Going back to it is a message too, so they are
+        // up to date by the time they are drawn.
+        if self.tab == Tab::Scan {
+            self.refresh_rows();
+        }
+        self.close_dialog_of_a_gone_host();
+        task
+    }
+
+    /// A menu or details dialog for a device that has left the list (a new scan, or a saved scan
+    /// opened) shows nothing, yet would still block Enter and Esc. It is closed instead.
+    fn close_dialog_of_a_gone_host(&mut self) {
+        if let Some(Modal::HostActions(key) | Modal::HostDetails(key)) = &self.modal
+            && self.find_host(key).is_none()
+        {
+            self.modal = None;
+        }
+    }
+
+    fn handle(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::FocusSearch => return iced::widget::operation::focus(SEARCH_INPUT_ID),
             Message::CopyText(text, label) => {
@@ -908,113 +678,23 @@ impl LanPing {
             .find(|host| host.device_key() == key)
     }
 
-    /// Live hosts followed by gone ones, filtered and ordered for display.
+    /// Live hosts followed by gone ones, filtered and ordered for display. The list is worked
+    /// out after each message, so drawing it costs no sorting or filtering.
     pub fn visible_rows(&self) -> Vec<Row<'_>> {
-        let live = self
-            .hosts
-            .iter()
-            .map(|host| (host, self.diff.status(host.ip).into()));
-        let gone = self.diff.gone.iter().map(|host| (host, RowStatus::Gone));
-        let mut rows: Vec<Row<'_>> = live
-            .chain(gone)
-            .map(|(host, status)| Row {
-                host,
-                status,
-                label: self.labels.get(&host.device_key()),
-            })
-            .filter(|row| {
-                let note = self.notes.get(&row.host.device_key());
-                self.filter.matches(row.host, row.label, note, row.status)
-            })
-            .collect();
-        rows.sort_by(|a, b| {
-            let gone_last = (a.status == RowStatus::Gone).cmp(&(b.status == RowStatus::Gone));
-            let order = compare_hosts(a.host, b.host, self.sort_key);
-            let order = if self.sort_ascending {
-                order
-            } else {
-                order.reverse()
-            };
-            gone_last.then(order)
+        self.row_list.rows(&self.hosts, &self.diff.gone)
+    }
+
+    /// Works the row list out again from the hosts, filter, order, names and notes.
+    fn refresh_rows(&mut self) {
+        self.row_list.rebuild(&RowInputs {
+            hosts: &self.hosts,
+            diff: &self.diff,
+            labels: &self.labels,
+            notes: &self.notes,
+            filter: &self.filter,
+            sort_key: self.sort_key,
+            ascending: self.sort_ascending,
         });
-        rows
-    }
-
-    fn open_url(&mut self, url: &str) {
-        if let Err(error) = open_target(url) {
-            self.set_notice(Notice::Error, format!("Could not open {url}: {error}"));
-        }
-    }
-
-    fn run_host_action(&mut self, key: &str, action: &HostAction) -> Task<Message> {
-        self.modal = None;
-        let Some(effect) = self.find_host(key).and_then(|host| action.effect(host)) else {
-            self.set_notice(
-                Notice::Error,
-                "That detail is not known for this host".to_owned(),
-            );
-            return Task::none();
-        };
-        match effect {
-            Effect::Open(target) => {
-                match open_target(&target) {
-                    Ok(()) => self.set_notice(Notice::Info, format!("Opened {target}")),
-                    Err(error) => {
-                        self.set_notice(Notice::Error, format!("Could not open {target}: {error}"));
-                    }
-                }
-                Task::none()
-            }
-            Effect::Copy(text) => {
-                self.set_notice(Notice::Info, format!("Copied {text}"));
-                iced::clipboard::write(text)
-            }
-            Effect::Diagnose(diagnostic, ip) => {
-                let title = format!("{diagnostic} {ip}");
-                self.modal = Some(Modal::Diagnostic {
-                    title: title.clone(),
-                    output: None,
-                });
-                Task::perform(run_diagnostic(diagnostic, ip), move |result| {
-                    Message::DiagnosticFinished(title.clone(), result)
-                })
-            }
-            Effect::CheckCertificate {
-                target,
-                server_name,
-            } => {
-                self.tab = Tab::Tls;
-                self.tls.set_target(target);
-                self.tls.set_server_name(server_name.unwrap_or_default());
-                self.tls.start()
-            }
-            Effect::Wake(mac) => {
-                match send_wake_packet(&mac) {
-                    Ok(()) => {
-                        self.set_notice(Notice::Info, format!("Sent wake-up packet to {mac}"))
-                    }
-                    Err(error) => self.set_notice(
-                        Notice::Error,
-                        format!("Could not send wake-up packet: {error}"),
-                    ),
-                }
-                Task::none()
-            }
-        }
-    }
-
-    fn show_summary(&mut self) {
-        let scans = load_saved_scans();
-        self.modal = Some(Modal::Summary(summarize(&self.hosts, &scans, unix_now())));
-    }
-
-    fn show_host_details(&mut self, key: String) {
-        let scans = load_saved_scans();
-        self.detail_scan_count = scans.len();
-        self.detail_sightings = sightings(&scans, &key);
-        self.detail_timeline = device_timeline(&scans, &key);
-        self.note_draft = NoteDraft::from_note(self.notes.get(&key));
-        self.modal = Some(Modal::HostDetails(key));
     }
 
     /// How a listed device compares with the previous scan.
@@ -1035,141 +715,6 @@ impl LanPing {
         }
     }
 
-    fn ask_export_path(&mut self, format: ExportFormat) -> Task<Message> {
-        if self.hosts.is_empty() {
-            self.set_notice(Notice::Error, "Nothing to export yet".to_owned());
-            return Task::none();
-        }
-        let file_name = format!("lanping-{}.{}", unix_now(), format.extension());
-        Task::perform(
-            ask_save_path(format, file_name, export_directory()),
-            move |path| Message::ExportPathChosen(format, path),
-        )
-    }
-
-    /// Saves finished tests or runs next to the saved scans and refreshes the history list.
-    pub(crate) fn save_measurements(&mut self, measurements: &[Measurement]) {
-        let Some(directory) = measurements_directory() else {
-            return;
-        };
-        if measurements.is_empty() {
-            return;
-        }
-        for measurement in measurements {
-            if let Err(error) = save_measurement(&directory, measurement) {
-                self.set_notice(Notice::Error, format!("Could not save the result: {error}"));
-                return;
-            }
-        }
-        self.speed.refresh_history(Some(&directory));
-    }
-
-    fn save_latency_log(&mut self, path: &Path) {
-        match fs::write(path, self.latency.log_as_csv()) {
-            Ok(()) => self.set_notice(Notice::Info, format!("Saved {}", path.display())),
-            Err(error) => self.set_notice(Notice::Error, format!("Could not save log: {error}")),
-        }
-    }
-
-    fn export(&mut self, format: ExportFormat, path: &Path) {
-        let generated_at = format_unix_utc(unix_now());
-        let input = ReportInput {
-            target: &self.target,
-            generated_at: &generated_at,
-            hosts: &self.hosts,
-            labels: &self.labels,
-            notes: &self.notes,
-        };
-        let result = format
-            .render(&input)
-            .and_then(|content| fs::write(path, content).map_err(|error| error.to_string()));
-        match result {
-            Ok(()) => self.set_notice(Notice::Info, format!("Saved {}", path.display())),
-            Err(error) => self.set_notice(Notice::Error, format!("Could not save export: {error}")),
-        }
-    }
-
-    pub(crate) fn save_to_history(&mut self) {
-        let Some(directory) = history_directory() else {
-            return;
-        };
-        let scan = SavedScan::new(self.scanned_target.clone(), self.hosts.clone());
-        if let Err(error) = save_scan(&directory, &scan) {
-            self.set_notice(
-                Notice::Error,
-                format!("Could not save scan history: {error}"),
-            );
-            return;
-        }
-        self.refresh_history();
-    }
-
-    pub(crate) fn refresh_history(&mut self) {
-        let Some(directory) = history_directory() else {
-            return;
-        };
-        self.history = list_scans(&directory)
-            .into_iter()
-            .map(|(path, scan)| HistoryEntry {
-                path,
-                label: format!(
-                    "{} - {} ({} hosts)",
-                    format_unix_utc(scan.finished_at_unix),
-                    scan.target,
-                    scan.hosts.len()
-                ),
-                target: scan.target,
-            })
-            .collect();
-    }
-
-    /// Hosts of the newest saved scan of `target`.
-    pub(crate) fn previous_scan_hosts(&self, target: &str) -> Option<Vec<Host>> {
-        let entry = self.history.iter().find(|entry| entry.target == target)?;
-        load_scan(&entry.path).ok().map(|scan| scan.hosts)
-    }
-
-    /// Opens a saved scan named on the command line, for example a demo or one from another machine.
-    fn open_scan_file(&mut self, path: PathBuf) {
-        let entry = self
-            .history
-            .iter()
-            .find(|entry| entry.path == path)
-            .cloned()
-            .unwrap_or_else(|| HistoryEntry {
-                label: path.display().to_string(),
-                target: String::new(),
-                path,
-            });
-        self.load_history(&entry);
-    }
-
-    fn load_history(&mut self, entry: &HistoryEntry) {
-        self.stop("Scan stopped");
-        match load_scan(&entry.path) {
-            Ok(scan) => {
-                let earlier = self
-                    .history
-                    .iter()
-                    .skip_while(|candidate| candidate.path != entry.path)
-                    .skip(1)
-                    .find(|candidate| candidate.target == scan.target)
-                    .and_then(|candidate| load_scan(&candidate.path).ok());
-                self.diff = match earlier {
-                    Some(earlier) => diff_scans(&earlier.hosts, &scan.hosts),
-                    None => ScanDiff::default(),
-                };
-                self.target = scan.target;
-                self.hosts = scan.hosts;
-                self.progress = (0, 0);
-                self.set_notice(Notice::Info, format!("Loaded {}", entry.label));
-            }
-            Err(error) => {
-                self.set_notice(Notice::Error, format!("Could not open saved scan: {error}"));
-            }
-        }
-    }
-
     pub(crate) fn set_notice(&mut self, kind: Notice, text: String) {
         self.notice = Some((kind, text));
     }
@@ -1178,17 +723,7 @@ impl LanPing {
 /// Reads saved preferences. A missing file means first run; an unreadable
 /// one is reported so the user knows their choices were not applied.
 pub(crate) fn load_settings() -> (Settings, Option<String>) {
-    let Some(path) = settings_path() else {
-        return (Settings::default(), None);
-    };
-    match Settings::load(&path) {
-        Ok(settings) => (settings, None),
-        Err(error) if error.kind() == ErrorKind::NotFound => (Settings::default(), None),
-        Err(error) => (
-            Settings::default(),
-            Some(format!("Could not read settings, using defaults: {error}")),
-        ),
-    }
+    load_or_default(settings_path(), "your settings", Settings::load)
 }
 
 fn load_saved_scans() -> Vec<SavedScan> {
@@ -1203,145 +738,9 @@ fn load_saved_scans() -> Vec<SavedScan> {
 }
 
 fn load_notes() -> (DeviceNotes, Option<String>) {
-    let Some(path) = device_notes_path() else {
-        return (DeviceNotes::default(), None);
-    };
-    match DeviceNotes::load(&path) {
-        Ok(notes) => (notes, None),
-        Err(error) if error.kind() == ErrorKind::NotFound => (DeviceNotes::default(), None),
-        Err(error) => (
-            DeviceNotes::default(),
-            Some(format!("Could not read device notes: {error}")),
-        ),
-    }
+    load_or_default(device_notes_path(), "your device notes", DeviceNotes::load)
 }
 
 fn load_labels() -> (DeviceLabels, Option<String>) {
-    let Some(path) = labels_path() else {
-        return (DeviceLabels::default(), None);
-    };
-    match DeviceLabels::load(&path) {
-        Ok(labels) => (labels, None),
-        Err(error) if error.kind() == ErrorKind::NotFound => (DeviceLabels::default(), None),
-        Err(error) => (
-            DeviceLabels::default(),
-            Some(format!("Could not read device names: {error}")),
-        ),
-    }
-}
-
-fn unix_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn network(interface: &str, kind: NetworkKind) -> LocalNetwork {
-        LocalNetwork {
-            interface: interface.to_owned(),
-            target: format!("10.0.{}.0/24", interface.len()),
-            kind,
-            host_count: 254,
-        }
-    }
-
-    #[test]
-    fn virtual_networks_are_listed_only_when_not_ignored() {
-        let detected = [
-            network("eth0", NetworkKind::Physical),
-            network("docker0", NetworkKind::Virtual),
-            network("Tailscale", NetworkKind::Tailnet),
-        ];
-        let mut settings = Settings::default();
-        let names = |networks: Vec<LocalNetwork>| -> Vec<String> {
-            networks
-                .into_iter()
-                .map(|network| network.interface)
-                .collect()
-        };
-        assert_eq!(
-            names(listed_networks(&detected, &settings)),
-            ["eth0", "Tailscale"]
-        );
-        settings.ignore_virtual_networks = false;
-        assert_eq!(
-            names(listed_networks(&detected, &settings)),
-            ["eth0", "docker0", "Tailscale"]
-        );
-    }
-
-    fn press(key: iced::keyboard::Key, modifiers: iced::keyboard::Modifiers) -> iced::Event {
-        use iced::keyboard::{Event, Location, key::Physical};
-        iced::Event::Keyboard(Event::KeyPressed {
-            key: key.clone(),
-            modified_key: key,
-            physical_key: Physical::Unidentified(iced::keyboard::key::NativeCode::Unidentified),
-            location: Location::Standard,
-            modifiers,
-            text: None,
-            repeat: false,
-        })
-    }
-
-    #[test]
-    fn shortcuts_map_to_messages() {
-        use iced::event::Status::{Captured, Ignored};
-        use iced::keyboard::{Key, Modifiers, key::Named};
-        let id = iced::window::Id::unique();
-        let map = |key, modifiers, status| shortcut_message(press(key, modifiers), status, id);
-        assert!(matches!(
-            map(Key::Named(Named::Escape), Modifiers::empty(), Captured),
-            Some(Message::EscapePressed)
-        ));
-        assert!(matches!(
-            map(Key::Character("f".into()), Modifiers::CTRL, Ignored),
-            Some(Message::FocusSearch)
-        ));
-        assert!(map(Key::Character("f".into()), Modifiers::empty(), Ignored).is_none());
-        assert!(matches!(
-            map(Key::Named(Named::Enter), Modifiers::empty(), Ignored),
-            Some(Message::EnterPressed)
-        ));
-        assert!(map(Key::Named(Named::Enter), Modifiers::empty(), Captured).is_none());
-    }
-
-    #[test]
-    fn a_new_main_network_is_reported_once() {
-        let home = network("eth0", NetworkKind::Physical);
-        let cafe = network("wlan0", NetworkKind::Physical);
-        let at_home = std::slice::from_ref(&home);
-        assert_eq!(changed_primary_target(at_home, at_home), None);
-        assert_eq!(
-            changed_primary_target(at_home, &[cafe.clone(), home.clone()]),
-            Some(cafe.target.clone())
-        );
-        assert_eq!(
-            changed_primary_target(&[], at_home),
-            Some(home.target.clone())
-        );
-        assert_eq!(changed_primary_target(&[cafe], &[]), None);
-    }
-
-    #[test]
-    fn suggestions_follow_the_typed_text() {
-        let detected = vec![
-            network("eth0", NetworkKind::Physical),
-            network("wlan", NetworkKind::Physical),
-        ];
-        let names = |typed: &str| -> Vec<String> {
-            matching_networks(detected.clone(), typed)
-                .into_iter()
-                .map(|n| n.interface)
-                .collect()
-        };
-        assert_eq!(names(""), ["eth0", "wlan"]);
-        assert_eq!(names("10.0"), ["eth0", "wlan"]);
-        assert_eq!(names("WLA"), ["wlan"]);
-        assert!(names("172.16.0.7").is_empty());
-        assert!(names(&detected[0].target).is_empty());
-    }
+    load_or_default(labels_path(), "your device names", DeviceLabels::load)
 }

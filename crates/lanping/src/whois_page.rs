@@ -1,20 +1,16 @@
 //! The WHOIS page of the DNS tab: who is behind a domain name or an IP address.
 
-use iced::font::Weight;
 use iced::widget::{button, column, container, row, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
 use lanping_core::whois::{WhoisError, WhoisReport, whois};
 
 use crate::app::Message;
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
-use crate::theme::{self, BAD, Edge, MUTED};
+use crate::job::Job;
+use crate::theme::{self, BAD, BOLD, Edge, MUTED, SECTION_SPACING};
+use crate::ui::note;
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const SECTION_SPACING: f32 = 14.0;
 const LABEL_WIDTH: f32 = 130.0;
 const ROW_PADDING: [f32; 2] = [8.0, 12.0];
 const RAW_TEXT_SIZE: f32 = 12.0;
@@ -31,8 +27,7 @@ enum Lookup {
 pub struct WhoisState {
     query: String,
     lookup: Lookup,
-    /// Counts lookups, so an answer that was overtaken is ignored.
-    generation: u64,
+    job: Job,
 }
 
 impl WhoisState {
@@ -40,7 +35,7 @@ impl WhoisState {
         Self {
             query: String::new(),
             lookup: Lookup::Idle,
-            generation: 0,
+            job: Job::default(),
         }
     }
 
@@ -49,19 +44,17 @@ impl WhoisState {
     }
 
     pub fn start(&mut self) -> Task<Message> {
-        self.generation += 1;
         self.lookup = Lookup::Running;
         let query = self.query.clone();
-        let generation = self.generation;
-        Task::perform(async move { whois(&query).await }, move |result| {
-            Message::WhoisDone(generation, result)
-        })
+        self.job
+            .spawn(async move { whois(&query).await }, Message::WhoisDone)
     }
 
     pub fn finish(&mut self, generation: u64, result: Result<WhoisReport, WhoisError>) {
-        if generation != self.generation {
+        if !self.job.is_current(generation) {
             return;
         }
+        self.job.finished();
         self.lookup = match result {
             Ok(report) => Lookup::Done(report),
             Err(error) => Lookup::Failed(error),
@@ -105,10 +98,6 @@ pub fn whois_view(state: &WhoisState) -> Element<'_, Message> {
     column![input_group(vec![query.into(), go]), result]
         .spacing(SECTION_SPACING)
         .into()
-}
-
-fn note<'a>(message: &'static str) -> Element<'a, Message> {
-    text(message).size(14).color(MUTED).into()
 }
 
 fn report_view(report: &WhoisReport) -> Element<'_, Message> {

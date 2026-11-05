@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 
 use lanping_core::Host;
 use lanping_core::device_type::guess_device_type;
+use lanping_core::text::compare_ignore_case;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SortKey {
@@ -48,13 +49,13 @@ pub fn compare_hosts(a: &Host, b: &Host, key: SortKey) -> Ordering {
     match key {
         SortKey::Address => by_address,
         SortKey::Latency => compare_optional(&a.latency, &b.latency).then(by_address),
-        SortKey::Hostname => compare_optional_text(
-            &a.display_name().map(str::to_owned),
-            &b.display_name().map(str::to_owned),
-        )
-        .then(by_address),
-        SortKey::Mac => compare_optional_text(&a.mac, &b.mac).then(by_address),
-        SortKey::Vendor => compare_optional_text(&a.vendor, &b.vendor).then(by_address),
+        SortKey::Hostname => {
+            compare_optional_text(a.display_name(), b.display_name()).then(by_address)
+        }
+        SortKey::Mac => compare_optional_text(a.mac.as_deref(), b.mac.as_deref()).then(by_address),
+        SortKey::Vendor => {
+            compare_optional_text(a.vendor.as_deref(), b.vendor.as_deref()).then(by_address)
+        }
         SortKey::Ports => a.open_ports.len().cmp(&b.open_ports.len()).then(by_address),
         SortKey::DeviceType => guess_device_type(a)
             .cmp(&guess_device_type(b))
@@ -72,11 +73,14 @@ fn compare_optional<T: Ord>(a: &Option<T>, b: &Option<T>) -> Ordering {
     }
 }
 
-fn compare_optional_text(a: &Option<String>, b: &Option<String>) -> Ordering {
-    compare_optional(
-        &a.as_ref().map(|t| t.to_lowercase()),
-        &b.as_ref().map(|t| t.to_lowercase()),
-    )
+/// Like [`compare_optional`] for text, ignoring case.
+fn compare_optional_text(a: Option<&str>, b: Option<&str>) -> Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => compare_ignore_case(a, b),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
 }
 
 #[cfg(test)]

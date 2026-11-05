@@ -269,53 +269,28 @@ pub async fn check(target: &str, server_name: Option<&str>) -> Result<TlsReport,
             .to_owned(),
         None => host.clone(),
     };
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let inner =
-        WebPkiServerVerifier::builder_with_provider(system_roots().await, Arc::clone(&provider))
-            .build()
-            .map_err(setup_error)?;
-    let verifier = Arc::new(Inspecting {
-        inner,
-        seen: Mutex::new(None),
-    });
-    let config = ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(setup_error)?
-        .dangerous()
-        .with_custom_certificate_verifier(Arc::clone(&verifier) as Arc<dyn ServerCertVerifier>)
-        .with_no_client_auth();
+    let (config, verifier) = inspecting_config().await?;
     let server_name = ServerName::try_from(name.clone()).map_err(|_| TlsError::InvalidTarget)?;
-
-    let _permit = socket_permit().await;
-    let stream = timeout(STEP_WAIT, TcpStream::connect((host.as_str(), port)))
-        .await
-        .map_err(|_| TlsError::Timeout)?
-        .map_err(|error| TlsError::Failed(connect_failure(&error, &host, port)))?;
-    let address = stream.peer_addr().ok();
-    let connector = TlsConnector::from(Arc::new(config));
-    let Ok(handshake) = timeout(STEP_WAIT, connector.connect(server_name, stream)).await else {
-        return Err(TlsError::Failed(
-            silent_after_connect(&host, port, &name).await,
-        ));
-    };
-    let (protocol, cipher, failure) = match handshake {
-        Ok(stream) => {
-            let (_, connection) = stream.get_ref();
-            (
-                connection
-                    .protocol_version()
-                    .map(|version| format!("{version:?}")),
-                connection
-                    .negotiated_cipher_suite()
-                    .map(|suite| format!("{:?}", suite.suite())),
-                None,
-            )
-        }
-        Err(error) => (
+    // The connection, and the place it holds in the socket budget, end before any diagnosis,
+    // which opens connections of its own.
+    let handshake = connect_and_handshake(&host, port, server_name, config).await?;
+    let (address, protocol, cipher, failure) = match handshake {
+        Handshake::Finished {
+            address,
+            protocol,
+            cipher,
+        } => (address, protocol, cipher, None),
+        Handshake::Failed { address, error } => (
+            address,
             None,
             None,
             Some(handshake_failure(&error, &host, port, &name).await),
         ),
+        Handshake::Silent => {
+            return Err(TlsError::Failed(
+                silent_after_connect(&host, port, &name).await,
+            ));
+        }
     };
     let seen = verifier
         .seen
@@ -342,6 +317,76 @@ pub async fn check(target: &str, server_name: Option<&str>) -> Result<TlsReport,
         chain,
         trust,
         checked_at: unix_now(),
+    })
+}
+
+/// A client setup that accepts any certificate so the chain can be read, together with the
+/// verifier that kept the chain and what the normal check said about it.
+async fn inspecting_config() -> Result<(ClientConfig, Arc<Inspecting>), TlsError> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let inner =
+        WebPkiServerVerifier::builder_with_provider(system_roots().await, Arc::clone(&provider))
+            .build()
+            .map_err(setup_error)?;
+    let verifier = Arc::new(Inspecting {
+        inner,
+        seen: Mutex::new(None),
+    });
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(setup_error)?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::clone(&verifier) as Arc<dyn ServerCertVerifier>)
+        .with_no_client_auth();
+    Ok((config, verifier))
+}
+
+/// How the handshake with a server ended.
+enum Handshake {
+    Finished {
+        address: Option<SocketAddr>,
+        protocol: Option<String>,
+        cipher: Option<String>,
+    },
+    /// The server answered the handshake with an error or something that is not TLS.
+    Failed {
+        address: Option<SocketAddr>,
+        error: std::io::Error,
+    },
+    /// The server accepted the connection and then said nothing.
+    Silent,
+}
+
+async fn connect_and_handshake(
+    host: &str,
+    port: u16,
+    server_name: ServerName<'static>,
+    config: ClientConfig,
+) -> Result<Handshake, TlsError> {
+    let _permit = socket_permit().await;
+    let stream = timeout(STEP_WAIT, TcpStream::connect((host, port)))
+        .await
+        .map_err(|_| TlsError::Timeout)?
+        .map_err(|error| TlsError::Failed(connect_failure(&error, host, port)))?;
+    let address = stream.peer_addr().ok();
+    let connector = TlsConnector::from(Arc::new(config));
+    let Ok(handshake) = timeout(STEP_WAIT, connector.connect(server_name, stream)).await else {
+        return Ok(Handshake::Silent);
+    };
+    Ok(match handshake {
+        Ok(stream) => {
+            let (_, connection) = stream.get_ref();
+            Handshake::Finished {
+                address,
+                protocol: connection
+                    .protocol_version()
+                    .map(|version| format!("{version:?}")),
+                cipher: connection
+                    .negotiated_cipher_suite()
+                    .map(|suite| format!("{:?}", suite.suite())),
+            }
+        }
+        Err(error) => Handshake::Failed { address, error },
     })
 }
 

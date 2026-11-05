@@ -157,7 +157,7 @@ pub fn parse_traceroute(text: &str) -> Vec<HopSample> {
                 return Some(timeout_sample(hop));
             }
             let address: IpAddr = first.parse().ok()?;
-            let rtt_ms = tokens.next()?.parse().ok()?;
+            let rtt_ms = finite_milliseconds(tokens.next()?)?;
             Some(HopSample {
                 hop,
                 address: Some(address),
@@ -209,7 +209,7 @@ pub fn parse_tracert(text: &str) -> Vec<HopSample> {
             let times: Vec<f64> = tokens
                 .windows(2)
                 .filter(|pair| pair[1] == "ms")
-                .filter_map(|pair| pair[0].trim_start_matches('<').parse().ok())
+                .filter_map(|pair| finite_milliseconds(pair[0].trim_start_matches('<')))
                 .collect();
             if times.is_empty() {
                 let timed_out = tokens.iter().skip(1).any(|token| *token == "*");
@@ -234,7 +234,13 @@ fn timeout_sample(hop: u8) -> HopSample {
 
 /// `2.661ms` as 2.661.
 fn parse_milliseconds(token: &str) -> Option<f64> {
-    token.strip_suffix("ms")?.parse().ok()
+    finite_milliseconds(token.strip_suffix("ms")?)
+}
+
+/// A number of milliseconds. `NaN` and `inf`, which `f64` would also read, are refused so
+/// one odd line cannot poison the statistics.
+fn finite_milliseconds(text: &str) -> Option<f64> {
+    text.parse::<f64>().ok().filter(|value| value.is_finite())
 }
 
 /// Everything learned about one hop over the rounds so far.
@@ -409,6 +415,15 @@ Trace complete.
         assert_eq!(parsed[1].rtt_ms, Some(4.0));
         assert_eq!(parsed[2], timeout_sample(3));
         assert_eq!(parsed[3].rtt_ms, Some(16.0 / 3.0));
+    }
+
+    #[test]
+    fn numbers_that_are_not_finite_are_not_round_trip_times() {
+        assert!(parse_traceroute(" 1  10.0.0.1  NaN ms").is_empty());
+        assert!(parse_traceroute(" 1  10.0.0.1  inf ms").is_empty());
+        let tracepath = parse_tracepath(" 1:  10.0.0.1  infms");
+        assert_eq!(tracepath.len(), 1);
+        assert_eq!(tracepath[0].rtt_ms, None);
     }
 
     #[test]

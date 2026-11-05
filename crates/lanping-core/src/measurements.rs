@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::files::{json_files, write_new_json};
 use crate::latency::LatencySeries;
 use crate::ping::PingSummary;
 use crate::throughput::ThroughputResult;
@@ -122,31 +123,14 @@ impl Measurement {
 /// Writes the record into `directory` and returns the file path. A record finished in the
 /// same second as another of its kind gets a number added, so nothing is overwritten.
 pub fn save(directory: &Path, measurement: &Measurement) -> io::Result<PathBuf> {
-    fs::create_dir_all(directory)?;
-    let stem = measurement.file_stem();
-    let mut path = directory.join(format!("{stem}.json"));
-    let mut number = 2;
-    while path.exists() {
-        path = directory.join(format!("{stem}-{number}.json"));
-        number += 1;
-    }
     let json = serde_json::to_string(measurement).map_err(io::Error::other)?;
-    fs::write(&path, json)?;
-    Ok(path)
+    write_new_json(directory, &measurement.file_stem(), &json)
 }
 
 /// Lists readable records, newest first, at most [`LIST_LIMIT`]. Corrupt files are skipped.
 pub fn list(directory: &Path) -> Vec<(PathBuf, Measurement)> {
-    let Ok(entries) = fs::read_dir(directory) else {
-        return Vec::new();
-    };
-    let mut records: Vec<(PathBuf, Measurement)> = entries
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|extension| extension == "json")
-        })
+    let mut records: Vec<(PathBuf, Measurement)> = json_files(directory)
+        .into_iter()
         .filter_map(|path| {
             let json = fs::read_to_string(&path).ok()?;
             let measurement = serde_json::from_str(&json).ok()?;

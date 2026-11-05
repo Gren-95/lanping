@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use crate::files::write_atomic;
 use serde::{Deserialize, Serialize};
 
 const MAX_LABEL_CHARS: usize = 60;
@@ -28,10 +29,6 @@ impl DeviceLabels {
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
@@ -42,11 +39,8 @@ impl DeviceLabels {
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
-        if let Some(directory) = path.parent() {
-            fs::create_dir_all(directory)?;
-        }
         let json = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
-        fs::write(path, json)
+        write_atomic(path, &json)
     }
 }
 

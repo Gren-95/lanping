@@ -1,6 +1,5 @@
 //! The host list: a scrolling table, or stacked cards when the card view is on.
 
-use iced::font::Weight;
 use iced::widget::{
     Row as LayoutRow, button, column, container, mouse_area, responsive, row, scrollable, space,
     text, tooltip,
@@ -15,19 +14,14 @@ use crate::host_filter::RowStatus;
 use crate::host_rows::Row;
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
 use crate::settings::Column;
-use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN, latency_color};
+use crate::theme::{
+    self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SCROLLBAR_GAP, WARN, latency_color,
+};
 
-const NO_VALUE: &str = "-";
 const CARD_SPACING: f32 = 10.0;
 const CARD_PADDING: f32 = 14.0;
 const CELL_PADDING: f32 = 8.0;
 const CELL_SIDE_PADDING: f32 = 12.0;
-/// Keeps the scrollbars clear of the grid.
-const SCROLLBAR_GAP: f32 = 12.0;
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 pub fn results<'a>(app: &'a LanPing) -> Element<'a, Message> {
     let rows = app.visible_rows();

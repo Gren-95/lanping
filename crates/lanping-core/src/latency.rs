@@ -2,18 +2,22 @@
 
 use std::collections::VecDeque;
 use std::fmt;
+use std::fmt::Write as _;
 use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Deref;
 use std::time::Duration;
 
 use surge_ping::Client;
+use tokio::time::timeout;
 
 use crate::probe::{create_icmp_client, ping, tcp_liveness};
-use crate::rtt_stats::RttStats;
+use crate::rtt_stats::{RttStats, millis};
 use crate::trace::validate_target;
 
 /// How long one probe waits for an answer.
 const PROBE_WAIT: Duration = Duration::from_secs(2);
+/// How long a host name lookup may take.
+const LOOKUP_WAIT: Duration = Duration::from_secs(5);
 /// Probes drawn in the history graph.
 pub const GRAPH_LENGTH: usize = 120;
 /// Probes kept for the saved log: a day at one probe a second.
@@ -84,7 +88,7 @@ impl Prober {
                 .map(|(round_trip, _)| round_trip),
             None => tcp_liveness(self.address, PROBE_WAIT).await,
         };
-        round_trip.map(|round_trip| round_trip.as_secs_f64() * 1000.0)
+        round_trip.map(millis)
     }
 }
 
@@ -92,9 +96,13 @@ async fn resolve_ipv4(target: String) -> Result<Ipv4Addr, LatencyError> {
     if let Ok(address) = target.parse::<Ipv4Addr>() {
         return Ok(address);
     }
-    tokio::task::spawn_blocking(move || dns_lookup::lookup_host(&target))
+    // The system lookup cannot be cancelled, so a slow one keeps its thread until it ends,
+    // but the caller is released after the wait.
+    let lookup = tokio::task::spawn_blocking(move || dns_lookup::lookup_host(&target));
+    timeout(LOOKUP_WAIT, lookup)
         .await
         .ok()
+        .and_then(Result::ok)
         .and_then(Result::ok)
         .and_then(|addresses| {
             addresses.into_iter().find_map(|address| match address {
@@ -155,16 +163,18 @@ impl LatencySeries {
 
     /// The log as CSV: `unix_time,rtt_ms`, with an empty time for a probe with no answer.
     pub fn log_as_csv(&self) -> String {
-        let lines = self.log.iter().map(|probe| {
-            let rtt = probe
-                .rtt_ms
-                .map_or_else(String::new, |rtt| format!("{rtt:.3}"));
-            format!("{},{rtt}", probe.unix_seconds)
-        });
-        std::iter::once("unix_time,rtt_ms".to_owned())
-            .chain(lines)
-            .collect::<Vec<_>>()
-            .join("\n")
+        const HEADER: &str = "unix_time,rtt_ms";
+        // About twelve bytes a line, so the text is built in one allocation.
+        let mut csv = String::with_capacity(HEADER.len() + 1 + self.log.len() * 12);
+        csv.push_str(HEADER);
+        for probe in &self.log {
+            csv.push('\n');
+            let _ = write!(csv, "{},", probe.unix_seconds);
+            if let Some(rtt) = probe.rtt_ms {
+                let _ = write!(csv, "{rtt:.3}");
+            }
+        }
+        csv
     }
 }
 

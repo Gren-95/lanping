@@ -12,6 +12,7 @@ mod host_filter;
 mod host_order;
 mod host_rows;
 mod icons;
+mod job;
 mod latency_tab;
 mod map_dialog;
 mod modal;
@@ -20,6 +21,7 @@ mod notify;
 mod opener;
 mod presets;
 mod results;
+mod row_list;
 mod scan_flow;
 mod settings;
 mod settings_page;
@@ -27,6 +29,8 @@ mod snmp_tab;
 mod snmp_view;
 mod sparkline;
 mod speed_locations;
+mod speed_model;
+mod speed_run;
 mod speed_tab;
 mod speed_view;
 mod storage;
@@ -38,6 +42,7 @@ mod theme;
 mod timestamp;
 mod tls_tab;
 mod trace_tab;
+mod ui;
 mod view;
 mod whois_page;
 mod wifi_channels;
@@ -67,7 +72,10 @@ fn window_icon() -> Option<window::Icon> {
 
 /// Saved size from the last session, kept at least as large as the minimum.
 fn starting_size() -> Size {
-    let (settings, _) = app::load_settings();
+    // Only a look: a file that cannot be read is dealt with, and reported, when the app starts.
+    let settings = storage::settings_path()
+        .and_then(|path| settings::Settings::load(&path).ok())
+        .unwrap_or_default();
     settings
         .window_size
         .map_or(DEFAULT_WINDOW, |(width, height)| {

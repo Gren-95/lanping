@@ -205,7 +205,8 @@ async fn enrich(
     let discover = config.discover;
     let upnp_targets: Vec<Ipv4Addr> = known.keys().copied().collect();
     let survey = tokio::spawn(async move {
-        if discover {
+        // Nothing to ask means nothing to wait for.
+        if discover && !upnp_targets.is_empty() {
             ssdp::survey(&upnp_targets, SSDP_LISTEN_TIME).await
         } else {
             HashMap::new()
@@ -213,17 +214,20 @@ async fn enrich(
     });
     let limit = Arc::new(Semaphore::new(MAX_PARALLEL_LOOKUPS));
     let mut lookups = JoinSet::new();
+    // Made once and shared, instead of copied for every host.
+    let ports: Arc<[u16]> = config.ports.as_slice().into();
+    let community = config.snmp_community.clone().map(Arc::new);
     for (_ip, mut host) in known {
-        let (limit, ports, wait) = (limit.clone(), config.ports.clone(), config.probe_timeout);
+        let (limit, ports, wait) = (limit.clone(), Arc::clone(&ports), config.probe_timeout);
         let grab = config.grab_banners;
-        let community = config.snmp_community.clone();
+        let community = community.clone();
         lookups.spawn(async move {
             let _permit = limit.acquire_owned().await.ok()?;
             host.hostname = resolve_hostname(host.ip).await;
             if discover {
                 host.discovery = query_host(host.ip, DISCOVERY_TIMEOUT).await;
             }
-            if let Some(community) = &community {
+            if let Some(community) = community.as_deref() {
                 host.snmp = query_device(host.ip, community, DISCOVERY_TIMEOUT)
                     .await
                     .unwrap_or_default();

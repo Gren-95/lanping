@@ -1,4 +1,5 @@
 use std::net::Ipv4Addr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::Semaphore;
@@ -163,12 +164,16 @@ pub fn format_ports(ports: &[u16]) -> String {
 
 /// Returns the open ports of `ip`, sorted ascending.
 pub async fn scan_ports(ip: Ipv4Addr, ports: &[u16], wait: Duration) -> Vec<u16> {
-    let limit = std::sync::Arc::new(Semaphore::new(MAX_PARALLEL_PROBES));
+    let limit = Arc::new(Semaphore::new(MAX_PARALLEL_PROBES));
     let mut attempts = JoinSet::new();
     for &port in ports {
-        let limit = limit.clone();
+        // The place is taken before the task exists, so a long port list never makes more
+        // tasks than there are places.
+        let Ok(permit) = Arc::clone(&limit).acquire_owned().await else {
+            break;
+        };
         attempts.spawn(async move {
-            let _permit = limit.acquire_owned().await.ok()?;
+            let _permit = permit;
             let (outcome, _) = tcp_probe(ip, port, wait).await;
             (outcome == TcpOutcome::Open).then_some(port)
         });

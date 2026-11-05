@@ -66,7 +66,14 @@ pub fn diff_scans(previous: &[Host], current: &[Host]) -> ScanDiff {
 }
 
 fn differs(old: &Host, new: &Host) -> bool {
-    old.ip != new.ip || old.hostname != new.hostname || old.open_ports != new.open_ports
+    old.ip != new.ip
+        || old.hostname != new.hostname
+        || !same_ports(&old.open_ports, &new.open_ports)
+}
+
+/// Whether two port lists hold the same ports, whatever their order.
+fn same_ports(a: &[u16], b: &[u16]) -> bool {
+    a.len() == b.len() && a.iter().all(|port| b.contains(port))
 }
 
 #[cfg(test)]

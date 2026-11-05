@@ -1,10 +1,9 @@
 //! Drawing of the SNMP tab.
 
-use iced::font::Weight;
 use iced::widget::{
     Row as LayoutRow, button, checkbox, column, container, scrollable, space, text, text_input,
 };
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Length};
 use lanping_core::snmp_interfaces::{HISTORY_LENGTH, Interface};
 
 use crate::app::{LanPing, Message};
@@ -13,23 +12,18 @@ use crate::results::pill;
 use crate::snmp_tab::{SnmpState, Status, format_rate, format_uptime, utilization_percent};
 use crate::sparkline::{Bar, sparkline, width_of};
 use crate::table_grid::{cell_width, grid_line};
-use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
+use crate::theme::{
+    self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SCROLLBAR_GAP, SECTION_SPACING, WARN,
+};
+use crate::ui::{note, panel, scrolling};
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
-const SCROLLBAR_GAP: f32 = 12.0;
 const TEXT_SIZE: u32 = 13;
 const COMMUNITY_WIDTH: f32 = 190.0;
 const UTILIZATION_WARN_PERCENT: f64 = 50.0;
 const UTILIZATION_BAD_PERCENT: f64 = 80.0;
 /// Smallest scale of an interface's graph, so a trickle does not fill the whole bar.
 const MIN_GRAPH_SCALE_BPS: f64 = 1e6;
-const NO_VALUE: &str = "-";
 
 const COLUMNS: [(&str, f32); 6] = [
     ("Interface", 230.0),
@@ -43,14 +37,8 @@ const COLUMNS: [(&str, f32); 6] = [
 pub fn snmp_panel(app: &LanPing) -> Element<'_, Message> {
     let snmp = &app.snmp;
     let body = column![controls(app), summary(snmp), content(snmp)].spacing(SECTION_SPACING);
-    let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
-        .width(Length::Fill)
-        .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    let page = scrolling(body);
+    panel(page)
 }
 
 fn controls(app: &LanPing) -> Element<'_, Message> {
@@ -147,10 +135,6 @@ fn content(snmp: &SnmpState) -> Element<'_, Message> {
         Status::Failed(message) => text(message.as_str()).color(BAD).into(),
         Status::Running => interface_table(snmp),
     }
-}
-
-fn note<'a>(message: &'static str) -> Element<'a, Message> {
-    text(message).size(14).color(MUTED).into()
 }
 
 fn graph_width() -> f32 {

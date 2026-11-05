@@ -1,39 +1,32 @@
 //! The Latency tab: probe one host on an interval and keep a graph and a log.
 
 use std::fmt;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use iced::font::Weight;
-use iced::task::Handle;
 use iced::widget::{
     Row as LayoutRow, button, column, container, pick_list, space, text, text_input,
 };
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::{Alignment, Element, Length, Task};
 use lanping_core::latency::{GRAPH_LENGTH, LatencyError, LatencySeries, Prober};
 use lanping_core::measurements::{LatencyRecord, Measurement};
 use lanping_core::trace::validate_target;
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
+use crate::job::Job;
 use crate::results::pill;
 use crate::sparkline::{Bar, chart};
-use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
+use crate::theme::{
+    self, BAD, BOLD, Edge, MIN_GRAPH_SCALE_MS, MUTED, NO_VALUE, SECTION_SPACING, WARN,
+    latency_color, loss_color,
+};
+use crate::timestamp::unix_now;
+use crate::ui::{empty_state, panel};
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
 const CHART_HEIGHT: f32 = 120.0;
 const TILE_PADDING: f32 = 12.0;
 const TILE_WIDTH: f32 = 120.0;
-const LOSS_WARN_PERCENT: f64 = 1.0;
-const LOSS_BAD_PERCENT: f64 = 10.0;
-const NO_VALUE: &str = "-";
-/// Smallest scale of the graph, so a 1 ms host does not fill the whole chart.
-const MIN_GRAPH_SCALE_MS: f64 = 10.0;
 
 /// Time between two probes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -75,9 +68,7 @@ pub struct LatencyState {
     prober: Option<Prober>,
     running: bool,
     error: Option<LatencyError>,
-    /// Counts starts and stops, so an answer from a stopped run is ignored.
-    generation: u64,
-    handle: Option<Handle>,
+    job: Job,
 }
 
 impl LatencyState {
@@ -101,22 +92,15 @@ impl LatencyState {
         self.error = None;
         self.running = true;
         let target = self.target.clone();
-        let generation = self.generation;
-        let (task, handle) = Task::perform(
+        self.job.spawn(
             async move { Prober::connect(&target).await },
-            move |result| Message::LatencyReady(generation, result),
+            Message::LatencyReady,
         )
-        .abortable();
-        self.handle = Some(handle);
-        task
     }
 
     pub fn stop(&mut self) {
         self.running = false;
-        self.generation += 1;
-        if let Some(handle) = self.handle.take() {
-            handle.abort();
-        }
+        self.job.cancel();
     }
 
     /// The target resolved: remember how to probe it and send the first probe.
@@ -125,7 +109,7 @@ impl LatencyState {
         generation: u64,
         result: Result<Prober, LatencyError>,
     ) -> Task<Message> {
-        if generation != self.generation || !self.running {
+        if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
         match result {
@@ -136,7 +120,7 @@ impl LatencyState {
             Err(error) => {
                 self.error = Some(error);
                 self.running = false;
-                self.handle = None;
+                self.job.finished();
                 Task::none()
             }
         }
@@ -144,10 +128,10 @@ impl LatencyState {
 
     /// Records a probe and schedules the next one.
     pub fn sampled(&mut self, generation: u64, rtt_ms: Option<f64>) -> Task<Message> {
-        if generation != self.generation || !self.running {
+        if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
-        self.series.record(unix_seconds(), rtt_ms);
+        self.series.record(unix_now(), rtt_ms);
         self.next_probe(self.interval.duration())
     }
 
@@ -155,15 +139,11 @@ impl LatencyState {
         let Some(prober) = self.prober.clone() else {
             return Task::none();
         };
-        let generation = self.generation;
         let probe = async move {
             tokio::time::sleep(delay).await;
             prober.sample().await
         };
-        let (task, handle) =
-            Task::perform(probe, move |rtt| Message::LatencySample(generation, rtt)).abortable();
-        self.handle = Some(handle);
-        task
+        self.job.spawn_next(probe, Message::LatencySample)
     }
 
     /// The run so far as a record for the history. `None` before the first probe.
@@ -178,7 +158,7 @@ impl LatencyState {
         Some(Measurement::Latency(LatencyRecord::new(
             &self.target,
             method,
-            unix_seconds(),
+            unix_now(),
             &self.series,
         )))
     }
@@ -210,14 +190,8 @@ impl LatencyState {
     }
 
     pub fn default_log_name(&self) -> String {
-        format!("latency-{}.csv", unix_seconds())
+        format!("latency-{}.csv", unix_now())
     }
-}
-
-fn unix_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 pub fn latency_panel(app: &LanPing) -> Element<'_, Message> {
@@ -237,11 +211,7 @@ pub fn latency_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![toolbar(latency), content]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    panel(page)
 }
 
 fn toolbar(latency: &LatencyState) -> Element<'_, Message> {
@@ -320,20 +290,6 @@ fn toolbar(latency: &LatencyState) -> Element<'_, Message> {
     .into()
 }
 
-fn empty_state<'a>(title: &'static str, detail: String) -> Element<'a, Message> {
-    container(
-        column![
-            text(title).size(20).font(BOLD),
-            text(detail).size(14).color(MUTED),
-        ]
-        .spacing(6)
-        .align_x(Alignment::Center),
-    )
-    .center(Length::Fill)
-    .padding(24)
-    .into()
-}
-
 fn results(latency: &LatencyState) -> Element<'_, Message> {
     let series = &latency.series;
     let tiles = LayoutRow::with_children([
@@ -405,16 +361,6 @@ fn tile<'a>(label: &'static str, value: String, color: iced::Color) -> Element<'
     .into()
 }
 
-fn loss_color(percent: f64) -> iced::Color {
-    if percent >= LOSS_BAD_PERCENT {
-        BAD
-    } else if percent >= LOSS_WARN_PERCENT {
-        WARN
-    } else {
-        GOOD
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -425,13 +371,6 @@ mod tests {
             target: "example.com".to_owned(),
             ..LatencyState::default()
         }
-    }
-
-    #[test]
-    fn loss_is_graded_by_size() {
-        assert_eq!(loss_color(0.0), GOOD);
-        assert_eq!(loss_color(5.0), WARN);
-        assert_eq!(loss_color(50.0), BAD);
     }
 
     #[test]

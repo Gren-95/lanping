@@ -1,3 +1,12 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Seconds since 1970 now. A clock set before 1970 reads as 0.
+pub fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs())
+}
+
 /// Formats Unix seconds as `YYYY-MM-DD HH:MM UTC` without a date library.
 pub fn format_unix_utc(seconds: u64) -> String {
     let days = (seconds / 86_400) as i64;
