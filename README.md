@@ -97,12 +97,16 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A Subnet tab turns an address with a prefix length or netmask into network, broadcast, host range and host count, for IPv4 and IPv6, and can start a scan of the range
 
+**Clock**
+
+- A Clock tab asks a time server over SNTP how far this computer's clock is ahead or behind, and how long the round trip took. It offers a few well-known servers or any you type, and warns when the clock is off by a second or more. Nothing on this computer is changed
+
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP and Subnet start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet and Clock start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run

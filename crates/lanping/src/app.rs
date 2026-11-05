@@ -17,6 +17,7 @@ use lanping_core::labels::DeviceLabels;
 use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::measurements::{Measurement, save as save_measurement};
 use lanping_core::ndt7::Server;
+use lanping_core::ntp::{NtpError, NtpReport};
 use lanping_core::range::{LocalNetwork, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::snmp_interfaces::{Interface, Poll, SnmpError};
@@ -39,6 +40,7 @@ use crate::host_order::SortKey;
 use crate::host_rows::Row;
 use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
+use crate::ntp_tab::NtpState;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::row_list::{RowInputs, RowList};
@@ -88,6 +90,7 @@ pub struct LanPing {
     pub latency: LatencyState,
     pub dns: DnsState,
     pub tls: TlsState,
+    pub ntp: NtpState,
     pub snmp: SnmpState,
     pub speed: SpeedState,
     pub modal: Option<Modal>,
@@ -169,6 +172,7 @@ impl LanPing {
             latency: LatencyState::default(),
             dns: DnsState::new(),
             tls: TlsState::new(),
+            ntp: NtpState::new(),
             snmp: SnmpState::new(),
             speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
@@ -461,6 +465,9 @@ impl LanPing {
             Message::TlsServerNameChanged(name) => self.tls.set_server_name(name),
             Message::TlsCheck => return self.tls.start(),
             Message::TlsDone(generation, result) => self.tls.finish(generation, result),
+            Message::NtpServerChanged(server) => self.ntp.set_server(server),
+            Message::NtpCheck => return self.ntp.start(),
+            Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
             Message::WhoisLookup => return self.dns.whois.start(),
