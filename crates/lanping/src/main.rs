@@ -69,7 +69,10 @@ fn window_icon() -> Option<window::Icon> {
 
 /// Saved size from the last session, kept at least as large as the minimum.
 fn starting_size() -> Size {
-    let (settings, _) = app::load_settings();
+    // Only a look: a file that cannot be read is dealt with, and reported, when the app starts.
+    let settings = storage::settings_path()
+        .and_then(|path| settings::Settings::load(&path).ok())
+        .unwrap_or_default();
     settings
         .window_size
         .map_or(DEFAULT_WINDOW, |(width, height)| {

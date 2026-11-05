@@ -17,6 +17,10 @@ impl LanPing {
     /// Starts a scan. `automatic` scans keep the old list on screen until
     /// they finish and may raise a new-device alert.
     pub(crate) fn start(&mut self, automatic: bool) -> Task<Message> {
+        // Never two scans feeding one list.
+        if let Some(handle) = self.scan_handle.take() {
+            handle.abort();
+        }
         let targets = match parse_targets(&self.target) {
             Ok(targets) => targets,
             Err(error) => {
@@ -78,11 +82,14 @@ impl LanPing {
         }
         if self.scanning {
             self.scanning = false;
+            // An automatic scan keeps the old list on screen, so what it found is in `incoming`.
+            let found = if self.auto_run {
+                self.incoming.len()
+            } else {
+                self.hosts.len()
+            };
             self.incoming.clear();
-            self.set_notice(
-                Notice::Info,
-                format!("{reason}: {} hosts found", self.hosts.len()),
-            );
+            self.set_notice(Notice::Info, format!("{reason}: {found} hosts found"));
         }
     }
 

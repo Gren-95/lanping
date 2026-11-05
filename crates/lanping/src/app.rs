@@ -1,6 +1,5 @@
 use std::fmt;
 use std::fs;
-use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -50,8 +49,8 @@ use crate::speed_tab::{
     Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
 };
 use crate::storage::{
-    device_notes_path, export_directory, history_directory, labels_path, measurements_directory,
-    migrate_legacy_data, settings_path,
+    device_notes_path, export_directory, history_directory, labels_path, load_or_default,
+    measurements_directory, migrate_legacy_data, settings_path,
 };
 use crate::subnet_tab::SubnetState;
 use crate::tabs::Tab;
@@ -315,6 +314,8 @@ pub struct LanPing {
     pub tab_drag: Option<Tab>,
     pub hosts: Vec<Host>,
     pub row_list: RowList,
+    /// Every saved scan, read when first needed and dropped when a scan is saved.
+    saved_scans: Option<Vec<SavedScan>>,
     pub diff: ScanDiff,
     pub sort_key: SortKey,
     pub sort_ascending: bool,
@@ -443,6 +444,7 @@ impl LanPing {
             tab_drag: None,
             hosts: Vec::new(),
             row_list: RowList::default(),
+            saved_scans: None,
             diff: ScanDiff::default(),
             sort_key: SortKey::Address,
             sort_ascending: true,
@@ -507,7 +509,18 @@ impl LanPing {
         if self.tab == Tab::Scan {
             self.refresh_rows();
         }
+        self.close_dialog_of_a_gone_host();
         task
+    }
+
+    /// A menu or details dialog for a device that has left the list (a new scan, or a saved scan
+    /// opened) shows nothing, yet would still block Enter and Esc. It is closed instead.
+    fn close_dialog_of_a_gone_host(&mut self) {
+        if let Some(Modal::HostActions(key) | Modal::HostDetails(key)) = &self.modal
+            && self.find_host(key).is_none()
+        {
+            self.modal = None;
+        }
     }
 
     fn handle(&mut self, message: Message) -> Task<Message> {
@@ -986,6 +999,8 @@ impl LanPing {
                 target,
                 server_name,
             } => {
+                // The tab may be hidden in the settings. Showing it keeps the page reachable.
+                self.settings.set_tab_visible(Tab::Tls, true);
                 self.tab = Tab::Tls;
                 self.tls.set_target(target);
                 self.tls.set_server_name(server_name.unwrap_or_default());
@@ -1006,16 +1021,25 @@ impl LanPing {
         }
     }
 
+    /// Reads the saved scans once. The list is kept until a scan is saved.
+    fn ensure_saved_scans(&mut self) {
+        if self.saved_scans.is_none() {
+            self.saved_scans = Some(load_saved_scans());
+        }
+    }
+
     fn show_summary(&mut self) {
-        let scans = load_saved_scans();
-        self.modal = Some(Modal::Summary(summarize(&self.hosts, &scans, unix_now())));
+        self.ensure_saved_scans();
+        let scans = self.saved_scans.as_deref().unwrap_or_default();
+        self.modal = Some(Modal::Summary(summarize(&self.hosts, scans, unix_now())));
     }
 
     fn show_host_details(&mut self, key: String) {
-        let scans = load_saved_scans();
+        self.ensure_saved_scans();
+        let scans = self.saved_scans.as_deref().unwrap_or_default();
         self.detail_scan_count = scans.len();
-        self.detail_sightings = sightings(&scans, &key);
-        self.detail_timeline = device_timeline(&scans, &key);
+        self.detail_sightings = sightings(scans, &key);
+        self.detail_timeline = device_timeline(scans, &key);
         self.note_draft = NoteDraft::from_note(self.notes.get(&key));
         self.modal = Some(Modal::HostDetails(key));
     }
@@ -1097,6 +1121,7 @@ impl LanPing {
             return;
         };
         let scan = SavedScan::new(self.scanned_target.clone(), self.hosts.clone());
+        self.saved_scans = None;
         if let Err(error) = save_scan(&directory, &scan) {
             self.set_notice(
                 Notice::Error,
@@ -1181,17 +1206,7 @@ impl LanPing {
 /// Reads saved preferences. A missing file means first run; an unreadable
 /// one is reported so the user knows their choices were not applied.
 pub(crate) fn load_settings() -> (Settings, Option<String>) {
-    let Some(path) = settings_path() else {
-        return (Settings::default(), None);
-    };
-    match Settings::load(&path) {
-        Ok(settings) => (settings, None),
-        Err(error) if error.kind() == ErrorKind::NotFound => (Settings::default(), None),
-        Err(error) => (
-            Settings::default(),
-            Some(format!("Could not read settings, using defaults: {error}")),
-        ),
-    }
+    load_or_default(settings_path(), "your settings", Settings::load)
 }
 
 fn load_saved_scans() -> Vec<SavedScan> {
@@ -1206,31 +1221,11 @@ fn load_saved_scans() -> Vec<SavedScan> {
 }
 
 fn load_notes() -> (DeviceNotes, Option<String>) {
-    let Some(path) = device_notes_path() else {
-        return (DeviceNotes::default(), None);
-    };
-    match DeviceNotes::load(&path) {
-        Ok(notes) => (notes, None),
-        Err(error) if error.kind() == ErrorKind::NotFound => (DeviceNotes::default(), None),
-        Err(error) => (
-            DeviceNotes::default(),
-            Some(format!("Could not read device notes: {error}")),
-        ),
-    }
+    load_or_default(device_notes_path(), "your device notes", DeviceNotes::load)
 }
 
 fn load_labels() -> (DeviceLabels, Option<String>) {
-    let Some(path) = labels_path() else {
-        return (DeviceLabels::default(), None);
-    };
-    match DeviceLabels::load(&path) {
-        Ok(labels) => (labels, None),
-        Err(error) if error.kind() == ErrorKind::NotFound => (DeviceLabels::default(), None),
-        Err(error) => (
-            DeviceLabels::default(),
-            Some(format!("Could not read device names: {error}")),
-        ),
-    }
+    load_or_default(labels_path(), "your device names", DeviceLabels::load)
 }
 
 fn unix_now() -> u64 {
