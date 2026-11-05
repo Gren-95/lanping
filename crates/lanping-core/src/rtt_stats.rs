@@ -1,6 +1,14 @@
 //! Running statistics of round trip times, shared by the trace and latency tools.
 
 use std::collections::VecDeque;
+use std::time::Duration;
+
+const MILLISECONDS_PER_SECOND: f64 = 1000.0;
+
+/// A duration in milliseconds, with the fraction.
+pub fn millis(duration: Duration) -> f64 {
+    duration.as_secs_f64() * MILLISECONDS_PER_SECOND
+}
 
 /// What a series of probes has shown so far. A probe with no answer is a loss.
 #[derive(Debug, Clone, PartialEq)]

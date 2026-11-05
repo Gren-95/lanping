@@ -1,60 +1,86 @@
+use std::borrow::Cow;
+
 use serde::Serialize;
 
 use crate::device_notes::{DeviceNote, DeviceNotes};
 use crate::host::Host;
+use crate::rtt_stats::millis;
 
-const CSV_HEADER: &str = "ip,latency_ms,hostname,mac,vendor,open_ports,banners,ipv6,device_name,manufacturer,model,services,owner,location,tags,notes";
+/// The columns of the CSV export, in order. [`host_fields`] fills them in the same order.
+const CSV_COLUMNS: [&str; 16] = [
+    "ip",
+    "latency_ms",
+    "hostname",
+    "mac",
+    "vendor",
+    "open_ports",
+    "banners",
+    "ipv6",
+    "device_name",
+    "manufacturer",
+    "model",
+    "services",
+    "owner",
+    "location",
+    "tags",
+    "notes",
+];
 
 pub fn to_csv(hosts: &[Host], notes: &DeviceNotes) -> String {
-    let mut output = String::from(CSV_HEADER);
+    let mut output = CSV_COLUMNS.join(",");
     output.push('\n');
+    let no_note = DeviceNote::default();
     for host in hosts {
-        let latency = host
-            .latency
-            .map(|latency| format!("{:.1}", latency.as_secs_f64() * 1000.0))
-            .unwrap_or_default();
-        let ports = host
-            .open_ports
-            .iter()
-            .map(u16::to_string)
-            .collect::<Vec<_>>()
-            .join(" ");
-        let banners = host
-            .banners
-            .iter()
-            .map(|banner| format!("{}: {}", banner.port, banner.text))
-            .collect::<Vec<_>>()
-            .join("; ");
-        let ipv6 = host
-            .ipv6
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(" ");
-        let note = notes.get(&host.device_key()).cloned().unwrap_or_default();
-        let fields = [
-            host.ip.to_string(),
-            latency,
-            host.hostname.clone().unwrap_or_default(),
-            host.mac.clone().unwrap_or_default(),
-            host.vendor.clone().unwrap_or_default(),
-            ports,
-            banners,
-            ipv6,
-            host.discovery.name.clone().unwrap_or_default(),
-            host.discovery.manufacturer.clone().unwrap_or_default(),
-            host.discovery.model.clone().unwrap_or_default(),
-            host.discovery.services.join(" "),
-            note.owner.clone(),
-            note.location.clone(),
-            note.tags.join(" "),
-            note.notes,
-        ];
-        let row: Vec<String> = fields.iter().map(|field| escape_csv_field(field)).collect();
-        output.push_str(&row.join(","));
-        output.push('\n');
+        let note = notes.get(&host.device_key()).unwrap_or(&no_note);
+        push_row(&mut output, &host_fields(host, note));
     }
     output
+}
+
+/// The values of one host, one per entry of [`CSV_COLUMNS`]. Text that already exists is
+/// borrowed; only values that have to be built are allocated.
+fn host_fields<'a>(host: &'a Host, note: &'a DeviceNote) -> [Cow<'a, str>; CSV_COLUMNS.len()] {
+    let borrowed = |text: &'a Option<String>| Cow::Borrowed(text.as_deref().unwrap_or_default());
+    let joined = |parts: Vec<String>, separator: &str| Cow::Owned(parts.join(separator));
+    [
+        Cow::Owned(host.ip.to_string()),
+        Cow::Owned(
+            host.latency
+                .map(|latency| format!("{:.1}", millis(latency)))
+                .unwrap_or_default(),
+        ),
+        borrowed(&host.hostname),
+        borrowed(&host.mac),
+        borrowed(&host.vendor),
+        joined(host.open_ports.iter().map(u16::to_string).collect(), " "),
+        joined(
+            host.banners
+                .iter()
+                .map(|banner| format!("{}: {}", banner.port, banner.text))
+                .collect(),
+            "; ",
+        ),
+        joined(host.ipv6.iter().map(ToString::to_string).collect(), " "),
+        borrowed(&host.discovery.name),
+        borrowed(&host.discovery.manufacturer),
+        borrowed(&host.discovery.model),
+        Cow::Owned(host.discovery.services.join(" ")),
+        Cow::Borrowed(&note.owner),
+        Cow::Borrowed(&note.location),
+        Cow::Owned(note.tags.join(" ")),
+        Cow::Borrowed(&note.notes),
+    ]
+}
+
+/// Appends one CSV line.
+fn push_row(output: &mut String, fields: &[Cow<'_, str>]) {
+    for (index, field) in fields.iter().enumerate() {
+        if index > 0 {
+            output.push(',');
+        }
+        output.push_str(&escape_csv_field(field));
+    }
+    output.push('\n');
 }
 
 /// One host in the JSON export, with the user's note beside it when there is one.
@@ -77,16 +103,20 @@ pub fn to_json(hosts: &[Host], notes: &DeviceNotes) -> serde_json::Result<String
     serde_json::to_string_pretty(&rows)
 }
 
-/// Quotes fields that need it (RFC 4180) and defuses spreadsheet formulas
-/// by prefixing a quote to values that start with `= + - @`.
-fn escape_csv_field(field: &str) -> String {
-    let defused = if field.starts_with(['=', '+', '-', '@']) {
-        format!("'{field}")
+/// Characters that make a spreadsheet read a value as a formula. A tab or a carriage return
+/// in front of one can also start it.
+const FORMULA_STARTS: [char; 6] = ['=', '+', '-', '@', '\t', '\r'];
+
+/// Quotes fields that need it (RFC 4180) and defuses spreadsheet formulas by prefixing a
+/// quote to values that start with a formula character.
+fn escape_csv_field(field: &str) -> Cow<'_, str> {
+    let defused = if field.starts_with(FORMULA_STARTS) {
+        Cow::Owned(format!("'{field}"))
     } else {
-        field.to_owned()
+        Cow::Borrowed(field)
     };
     if defused.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", defused.replace('"', "\"\""))
+        Cow::Owned(format!("\"{}\"", defused.replace('"', "\"\"")))
     } else {
         defused
     }
@@ -111,10 +141,18 @@ mod tests {
     }
 
     #[test]
+    fn formulas_behind_a_tab_or_carriage_return_are_defused_too() {
+        assert_eq!(escape_csv_field("=1+1"), "'=1+1");
+        assert_eq!(escape_csv_field("\t=1+1"), "'\t=1+1");
+        assert_eq!(escape_csv_field("\r+cmd"), "\"'\r+cmd\"");
+        assert_eq!(escape_csv_field("plain"), "plain");
+    }
+
+    #[test]
     fn writes_header_and_quoted_row() {
         let csv = to_csv(&[sample_host()], &DeviceNotes::default());
         let mut lines = csv.lines();
-        assert_eq!(lines.next(), Some(CSV_HEADER));
+        assert_eq!(lines.next(), Some(CSV_COLUMNS.join(",").as_str()));
         assert_eq!(
             lines.next(),
             Some(

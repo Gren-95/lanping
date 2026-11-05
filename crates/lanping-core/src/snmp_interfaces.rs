@@ -163,9 +163,12 @@ fn signed(bytes: &[u8]) -> Option<i64> {
 fn read_value(kind: u8, bytes: &[u8]) -> Value {
     match kind {
         TAG_INTEGER => signed(bytes).map_or(Value::Other, Value::Integer),
-        TAG_COUNTER32 | TAG_GAUGE32 | TAG_TIMETICKS | TAG_COUNTER64 => {
-            unsigned(bytes).map_or(Value::Other, Value::Unsigned)
-        }
+        TAG_COUNTER64 => unsigned(bytes).map_or(Value::Other, Value::Unsigned),
+        // These types are 32 bits wide. A larger number is a broken device, and one that
+        // would make the wrap arithmetic overflow.
+        TAG_COUNTER32 | TAG_GAUGE32 | TAG_TIMETICKS => unsigned(bytes)
+            .filter(|value| *value <= u64::from(u32::MAX))
+            .map_or(Value::Other, Value::Unsigned),
         TAG_OCTET_STRING => {
             clean_text(bytes).map_or_else(|| Value::Text(String::new()), Value::Text)
         }
@@ -321,8 +324,11 @@ impl Session {
                 let Ok(Ok(length)) = timeout(left, self.socket.recv(&mut buffer)).await else {
                     break;
                 };
-                if let Answer::Values(values) = parse_response(&buffer[..length], id)? {
-                    return Ok(values);
+                match parse_response(&buffer[..length], id) {
+                    Ok(Answer::Values(values)) => return Ok(values),
+                    // Another request's answer, or a stray datagram: keep waiting for ours.
+                    Ok(Answer::Other) | Err(SnmpError::Malformed) => {}
+                    Err(error) => return Err(error),
                 }
             }
         }
@@ -487,19 +493,10 @@ impl Agent {
         let session = Session::open(self.address, &self.community, self.wait).await?;
         let mut wanted: Vec<Vec<u32>> = vec![SYS_UPTIME.to_vec()];
         for interface in interfaces {
-            let (in_table, in_column, out_table, out_column) = if interface.wide {
-                (
-                    IF_X_TABLE,
-                    COLUMN_X_HC_IN_OCTETS,
-                    IF_X_TABLE,
-                    COLUMN_X_HC_OUT_OCTETS,
-                )
-            } else {
-                (IF_TABLE, COLUMN_IN_OCTETS, IF_TABLE, COLUMN_OUT_OCTETS)
-            };
+            let (table, in_column, out_column) = counter_columns(interface.wide);
             wanted.push(cell(IF_TABLE, COLUMN_OPER_STATUS, interface.index));
-            wanted.push(cell(in_table, in_column, interface.index));
-            wanted.push(cell(out_table, out_column, interface.index));
+            wanted.push(cell(table, in_column, interface.index));
+            wanted.push(cell(table, out_column, interface.index));
         }
         let mut values: HashMap<Vec<u32>, Value> = HashMap::new();
         for chunk in wanted.chunks(GET_CHUNK) {
@@ -521,11 +518,7 @@ impl Agent {
                     Some(Value::Unsigned(value)) => Some(*value),
                     _ => None,
                 };
-                let (table, in_column, out_column) = if interface.wide {
-                    (IF_X_TABLE, COLUMN_X_HC_IN_OCTETS, COLUMN_X_HC_OUT_OCTETS)
-                } else {
-                    (IF_TABLE, COLUMN_IN_OCTETS, COLUMN_OUT_OCTETS)
-                };
+                let (table, in_column, out_column) = counter_columns(interface.wide);
                 let up = matches!(
                     values.get(&cell(IF_TABLE, COLUMN_OPER_STATUS, interface.index)),
                     Some(Value::Integer(status)) if *status == OPER_STATUS_UP
@@ -546,6 +539,16 @@ impl Agent {
             uptime_ticks,
             readings,
         })
+    }
+}
+
+/// The table and the in and out columns that hold an interface's byte counters: the 64-bit
+/// ones when it has them, otherwise the 32-bit ones.
+fn counter_columns(wide: bool) -> (&'static [u32], u32, u32) {
+    if wide {
+        (IF_X_TABLE, COLUMN_X_HC_IN_OCTETS, COLUMN_X_HC_OUT_OCTETS)
+    } else {
+        (IF_TABLE, COLUMN_IN_OCTETS, COLUMN_OUT_OCTETS)
     }
 }
 
@@ -582,7 +585,7 @@ fn counter_growth(before: u64, now: u64, wide: bool) -> Option<u64> {
     if wide {
         now.checked_sub(before)
     } else {
-        Some((now + COUNTER32_RANGE - before) % COUNTER32_RANGE)
+        Some(now.wrapping_sub(before) & (COUNTER32_RANGE - 1))
     }
 }
 
@@ -898,6 +901,21 @@ mod tests {
         assert_eq!(non_repeaters, [0]);
         let (_, repetitions, _) = read_element(rest).unwrap();
         assert_eq!(repetitions, [20]);
+    }
+
+    #[test]
+    fn a_32_bit_counter_with_a_number_too_big_for_it_is_not_a_number() {
+        let too_big = [1, 0, 0, 0, 0];
+        assert_eq!(read_value(TAG_COUNTER32, &too_big), Value::Other);
+        assert_eq!(read_value(TAG_GAUGE32, &too_big), Value::Other);
+        assert!(matches!(
+            read_value(TAG_COUNTER64, &too_big),
+            Value::Unsigned(_)
+        ));
+        assert_eq!(
+            counter_growth(10, u64::MAX, false),
+            Some(u64::from(u32::MAX) - 10)
+        );
     }
 
     #[test]

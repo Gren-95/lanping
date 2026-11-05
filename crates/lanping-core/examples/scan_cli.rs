@@ -32,7 +32,7 @@ async fn main() {
             host.ip,
             host.latency.map_or("-".to_owned(), |l| format!(
                 "{:.1} ms",
-                l.as_secs_f64() * 1000.0
+                lanping_core::rtt_stats::millis(l)
             )),
             host.hostname.as_deref().unwrap_or("-"),
             host.mac.as_deref().unwrap_or("-"),

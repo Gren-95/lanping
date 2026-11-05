@@ -11,7 +11,9 @@ use lanping_core::diagnostics::run as run_diagnostic;
 use lanping_core::diff::{ScanDiff, diff_scans};
 use lanping_core::dns::{Answer, DnsError, RecordType, ResolverTiming};
 use lanping_core::gateway::default_gateway;
-use lanping_core::history::{SavedScan, Sighting, list_scans, load_scan, save_scan, sightings};
+use lanping_core::history::{
+    SavedScan, Sighting, list_scan_summaries, list_scans, load_scan, save_scan, sightings,
+};
 use lanping_core::labels::DeviceLabels;
 use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::measurements::{Measurement, save as save_measurement};
@@ -1108,7 +1110,7 @@ impl LanPing {
         let Some(directory) = history_directory() else {
             return;
         };
-        self.history = list_scans(&directory)
+        self.history = list_scan_summaries(&directory)
             .into_iter()
             .map(|(path, scan)| HistoryEntry {
                 path,
@@ -1116,7 +1118,7 @@ impl LanPing {
                     "{} - {} ({} hosts)",
                     format_unix_utc(scan.finished_at_unix),
                     scan.target,
-                    scan.hosts.len()
+                    scan.host_count
                 ),
                 target: scan.target,
             })

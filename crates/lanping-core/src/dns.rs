@@ -11,6 +11,7 @@ use tokio::net::{TcpStream, UdpSocket};
 use tokio::time::timeout;
 
 use crate::mdns::{read_name, read_u16};
+use crate::rtt_stats::millis;
 use crate::socket_budget::socket_permit;
 
 const DNS_PORT: u16 = 53;
@@ -452,7 +453,7 @@ pub async fn benchmark(resolvers: Vec<(String, IpAddr)>, name: &str) -> Vec<Reso
             for _ in 0..BENCHMARK_ROUNDS {
                 let round = lookup(address, &name, RecordType::A)
                     .await
-                    .map(|answer| answer.elapsed.as_secs_f64() * 1000.0);
+                    .map(|answer| millis(answer.elapsed));
                 rounds.push(round);
             }
             (

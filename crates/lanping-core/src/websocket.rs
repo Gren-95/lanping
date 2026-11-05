@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::io::{
-    AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf,
-    WriteHalf,
+    AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader,
+    ReadHalf, WriteHalf,
 };
 
 const OPCODE_CONTINUATION: u8 = 0;
@@ -22,6 +22,8 @@ const CLOSE_NORMAL: [u8; 2] = 1000_u16.to_be_bytes();
 const LEN_16_BITS: u8 = 126;
 const LEN_64_BITS: u8 = 127;
 const MAX_HEADER_LINES: usize = 64;
+/// Most bytes the handshake may take, headers included.
+const MAX_HANDSHAKE_BYTES: usize = 16 * 1024;
 /// Largest text or control message read into memory.
 const MAX_SMALL_MESSAGE: u64 = 1024 * 1024;
 const DISCARD_CHUNK: usize = 64 * 1024;
@@ -34,11 +36,15 @@ pub(crate) enum Message {
     /// A binary message of this many bytes. Its content is not kept.
     Binary(u64),
     Ping(Vec<u8>),
+    /// The answer to a ping of ours. Nothing to do with it.
+    Pong,
     Close,
 }
 
 pub(crate) struct Reader<R> {
     inner: BufReader<R>,
+    /// Where binary messages are read to and dropped; made once, on first use.
+    scratch: Vec<u8>,
 }
 
 pub(crate) struct Writer<W> {
@@ -46,6 +52,26 @@ pub(crate) struct Writer<W> {
     mask: [u8; 4],
     /// A ready frame of zeros, set by [`Writer::prepare_zeros`].
     prepared: Vec<u8>,
+}
+
+/// Reads one line of the handshake, spending from `budget`. A server that never ends a line,
+/// or never ends its headers, runs the budget out instead of the client's memory. The stream
+/// ending before the headers do is an error too.
+async fn read_capped_line<R: AsyncBufRead + Unpin>(
+    reader: &mut R,
+    budget: &mut usize,
+) -> Result<String, String> {
+    let mut line = String::new();
+    let mut limited = reader.take(*budget as u64);
+    let length = limited
+        .read_line(&mut line)
+        .await
+        .map_err(|error| format!("The WebSocket handshake broke: {error}"))?;
+    *budget = budget.saturating_sub(length);
+    if length == 0 || !line.ends_with('\n') {
+        return Err("The WebSocket handshake ended too soon or ran too long".to_owned());
+    }
+    Ok(line)
 }
 
 /// Does the opening handshake on `stream` for `wss://host{path}` asking for `protocol`, and
@@ -69,23 +95,19 @@ where
         .write_all(request.as_bytes())
         .await
         .map_err(|error| format!("Could not start the WebSocket: {error}"))?;
-    let mut status = String::new();
-    reader
-        .read_line(&mut status)
-        .await
-        .map_err(|error| format!("No answer to the WebSocket handshake: {error}"))?;
+    let mut budget = MAX_HANDSHAKE_BYTES;
+    let status = read_capped_line(&mut reader, &mut budget).await?;
     if status.split_whitespace().nth(1) != Some("101") {
         return Err(format!("{host} refused the WebSocket: {}", status.trim()));
     }
     for _ in 0..MAX_HEADER_LINES {
-        let mut line = String::new();
-        let length = reader
-            .read_line(&mut line)
-            .await
-            .map_err(|error| format!("The WebSocket handshake broke: {error}"))?;
-        if length == 0 || line.trim().is_empty() {
+        let line = read_capped_line(&mut reader, &mut budget).await?;
+        if line.trim().is_empty() {
             return Ok((
-                Reader { inner: reader },
+                Reader {
+                    inner: reader,
+                    scratch: Vec::new(),
+                },
                 Writer {
                     inner: write,
                     mask: random_bytes::<4>(),
@@ -145,7 +167,7 @@ impl<R: AsyncRead + Unpin> Reader<R> {
         Ok(match opcode {
             OPCODE_TEXT => Message::Text(String::from_utf8_lossy(&payload).into_owned()),
             OPCODE_PING => Message::Ping(payload),
-            OPCODE_PONG => Message::Ping(Vec::new()),
+            OPCODE_PONG => Message::Pong,
             OPCODE_CLOSE => Message::Close,
             _ => {
                 return Err(io::Error::new(
@@ -161,10 +183,12 @@ impl<R: AsyncRead + Unpin> Reader<R> {
         mut length: u64,
         on_bytes: &mut impl FnMut(usize),
     ) -> io::Result<()> {
-        let mut buffer = vec![0; DISCARD_CHUNK];
+        if self.scratch.is_empty() {
+            self.scratch = vec![0; DISCARD_CHUNK];
+        }
         while length > 0 {
-            let want = buffer.len().min(length as usize);
-            let got = self.inner.read(&mut buffer[..want]).await?;
+            let want = self.scratch.len().min(length as usize);
+            let got = self.inner.read(&mut self.scratch[..want]).await?;
             if got == 0 {
                 return Err(io::ErrorKind::UnexpectedEof.into());
             }
@@ -303,6 +327,7 @@ mod tests {
     async fn reader_over(bytes: Vec<u8>) -> Reader<io::Cursor<Vec<u8>>> {
         Reader {
             inner: BufReader::new(io::Cursor::new(bytes)),
+            scratch: Vec::new(),
         }
     }
 
@@ -453,6 +478,44 @@ mod tests {
             Message::Text("first".to_owned())
         );
         fake_server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_server_that_never_ends_a_line_is_cut_off() {
+        let (client, mut server) = duplex(64 * 1024);
+        tokio::spawn(async move {
+            let mut buffer = [0; 1024];
+            let _ = server.read(&mut buffer).await;
+            let _ = server
+                .write_all(b"HTTP/1.1 101 Switching Protocols\r\n")
+                .await;
+            let endless = vec![b'a'; 2 * MAX_HANDSHAKE_BYTES];
+            let _ = server.write_all(&endless).await;
+        });
+        let error = connect(client, "example.test", "/x", "p")
+            .await
+            .err()
+            .unwrap();
+        assert!(error.contains("too soon or ran too long"), "{error}");
+    }
+
+    #[tokio::test]
+    async fn a_server_that_hangs_up_in_the_headers_is_an_error() {
+        let (client, mut server) = duplex(64 * 1024);
+        tokio::spawn(async move {
+            let mut buffer = [0; 1024];
+            let _ = server.read(&mut buffer).await;
+            let _ = server
+                .write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n")
+                .await;
+        });
+        assert!(connect(client, "example.test", "/x", "p").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn a_pong_is_a_pong_and_not_a_ping() {
+        let mut reader = reader_over(server_frame(OPCODE_PONG, b"")).await;
+        assert_eq!(reader.next_message(|_| {}).await.unwrap(), Message::Pong);
     }
 
     #[tokio::test]

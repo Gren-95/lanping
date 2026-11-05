@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::{TcpStream, lookup_host};
 use tokio::time::{sleep, timeout};
 
-use crate::rtt_stats::RttStats;
+use crate::rtt_stats::{RttStats, millis};
 use crate::socket_budget::socket_permit;
 
 /// Connections opened for one ping measurement.
@@ -83,7 +83,7 @@ async fn connect_time(address: SocketAddr) -> Option<f64> {
         Ok(_) => true,
         Err(error) => error.kind() == std::io::ErrorKind::ConnectionRefused,
     };
-    answered.then(|| started.elapsed().as_secs_f64() * 1000.0)
+    answered.then(|| millis(started.elapsed()))
 }
 
 #[cfg(test)]

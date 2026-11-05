@@ -33,6 +33,8 @@ const CONNECT_WAIT: Duration = Duration::from_secs(5);
 /// Extra time allowed on top of the test length, for the last bytes to drain.
 const GRACE: Duration = Duration::from_secs(5);
 const MAX_CONNECTIONS: usize = 16;
+/// Pause after a failed accept, so a persistent error does not spin.
+const ACCEPT_RETRY_PAUSE: Duration = Duration::from_millis(100);
 pub(crate) const BITS_PER_MEGABIT: f64 = 1_000_000.0;
 const SAMPLE_EVERY: Duration = Duration::from_secs(1);
 
@@ -116,7 +118,13 @@ pub async fn bind(port: u16) -> io::Result<TcpListener> {
 /// Answers tests until the future is dropped. Each finished stream is reported on `served`.
 pub async fn serve(listener: TcpListener, served: mpsc::UnboundedSender<ServedStream>) {
     let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
-    while let Ok((stream, peer)) = listener.accept().await {
+    loop {
+        let Ok((stream, peer)) = listener.accept().await else {
+            // A failed accept, such as a connection that was reset before it was taken or
+            // too many open files, does not end the server.
+            sleep(ACCEPT_RETRY_PAUSE).await;
+            continue;
+        };
         let Ok(slot) = Arc::clone(&slots).try_acquire_owned() else {
             continue;
         };

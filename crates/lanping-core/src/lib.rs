@@ -8,6 +8,7 @@ pub mod diff;
 pub mod discovery;
 pub mod dns;
 pub mod export;
+mod files;
 pub mod gateway;
 pub mod history;
 pub mod host;

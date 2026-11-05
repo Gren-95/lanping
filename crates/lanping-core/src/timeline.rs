@@ -68,15 +68,9 @@ fn changes_between(before: &Host, after: &Host) -> Vec<Change> {
 /// networks the device has been seen on count, so a scan of another network does
 /// not make it look offline.
 pub fn device_timeline(scans: &[SavedScan], device_key: &str) -> Vec<TimelineEntry> {
-    let find = |scan: &'_ SavedScan| -> Option<Host> {
-        scan.hosts
-            .iter()
-            .find(|host| host.device_key() == device_key)
-            .cloned()
-    };
     let networks: HashSet<&str> = scans
         .iter()
-        .filter(|scan| find(scan).is_some())
+        .filter(|scan| scan.host_for(device_key).is_some())
         .map(|scan| scan.target.as_str())
         .collect();
     let mut relevant: Vec<&SavedScan> = scans
@@ -86,12 +80,12 @@ pub fn device_timeline(scans: &[SavedScan], device_key: &str) -> Vec<TimelineEnt
     relevant.sort_by_key(|scan| scan.finished_at_unix);
 
     let mut entries = Vec::new();
-    let mut last_seen: Option<Host> = None;
+    let mut last_seen: Option<&Host> = None;
     let mut online = false;
     for scan in relevant {
         let at_unix = scan.finished_at_unix;
         let mut record = |change| entries.push(TimelineEntry { at_unix, change });
-        match (find(scan), &last_seen) {
+        match (scan.host_for(device_key), last_seen) {
             (Some(host), None) => {
                 record(Change::FirstSeen);
                 last_seen = Some(host);
@@ -101,7 +95,7 @@ pub fn device_timeline(scans: &[SavedScan], device_key: &str) -> Vec<TimelineEnt
                 if !online {
                     record(Change::CameBack);
                 }
-                changes_between(before, &host)
+                changes_between(before, host)
                     .into_iter()
                     .for_each(&mut record);
                 last_seen = Some(host);

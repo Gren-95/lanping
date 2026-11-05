@@ -51,23 +51,38 @@ pub enum Location {
 }
 
 impl Location {
-    fn query(&self) -> String {
+    /// The query string, or `None` for a country code that is not two ASCII letters.
+    fn query(&self) -> Option<String> {
         match self {
-            Self::Nearest => String::new(),
-            Self::Country(code) => format!("?country={code}"),
+            Self::Nearest => Some(String::new()),
+            Self::Country(code) => (code.len() == 2
+                && code.chars().all(|c| c.is_ascii_alphabetic()))
+            .then(|| format!("?country={code}")),
         }
     }
 }
 
 /// A server that can run a test, with the addresses to use. The addresses carry a token
 /// that stops working after a couple of minutes, so ask for servers shortly before a test.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Server {
     pub machine: String,
     pub city: String,
     pub country: String,
     download_url: String,
     upload_url: String,
+}
+
+/// The addresses carry a token that lets anyone run a test as this client, so they are left out
+/// of debug output, the way a community string is.
+impl fmt::Debug for Server {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Server")
+            .field("machine", &self.machine)
+            .field("city", &self.city)
+            .field("country", &self.country)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Server {
@@ -136,7 +151,10 @@ struct Place {
 /// For a country, only servers in that country are returned: M-Lab otherwise fills the answer
 /// up with the nearest servers of other countries.
 pub async fn locate(location: &Location) -> Result<Vec<Server>, String> {
-    let path = format!("{LOCATE_PATH}{}", location.query());
+    let query = location
+        .query()
+        .ok_or_else(|| "A country is a two letter code".to_owned())?;
+    let path = format!("{LOCATE_PATH}{query}");
     let body = fetch(&path).await?;
     let servers = parse_servers(&body)?;
     match location {
@@ -159,7 +177,7 @@ async fn fetch(path: &str) -> Result<Vec<u8>, String> {
             status => return Err(format!("{LOCATE_HOST} answered: HTTP {status}")),
         }
     }
-    Err(BUSY_MESSAGE.to_owned())
+    unreachable!("the last attempt always returns")
 }
 
 /// How long to wait before attempt number `attempt + 1`.
@@ -477,6 +495,22 @@ mod tests {
     }
 
     #[test]
+    fn debug_output_leaves_out_the_token_carrying_addresses() {
+        let server = Server::new(
+            "m",
+            "City",
+            "XX",
+            "wss://h/d?access_token=SECRET",
+            "wss://h/u?access_token=SECRET",
+        );
+        let shown = format!("{server:?}");
+        assert!(
+            shown.contains("City") && !shown.contains("SECRET"),
+            "{shown}"
+        );
+    }
+
+    #[test]
     fn found_server_addresses_are_used_for_less_than_the_token_lasts() {
         assert!(SERVER_ADDRESS_LIFETIME < Duration::from_secs(60));
     }
@@ -512,8 +546,14 @@ mod tests {
 
     #[test]
     fn builds_the_locate_query_for_a_country() {
-        assert_eq!(Location::Nearest.query(), "");
-        assert_eq!(Location::Country("JP".to_owned()).query(), "?country=JP");
+        assert_eq!(Location::Nearest.query().as_deref(), Some(""));
+        assert_eq!(
+            Location::Country("JP".to_owned()).query().as_deref(),
+            Some("?country=JP")
+        );
+        for bad in ["", "J", "JPN", "J&", "J\r", "1P"] {
+            assert_eq!(Location::Country(bad.to_owned()).query(), None, "{bad:?}");
+        }
     }
 
     #[test]
