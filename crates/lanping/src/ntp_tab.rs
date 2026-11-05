@@ -1,20 +1,18 @@
 //! The Clock tab: how far this computer's clock is from a time server.
 
-use iced::widget::{Row as LayoutRow, button, column, container, row, text, text_input};
+use iced::widget::{Row as LayoutRow, button, column, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use lanping_core::ntp::{NtpError, NtpReport, WELL_KNOWN_SERVERS, check};
 
 use crate::app::{LanPing, Message};
-use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
+use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::settings_page::small_button;
-use crate::theme::{self, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{empty_state, note, page_header, panel, scrolling};
+use crate::theme::{self, BOLD, Edge, GOOD, SECTION_SPACING, WARN};
+use crate::ui::{card, empty_state, fact_row, note, page_header, panel, scrolling};
 use crate::view::input_group;
 
-const LABEL_WIDTH: f32 = 130.0;
-const CARD_PADDING: f32 = 14.0;
 const HEADLINE_SIZE: u32 = 22;
 const INPUT_TEXT_SIZE: u32 = 13;
 /// A clock further off than this can break certificate checks and logins.
@@ -127,25 +125,18 @@ fn report_view(report: &NtpReport) -> Element<'_, Message> {
     } else {
         pill("Clock is accurate", GOOD)
     };
-    let mut lines = column![].spacing(6);
-    for (label, value) in [
+    let lines = [
         ("Round trip", format_milliseconds(report.round_trip_seconds)),
         (
             "Server",
             format!("{}  ·  {}", report.server, report.address),
         ),
         ("Stratum", report.stratum.to_string()),
-    ] {
-        lines = lines.push(
-            row![
-                text(label).color(MUTED).width(LABEL_WIDTH),
-                text(value.clone()).width(Length::Fill),
-                copy_button(value, label),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Start),
-        );
-    }
+    ]
+    .into_iter()
+    .fold(column![].spacing(6), |list, (label, value)| {
+        list.push(fact_row(label, value))
+    });
     let headline = row![
         text(describe_offset(report.clock_ahead_seconds))
             .size(HEADLINE_SIZE)
@@ -154,18 +145,14 @@ fn report_view(report: &NtpReport) -> Element<'_, Message> {
     ]
     .spacing(12)
     .align_y(Alignment::Center);
-    let mut card = column![headline, lines].spacing(SECTION_SPACING);
+    let mut body = column![headline, lines].spacing(SECTION_SPACING);
     if off {
-        card = card.push(note(
+        body = body.push(note(
             "A clock this far off can make certificates look expired or not yet valid, and \
              can break logins that depend on the time.",
         ));
     }
-    container(card)
-        .padding(CARD_PADDING)
-        .width(Length::Fill)
-        .style(theme::card)
-        .into()
+    card(body)
 }
 
 /// `3.20 s ahead of the server`, `45 ms behind the server`, or `matches the server`.

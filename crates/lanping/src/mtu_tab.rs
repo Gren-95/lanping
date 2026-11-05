@@ -1,19 +1,18 @@
 //! The MTU tab: the largest packet that reaches a host without being split.
 
-use iced::widget::{button, column, container, row, text, text_input};
+use iced::widget::{button, column, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use lanping_core::path_mtu::{Method, MtuError, MtuReport, USUAL_MTUS, check, usual_name};
 
 use crate::app::{LanPing, Message};
-use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
+use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::theme::{self, ACCENT, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{empty_state, note, page_header, panel, scrolling};
+use crate::ui::{card, empty_state, fact_row, note, page_header, panel, scrolling};
 use crate::view::input_group;
 
 const LABEL_WIDTH: f32 = 130.0;
-const CARD_PADDING: f32 = 14.0;
 const HEADLINE_SIZE: u32 = 22;
 const INPUT_TEXT_SIZE: u32 = 13;
 /// The size of a standard Ethernet link; a path below it was narrowed by something.
@@ -127,19 +126,12 @@ fn report_view(report: &MtuReport) -> Element<'_, Message> {
     let headline = row![text(size).size(HEADLINE_SIZE).font(BOLD), verdict]
         .spacing(12)
         .align_y(Alignment::Center);
-    let mut lines = column![].spacing(6);
-    for (label, value) in details(report) {
-        lines = lines.push(
-            row![
-                text(label).color(MUTED).width(LABEL_WIDTH),
-                text(value.clone()).width(Length::Fill),
-                copy_button(value, label),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Start),
-        );
-    }
-    let card = container(
+    let lines = details(report)
+        .into_iter()
+        .fold(column![].spacing(6), |list, (label, value)| {
+            list.push(fact_row(label, value))
+        });
+    card(
         column![
             headline,
             lines,
@@ -148,10 +140,6 @@ fn report_view(report: &MtuReport) -> Element<'_, Message> {
         ]
         .spacing(SECTION_SPACING),
     )
-    .padding(CARD_PADDING)
-    .width(Length::Fill)
-    .style(theme::card);
-    card.into()
 }
 
 /// The labelled facts of a measurement.
