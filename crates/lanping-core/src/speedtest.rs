@@ -7,28 +7,22 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use rustls::ClientConfig;
-use rustls::pki_types::ServerName;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tokio_rustls::TlsConnector;
 
-use crate::socket_budget::socket_permit;
+use crate::https::{self, Connection};
 use crate::throughput::{Direction, ThroughputResult, sample};
-use crate::tls::system_roots;
 
 /// The service the test talks to, shown to the user before they run it.
 pub const SERVICE_HOST: &str = "speed.cloudflare.com";
-const PORT: u16 = 443;
 /// Bytes asked for in one download request. The service refuses 100 MB and more.
 const DOWNLOAD_BYTES: u64 = 90_000_000;
 /// Bytes promised in one upload request.
 const UPLOAD_BYTES: u64 = 25_000_000;
 const STREAMS: usize = 4;
 const CHUNK_BYTES: usize = 64 * 1024;
-const CONNECT_WAIT: Duration = Duration::from_secs(8);
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MIN_SECONDS: u8 = 3;
 const MAX_SECONDS: u8 = 30;
@@ -41,7 +35,7 @@ pub async fn run(
     progress: Option<mpsc::UnboundedSender<f64>>,
 ) -> Result<ThroughputResult, String> {
     let seconds = seconds.clamp(MIN_SECONDS, MAX_SECONDS);
-    let connector = connector().await?;
+    let connector = https::connector().await?;
     let counter = Arc::new(AtomicU64::new(0));
     let samples = Arc::new(Mutex::new(Vec::new()));
     let started = Instant::now();
@@ -83,29 +77,8 @@ pub async fn run(
     ))
 }
 
-async fn connector() -> Result<TlsConnector, String> {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let config = ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|error| format!("Could not set up TLS: {error}"))?
-        .with_root_certificates(system_roots().await)
-        .with_no_client_auth();
-    Ok(TlsConnector::from(Arc::new(config)))
-}
-
-type Stream = tokio_rustls::client::TlsStream<TcpStream>;
-
-async fn open(connector: &TlsConnector) -> Result<Stream, String> {
-    let _permit = socket_permit().await;
-    let name = ServerName::try_from(SERVICE_HOST).map_err(|error| error.to_string())?;
-    let tcp = timeout(CONNECT_WAIT, TcpStream::connect((SERVICE_HOST, PORT)))
-        .await
-        .map_err(|_| format!("{SERVICE_HOST} did not answer"))?
-        .map_err(|error| format!("Could not reach {SERVICE_HOST}: {error}"))?;
-    timeout(CONNECT_WAIT, connector.connect(name, tcp))
-        .await
-        .map_err(|_| format!("{SERVICE_HOST} did not finish the TLS handshake"))?
-        .map_err(|error| format!("TLS to {SERVICE_HOST} failed: {error}"))
+async fn open(connector: &TlsConnector) -> Result<Connection, String> {
+    https::connect(connector, SERVICE_HOST, https::HTTPS_PORT).await
 }
 
 /// Requests files one after another and counts their bodies until `deadline`.
