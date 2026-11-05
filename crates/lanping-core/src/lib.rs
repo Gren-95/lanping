@@ -14,6 +14,7 @@ pub mod host;
 pub mod labels;
 pub mod latency;
 pub mod mdns;
+pub mod measurements;
 pub mod neighbors;
 pub mod netbios;
 pub mod os_guess;
