@@ -16,6 +16,7 @@ use crate::modal::overlay;
 use crate::monitor::AutoInterval;
 use crate::results::{pill, results};
 use crate::settings_page::settings_panel;
+use crate::snmp_view::snmp_panel;
 use crate::speed_view::speed_panel;
 use crate::subnet_tab::subnet_panel;
 use crate::tabs::{Tab, tab_bar};
@@ -67,6 +68,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Speed => (header(app), speed_panel(app)),
         Tab::Dns => (header(app), dns_panel(app, width)),
         Tab::Tls => (header(app), tls_panel(app, width)),
+        Tab::Snmp => (header(app), snmp_panel(app)),
         Tab::Subnet => (header(app), subnet_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };

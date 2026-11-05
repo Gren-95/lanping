@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::host_filter::HostFilter;
 use crate::host_order::SortKey;
 use crate::presets::FilterPreset;
+use crate::tabs::Tab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Column {
@@ -71,12 +72,19 @@ pub struct ColumnSetting {
     pub visible: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabSetting {
+    pub tab: Tab,
+    pub visible: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum SettingsTab {
     #[default]
     CommonPorts,
     CustomPorts,
     Columns,
+    Tabs,
     Monitoring,
     Network,
     Presets,
@@ -93,6 +101,8 @@ pub struct Settings {
     /// SNMP community to read device details with. Empty leaves SNMP off.
     pub snmp_community: String,
     pub columns: Vec<ColumnSetting>,
+    /// The tabs of the window, in order, and which of them show.
+    pub tabs: Vec<TabSetting>,
     /// Minutes between automatic rescans; `0` turns them off.
     pub auto_rescan_minutes: u32,
     pub notify_new_devices: bool,
@@ -139,6 +149,10 @@ impl Default for Settings {
                     column,
                     visible: true,
                 })
+                .collect(),
+            tabs: Tab::CONFIGURABLE
+                .iter()
+                .map(|&tab| TabSetting { tab, visible: true })
                 .collect(),
         }
     }
@@ -200,6 +214,58 @@ impl Settings {
         self.columns.insert(to, moved);
     }
 
+    /// The tabs to show in the bar, in order.
+    pub fn visible_tabs(&self) -> Vec<Tab> {
+        self.tabs
+            .iter()
+            .filter(|setting| setting.visible)
+            .map(|setting| setting.tab)
+            .collect()
+    }
+
+    /// The devices tab stays visible, so there is always a page to come back to.
+    pub fn set_tab_visible(&mut self, tab: Tab, visible: bool) {
+        if tab == Tab::Scan {
+            return;
+        }
+        if let Some(setting) = self.tabs.iter_mut().find(|setting| setting.tab == tab) {
+            setting.visible = visible;
+        }
+    }
+
+    /// Moves `tab` to where `target` sits; the tabs in between shift over.
+    pub fn move_tab_to(&mut self, tab: Tab, target: Tab) {
+        let position = |wanted: Tab| self.tabs.iter().position(|setting| setting.tab == wanted);
+        let (Some(from), Some(to)) = (position(tab), position(target)) else {
+            return;
+        };
+        let moved = self.tabs.remove(from);
+        self.tabs.insert(to, moved);
+    }
+
+    /// Drops duplicate and unknown tabs and appends any the file did not mention, which is how
+    /// a tab added by a newer version shows up in an old settings file.
+    fn normalize_tabs(&mut self) {
+        let mut seen = Vec::new();
+        self.tabs.retain(|setting| {
+            let wanted = Tab::CONFIGURABLE.contains(&setting.tab) && !seen.contains(&setting.tab);
+            seen.push(setting.tab);
+            wanted
+        });
+        for tab in Tab::CONFIGURABLE {
+            if !seen.contains(&tab) {
+                self.tabs.push(TabSetting { tab, visible: true });
+            }
+        }
+        if let Some(devices) = self
+            .tabs
+            .iter_mut()
+            .find(|setting| setting.tab == Tab::Scan)
+        {
+            devices.visible = true;
+        }
+    }
+
     /// Drops duplicate columns and appends any the file did not mention.
     fn normalized(mut self) -> Self {
         let mut seen = Vec::new();
@@ -229,7 +295,9 @@ impl Settings {
     pub fn load(path: &Path) -> io::Result<Self> {
         let json = fs::read_to_string(path)?;
         let settings: Settings = serde_json::from_str(&json).map_err(io::Error::other)?;
-        Ok(settings.normalized())
+        let mut settings = settings.normalized();
+        settings.normalize_tabs();
+        Ok(settings)
     }
 
     pub fn save(&self, path: &Path) -> io::Result<()> {
@@ -245,6 +313,80 @@ impl Settings {
 mod tests {
     use super::*;
     use lanping_core::ports::COMMON_SERVICES;
+
+    #[test]
+    fn every_tab_shows_in_the_default_order_by_default() {
+        let settings = Settings::default();
+        assert_eq!(settings.visible_tabs(), Tab::CONFIGURABLE);
+        assert!(!settings.visible_tabs().contains(&Tab::Settings));
+    }
+
+    #[test]
+    fn a_tab_can_be_hidden_but_the_devices_tab_cannot() {
+        let mut settings = Settings::default();
+        settings.set_tab_visible(Tab::Wifi, false);
+        settings.set_tab_visible(Tab::Scan, false);
+        let shown = settings.visible_tabs();
+        assert!(!shown.contains(&Tab::Wifi));
+        assert!(shown.contains(&Tab::Scan));
+        settings.set_tab_visible(Tab::Wifi, true);
+        assert!(settings.visible_tabs().contains(&Tab::Wifi));
+    }
+
+    #[test]
+    fn moving_a_tab_shifts_the_ones_in_between() {
+        let mut settings = Settings::default();
+        settings.move_tab_to(Tab::Subnet, Tab::Wifi);
+        assert_eq!(
+            &settings.visible_tabs()[..3],
+            [Tab::Scan, Tab::Subnet, Tab::Wifi]
+        );
+        settings.move_tab_to(Tab::Scan, Tab::Subnet);
+        assert_eq!(settings.visible_tabs()[0], Tab::Subnet);
+        settings.move_tab_to(Tab::Wifi, Tab::Wifi);
+        settings.move_tab_to(Tab::Settings, Tab::Wifi);
+        assert_eq!(settings.tabs.len(), Tab::CONFIGURABLE.len());
+    }
+
+    #[test]
+    fn a_hidden_tab_keeps_its_place_in_the_order() {
+        let mut settings = Settings::default();
+        settings.set_tab_visible(Tab::Trace, false);
+        settings.move_tab_to(Tab::Speed, Tab::Trace);
+        settings.set_tab_visible(Tab::Trace, true);
+        let order: Vec<Tab> = settings.tabs.iter().map(|setting| setting.tab).collect();
+        assert!(
+            order.iter().position(|t| *t == Tab::Speed)
+                < order.iter().position(|t| *t == Tab::Trace)
+        );
+    }
+
+    #[test]
+    fn an_old_file_without_tabs_gets_them_all_and_new_ones_are_appended() {
+        let older: Settings = serde_json::from_str(r#"{"grab_banners":true}"#).unwrap();
+        assert_eq!(older.visible_tabs(), Tab::CONFIGURABLE);
+        let mut partial: Settings = serde_json::from_str(
+            r#"{"tabs":[{"tab":"Dns","visible":true},{"tab":"Dns","visible":false},{"tab":"Settings","visible":true},{"tab":"Scan","visible":false}]}"#,
+        )
+        .unwrap();
+        partial.normalize_tabs();
+        let order: Vec<Tab> = partial.tabs.iter().map(|setting| setting.tab).collect();
+        assert_eq!(order[0], Tab::Dns, "the saved order comes first");
+        assert_eq!(order.iter().filter(|tab| **tab == Tab::Dns).count(), 1);
+        assert!(
+            !order.contains(&Tab::Settings),
+            "Settings is not a configurable tab"
+        );
+        assert_eq!(
+            order.len(),
+            Tab::CONFIGURABLE.len(),
+            "the missing tabs were appended"
+        );
+        assert!(
+            partial.visible_tabs().contains(&Tab::Scan),
+            "devices cannot stay hidden"
+        );
+    }
 
     #[test]
     fn defaults_select_every_common_port() {

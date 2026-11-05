@@ -11,16 +11,16 @@ use tokio::time::timeout;
 
 use crate::socket_budget::socket_permit;
 
-const SNMP_PORT: u16 = 161;
-const VERSION_2C: u8 = 1;
-const TAG_INTEGER: u8 = 0x02;
-const TAG_OCTET_STRING: u8 = 0x04;
-const TAG_NULL: u8 = 0x05;
-const TAG_OID: u8 = 0x06;
-const TAG_SEQUENCE: u8 = 0x30;
+pub(crate) const SNMP_PORT: u16 = 161;
+pub(crate) const VERSION_2C: u8 = 1;
+pub(crate) const TAG_INTEGER: u8 = 0x02;
+pub(crate) const TAG_OCTET_STRING: u8 = 0x04;
+pub(crate) const TAG_NULL: u8 = 0x05;
+pub(crate) const TAG_OID: u8 = 0x06;
+pub(crate) const TAG_SEQUENCE: u8 = 0x30;
 const TAG_GET_REQUEST: u8 = 0xA0;
-const TAG_RESPONSE: u8 = 0xA2;
-const TAG_TIMETICKS: u8 = 0x43;
+pub(crate) const TAG_RESPONSE: u8 = 0xA2;
+pub(crate) const TAG_TIMETICKS: u8 = 0x43;
 const TICKS_PER_SECOND: u64 = 100;
 const MAX_TEXT_CHARS: usize = 200;
 const REQUEST_ID: u8 = 0x4C;
@@ -66,7 +66,7 @@ pub struct SnmpInfo {
     pub interface_count: Option<u64>,
 }
 
-fn encode(tag: u8, content: &[u8]) -> Vec<u8> {
+pub(crate) fn encode(tag: u8, content: &[u8]) -> Vec<u8> {
     let mut encoded = vec![tag];
     match content.len() {
         length @ 0..=127 => encoded.push(length as u8),
@@ -80,7 +80,7 @@ fn encode(tag: u8, content: &[u8]) -> Vec<u8> {
     encoded
 }
 
-fn encode_oid(oid: &[u32]) -> Vec<u8> {
+pub(crate) fn encode_oid(oid: &[u32]) -> Vec<u8> {
     let mut content = vec![(oid[0] * 40 + oid[1]) as u8];
     for &part in &oid[2..] {
         let mut groups = vec![(part & 0x7F) as u8];
@@ -114,7 +114,7 @@ fn get_request(community: &str, oids: &[&[u32]]) -> Vec<u8> {
 }
 
 /// Reads one tag, length and value. Returns them and what follows.
-fn read_element(data: &[u8]) -> Option<(u8, &[u8], &[u8])> {
+pub(crate) fn read_element(data: &[u8]) -> Option<(u8, &[u8], &[u8])> {
     let (&tag, rest) = data.split_first()?;
     let (&first, rest) = rest.split_first()?;
     let (length, rest) = match first {
@@ -136,7 +136,7 @@ fn read_element(data: &[u8]) -> Option<(u8, &[u8], &[u8])> {
     Some((tag, value, &rest[length..]))
 }
 
-fn read_unsigned(value: &[u8]) -> Option<u64> {
+pub(crate) fn read_unsigned(value: &[u8]) -> Option<u64> {
     if value.is_empty() || value.len() > 8 {
         return None;
     }
@@ -148,7 +148,7 @@ fn read_unsigned(value: &[u8]) -> Option<u64> {
 }
 
 /// Replaces control characters and limits the length. Empty text becomes `None`.
-fn clean_text(value: &[u8]) -> Option<String> {
+pub(crate) fn clean_text(value: &[u8]) -> Option<String> {
     let text = String::from_utf8_lossy(value);
     let cleaned: String = text
         .chars()

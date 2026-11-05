@@ -12,6 +12,7 @@ use crate::app::{LanPing, Message};
 use crate::icons::lucide;
 use crate::monitor::AutoInterval;
 use crate::settings::{Column, SettingsTab};
+use crate::tabs::Tab;
 use crate::theme::{self, ACCENT, BAD, MUTED};
 
 const ITEM_SPACING: f32 = 10.0;
@@ -29,6 +30,7 @@ pub fn settings_panel(app: &LanPing) -> Element<'_, Message> {
         SettingsTab::CommonPorts => common_ports_tab(app),
         SettingsTab::CustomPorts => custom_ports_tab(app),
         SettingsTab::Columns => columns_tab(app),
+        SettingsTab::Tabs => tabs_tab(app),
         SettingsTab::Monitoring => monitoring_tab(app),
         SettingsTab::Network => network_tab(app),
         SettingsTab::Presets => presets_tab(app),
@@ -55,6 +57,7 @@ fn tab_strip(selected: &SettingsTab) -> Element<'_, Message> {
         (SettingsTab::CommonPorts, lucide::list_checks(), "Ports"),
         (SettingsTab::CustomPorts, lucide::square_pen(), "Custom"),
         (SettingsTab::Columns, lucide::columns_three(), "Columns"),
+        (SettingsTab::Tabs, lucide::layout_list(), "Tabs"),
         (SettingsTab::Monitoring, lucide::refresh_cw(), "Monitoring"),
         (SettingsTab::Network, lucide::network(), "Network"),
         (SettingsTab::Presets, lucide::bookmark(), "Presets"),
@@ -205,6 +208,57 @@ fn columns_tab(app: &LanPing) -> Element<'_, Message> {
     ]
     .spacing(ITEM_SPACING + 4.0)
     .into()
+}
+
+fn tabs_tab(app: &LanPing) -> Element<'_, Message> {
+    column![
+        text("Tick the tabs to show. Drag a row up or down to change the order. Devices always stays.")
+            .size(13)
+            .color(MUTED),
+        tab_list(app),
+    ]
+    .spacing(ITEM_SPACING + 4.0)
+    .into()
+}
+
+/// Every tab as a row you can drag up or down.
+fn tab_list(app: &LanPing) -> Element<'_, Message> {
+    let rows = app
+        .settings
+        .tabs
+        .iter()
+        .fold(column![].spacing(ITEM_SPACING), |list, setting| {
+            let tab = setting.tab;
+            let toggle = checkbox(setting.visible)
+                .label(tab.title())
+                .on_toggle_maybe(
+                    (tab != Tab::Scan).then_some(move |visible| Message::TabToggled(tab, visible)),
+                );
+            let entry = row![
+                lucide::grip_vertical().size(16).color(MUTED),
+                tab.icon().size(16).color(MUTED),
+                toggle,
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center);
+            let card = container(entry).padding(10).width(Length::Fill).style(
+                if app.tab_drag == Some(tab) {
+                    theme::selected_card
+                } else {
+                    theme::card
+                },
+            );
+            list.push(
+                mouse_area(card)
+                    .on_press(Message::TabDragStarted(tab))
+                    .on_enter(Message::TabDraggedOver(tab))
+                    .interaction(iced::mouse::Interaction::Grab),
+            )
+        });
+    mouse_area(rows)
+        .on_release(Message::TabDragEnded)
+        .on_exit(Message::TabDragEnded)
+        .into()
 }
 
 /// Every column as a row you can drag up or down; `highlight` marks one row.

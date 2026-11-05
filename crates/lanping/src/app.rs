@@ -18,6 +18,7 @@ use lanping_core::measurements::{Measurement, save as save_measurement};
 use lanping_core::ndt7::Server;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
+use lanping_core::snmp_interfaces::{Interface, Poll, SnmpError};
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::throughput::ServedStream;
 use lanping_core::timeline::{TimelineEntry, device_timeline};
@@ -40,6 +41,7 @@ use crate::monitor::AutoInterval;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
 use crate::settings::{Column, Settings, SettingsTab};
+use crate::snmp_tab::SnmpState;
 use crate::speed_locations::LocationChoice;
 use crate::speed_tab::{
     Source, SpeedEvent, SpeedPage, SpeedService, SpeedState, TestKind, TestLength,
@@ -187,6 +189,10 @@ pub enum Message {
     ColumnDragStarted(Column),
     ColumnDraggedOver(Column),
     ColumnDragEnded,
+    TabToggled(Tab, bool),
+    TabDragStarted(Tab),
+    TabDraggedOver(Tab),
+    TabDragEnded,
     AutoRescanPicked(AutoInterval),
     NotifyToggled(bool),
     NotifyPortsToggled(bool),
@@ -238,6 +244,12 @@ pub enum Message {
     LatencyCopySummary,
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
+    SnmpTargetChanged(String),
+    SnmpStart,
+    SnmpStop,
+    SnmpDiscovered(u64, Result<Vec<Interface>, SnmpError>),
+    SnmpPolled(u64, Result<Poll, SnmpError>),
+    SnmpShowAllToggled(bool),
     TlsTargetChanged(String),
     TlsServerNameChanged(String),
     TlsCheck,
@@ -279,6 +291,7 @@ pub struct LanPing {
     pub latency: LatencyState,
     pub dns: DnsState,
     pub tls: TlsState,
+    pub snmp: SnmpState,
     pub speed: SpeedState,
     pub modal: Option<Modal>,
     pub label_draft: String,
@@ -295,6 +308,8 @@ pub struct LanPing {
     pub detail_timeline: Vec<TimelineEntry>,
     /// Column being dragged in the column list.
     pub column_drag: Option<Column>,
+    /// Tab being dragged in the tab list of the settings.
+    pub tab_drag: Option<Tab>,
     pub hosts: Vec<Host>,
     pub diff: ScanDiff,
     pub sort_key: SortKey,
@@ -408,6 +423,7 @@ impl LanPing {
             latency: LatencyState::default(),
             dns: DnsState::new(),
             tls: TlsState::new(),
+            snmp: SnmpState::new(),
             speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
             label_draft: String::new(),
@@ -420,6 +436,7 @@ impl LanPing {
             detail_scan_count: 0,
             detail_timeline: Vec::new(),
             column_drag: None,
+            tab_drag: None,
             hosts: Vec::new(),
             diff: ScanDiff::default(),
             sort_key: SortKey::Address,
@@ -557,6 +574,24 @@ impl LanPing {
                     self.settings.move_column_to(dragged, target);
                 }
             }
+            Message::TabToggled(tab, visible) => {
+                self.settings.set_tab_visible(tab, visible);
+                if !visible && self.tab == tab {
+                    self.tab = Tab::Scan;
+                }
+                self.save_settings();
+            }
+            Message::TabDragStarted(tab) => self.tab_drag = Some(tab),
+            Message::TabDraggedOver(target) => {
+                if let Some(dragged) = self.tab_drag {
+                    self.settings.move_tab_to(dragged, target);
+                }
+            }
+            Message::TabDragEnded => {
+                if self.tab_drag.take().is_some() {
+                    self.save_settings();
+                }
+            }
             Message::ColumnDragEnded => {
                 if self.column_drag.take().is_some() {
                     self.save_settings();
@@ -640,6 +675,18 @@ impl LanPing {
             }
             Message::SpeedServerFailed(message) => self.speed.server_failed(message),
             Message::SpeedServed(stream) => self.speed.served(stream),
+            Message::SnmpTargetChanged(target) => self.snmp.target = target,
+            Message::SnmpStart => {
+                return self.snmp.start(&self.settings.snmp_community);
+            }
+            Message::SnmpStop => self.snmp.stop(),
+            Message::SnmpDiscovered(generation, result) => {
+                return self.snmp.discovered(generation, result);
+            }
+            Message::SnmpPolled(generation, result) => {
+                return self.snmp.polled(generation, result);
+            }
+            Message::SnmpShowAllToggled(show_all) => self.snmp.show_all = show_all,
             Message::TlsTargetChanged(target) => self.tls.set_target(target),
             Message::TlsServerNameChanged(name) => self.tls.set_server_name(name),
             Message::TlsCheck => return self.tls.start(),

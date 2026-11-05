@@ -23,6 +23,8 @@ mod results;
 mod scan_flow;
 mod settings;
 mod settings_page;
+mod snmp_tab;
+mod snmp_view;
 mod sparkline;
 mod speed_locations;
 mod speed_tab;
