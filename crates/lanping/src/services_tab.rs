@@ -12,7 +12,7 @@ use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
 use crate::job::Job;
 use crate::settings_page::small_button;
 use crate::theme::{self, BOLD, MUTED, SECTION_SPACING};
-use crate::ui::{note, panel, scrolling};
+use crate::ui::{empty_state, page_header, panel, scrolling};
 
 const CARD_PADDING: f32 = 12.0;
 const GROUP_SPACING: f32 = 8.0;
@@ -70,21 +70,28 @@ pub fn services_panel(app: &LanPing) -> Element<'_, Message> {
         .style(theme::primary_button),
         "Ask the network what announces itself. It listens for a few seconds.",
     );
-    let result: Element<'_, Message> = match &app.services.lookup {
-        Lookup::Idle => note(
-            "Lists what announces itself on the network: printers, Chromecasts, AirPlay, file \
-             shares and media servers. It only listens for what devices say about themselves.",
+    let header = page_header(
+        "Services",
+        "Printers, Chromecasts, AirPlay, file shares and media servers that announce themselves.",
+        Some(browse_button),
+    );
+    let content: Element<'_, Message> = match &app.services.lookup {
+        Lookup::Idle => empty_state(
+            "Nothing browsed yet",
+            "Press Browse the network. It only listens to what devices say about themselves.",
         ),
-        Lookup::Running => note("Listening for a few seconds."),
-        Lookup::Done(entries) if entries.is_empty() => note(
-            "Nothing announced itself. Some networks block multicast between devices, \
-             especially on Wi-Fi guest networks.",
+        Lookup::Running => empty_state("Listening", "This takes a few seconds."),
+        Lookup::Done(entries) if entries.is_empty() => empty_state(
+            "Nothing announced itself",
+            "Some networks block multicast between devices, especially guest Wi-Fi.",
         ),
-        Lookup::Done(entries) => results(entries, &app.hosts),
+        Lookup::Done(entries) => scrolling(results(entries, &app.hosts)).into(),
     };
-    panel(scrolling(
-        column![browse_button, result].spacing(SECTION_SPACING),
-    ))
+    panel(
+        column![header, content]
+            .spacing(SECTION_SPACING)
+            .height(Length::Fill),
+    )
 }
 
 fn results<'a>(entries: &'a [ServiceEntry], hosts: &[Host]) -> Element<'a, Message> {

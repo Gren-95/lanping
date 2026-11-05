@@ -1,6 +1,6 @@
 //! The Clock tab: how far this computer's clock is from a time server.
 
-use iced::widget::{Row as LayoutRow, button, column, row, text, text_input};
+use iced::widget::{Row as LayoutRow, button, column, container, row, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 use lanping_core::ntp::{NtpError, NtpReport, WELL_KNOWN_SERVERS, check};
 
@@ -9,11 +9,13 @@ use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::settings_page::small_button;
-use crate::theme::{self, BAD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{note, panel, scrolling};
+use crate::theme::{self, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
+use crate::ui::{empty_state, note, page_header, panel, scrolling};
 use crate::view::input_group;
 
 const LABEL_WIDTH: f32 = 130.0;
+const CARD_PADDING: f32 = 14.0;
+const HEADLINE_SIZE: u32 = 22;
 const INPUT_TEXT_SIZE: u32 = 13;
 /// A clock further off than this can break certificate checks and logins.
 const WARN_OFFSET_SECONDS: f64 = 1.0;
@@ -96,15 +98,26 @@ pub fn ntp_panel(app: &LanPing) -> Element<'_, Message> {
     .spacing(8)
     .wrap()
     .vertical_spacing(8);
-    let result: Element<'_, Message> = match &ntp.lookup {
-        Lookup::Idle => note("Press the button to ask the server what time it is."),
-        Lookup::Running => note(format!("Asking {}.", ntp.server.trim())),
-        Lookup::Failed(error) => text(error.to_string()).color(BAD).into(),
-        Lookup::Done(report) => report_view(report),
+    let header = page_header(
+        "Clock check",
+        "How far this computer's clock is from a time server. A wrong clock breaks certificates and logins.",
+        None,
+    );
+    let content: Element<'_, Message> = match &ntp.lookup {
+        Lookup::Idle => empty_state(
+            "Not checked yet",
+            "Press the button to ask the server what time it is.",
+        ),
+        Lookup::Running => empty_state("Asking the server", ntp.server.trim().to_owned()),
+        Lookup::Failed(error) => empty_state("Cannot check the clock", error.to_string()),
+        Lookup::Done(report) => scrolling(report_view(report)).into(),
     };
-    let body =
-        column![input_group(vec![server.into(), go]), suggestions, result].spacing(SECTION_SPACING);
-    panel(scrolling(body))
+    let controls = column![input_group(vec![server.into(), go]), suggestions].spacing(8);
+    panel(
+        column![header, controls, content]
+            .spacing(SECTION_SPACING)
+            .height(Length::Fill),
+    )
 }
 
 fn report_view(report: &NtpReport) -> Element<'_, Message> {
@@ -116,7 +129,6 @@ fn report_view(report: &NtpReport) -> Element<'_, Message> {
     };
     let mut lines = column![].spacing(6);
     for (label, value) in [
-        ("This clock", describe_offset(report.clock_ahead_seconds)),
         ("Round trip", format_milliseconds(report.round_trip_seconds)),
         (
             "Server",
@@ -134,14 +146,26 @@ fn report_view(report: &NtpReport) -> Element<'_, Message> {
             .align_y(Alignment::Start),
         );
     }
-    let mut page = column![verdict, lines].spacing(SECTION_SPACING);
+    let headline = row![
+        text(describe_offset(report.clock_ahead_seconds))
+            .size(HEADLINE_SIZE)
+            .font(BOLD),
+        verdict
+    ]
+    .spacing(12)
+    .align_y(Alignment::Center);
+    let mut card = column![headline, lines].spacing(SECTION_SPACING);
     if off {
-        page = page.push(note(
+        card = card.push(note(
             "A clock this far off can make certificates look expired or not yet valid, and \
              can break logins that depend on the time.",
         ));
     }
-    page.into()
+    container(card)
+        .padding(CARD_PADDING)
+        .width(Length::Fill)
+        .style(theme::card)
+        .into()
 }
 
 /// `3.20 s ahead of the server`, `45 ms behind the server`, or `matches the server`.
