@@ -121,12 +121,16 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - A Web tab has two pages. Website checks a site's answer: the redirect chain, where the time goes (name lookup, connect, secure handshake, first byte), the TLS version, and whether HSTS, Content-Security-Policy, X-Content-Type-Options, clickjacking protection and Referrer-Policy are present and sensible. Email records shows a domain's MX records and grades its SPF (including the 10-lookup limit) and DMARC records, and looks for DKIM keys at twelve common names, each with what it means in plain words. Both make ordinary requests and ask ordinary DNS questions
 
+**Syslog**
+
+- A Syslog tab listens for log messages from a router, NAS or other device and shows them live, newest first, with a filter by host or address, a text search and a minimum severity, and a button to copy what is shown. It reads both the old BSD form (RFC 3164) and the newer one (RFC 5424) and keeps the raw line of anything it cannot read. It only listens after you press Start, on UDP and optionally TCP, and says which addresses it is on and how to point the device at it. It defaults to port 5514 because 514 needs administrator rights. Messages are bounded in size and in number (the newest 5000 are kept), and a flood is dropped rather than stored
+
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU, My network and Web start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU, My network, Web and Syslog start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run

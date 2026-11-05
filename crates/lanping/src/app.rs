@@ -27,6 +27,7 @@ use lanping_core::report::ReportInput;
 use lanping_core::service_browse::ServiceEntry;
 use lanping_core::snmp_interfaces::{Interface, Poll, SnmpError};
 use lanping_core::summary::{Summary, summarize};
+use lanping_core::syslog::SyslogMessage;
 use lanping_core::throughput::ServedStream;
 use lanping_core::timeline::{TimelineEntry, device_timeline};
 use lanping_core::tls::{TlsError, TlsReport};
@@ -64,6 +65,7 @@ use crate::storage::{
     measurements_directory, migrate_legacy_data, settings_path,
 };
 use crate::subnet_tab::SubnetState;
+use crate::syslog_tab::{SeverityChoice, SyslogState};
 use crate::tabs::Tab;
 use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
@@ -106,6 +108,7 @@ pub struct LanPing {
     pub mtu: MtuState,
     pub network: NetworkState,
     pub web: WebState,
+    pub syslog: SyslogState,
     pub upnp: UpnpState,
     pub services: ServicesState,
     pub snmp: SnmpState,
@@ -193,6 +196,7 @@ impl LanPing {
             mtu: MtuState::new(),
             network: NetworkState::new(),
             web: WebState::new(),
+            syslog: SyslogState::new(),
             upnp: UpnpState::new(),
             services: ServicesState::new(),
             snmp: SnmpState::new(),
@@ -494,6 +498,24 @@ impl LanPing {
             Message::NtpCheck => return self.ntp.start(),
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::UpnpRead => return self.upnp.start(),
+            Message::SyslogStart => return self.syslog.start(),
+            Message::SyslogStop => self.syslog.stop(),
+            Message::SyslogPortChanged(port) => self.syslog.port = port,
+            Message::SyslogTcpToggled(on) => self.syslog.tcp = on,
+            Message::SyslogListening(port, tcp, addresses) => {
+                self.syslog.is_listening_now(port, tcp, addresses)
+            }
+            Message::SyslogFailed(reason) => self.syslog.failed(reason),
+            Message::SyslogReceived(batch) => self.syslog.receive(batch),
+            Message::SyslogClear => self.syslog.clear(),
+            Message::SyslogHostFilter(text) => self.syslog.filter.host = text,
+            Message::SyslogTextFilter(text) => self.syslog.filter.text = text,
+            Message::SyslogSeverityPicked(choice) => self.syslog.filter.severity = choice,
+            Message::SyslogCopyShown => {
+                let (text, count) = self.syslog.shown_as_text();
+                self.set_notice(Notice::Info, format!("Copied {count} messages"));
+                return iced::clipboard::write(text);
+            }
             Message::WebPagePicked(page) => self.web.page = page,
             Message::WebAddressChanged(address) => self.web.address = address,
             Message::WebCheck => return self.web.check_site(),

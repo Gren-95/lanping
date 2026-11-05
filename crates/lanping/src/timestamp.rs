@@ -19,6 +19,17 @@ pub fn format_unix_utc(seconds: u64) -> String {
     )
 }
 
+/// Formats Unix seconds as the `HH:MM:SS` of that day in UTC.
+pub fn format_unix_time_utc(seconds: u64) -> String {
+    let seconds_of_day = seconds % 86_400;
+    format!(
+        "{:02}:{:02}:{:02}",
+        seconds_of_day / 3600,
+        seconds_of_day % 3600 / 60,
+        seconds_of_day % 60
+    )
+}
+
 /// Days since 1970-01-01 to a proleptic Gregorian date (Howard Hinnant).
 fn civil_from_days(days: i64) -> (i64, u32, u32) {
     let shifted = days + 719_468;
@@ -45,6 +56,13 @@ mod tests {
     #[test]
     fn formats_epoch() {
         assert_eq!(format_unix_utc(0), "1970-01-01 00:00 UTC");
+    }
+
+    #[test]
+    fn formats_the_time_of_day() {
+        assert_eq!(format_unix_time_utc(0), "00:00:00");
+        assert_eq!(format_unix_time_utc(1_709_210_096), "12:34:56");
+        assert_eq!(format_unix_time_utc(86_399), "23:59:59");
     }
 
     #[test]
