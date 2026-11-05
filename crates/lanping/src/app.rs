@@ -18,6 +18,7 @@ use lanping_core::measurements::{Measurement, save as save_measurement};
 use lanping_core::ndt7::Server;
 use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
+use lanping_core::snmp_interfaces::{Interface, Poll, SnmpError};
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::throughput::ServedStream;
 use lanping_core::timeline::{TimelineEntry, device_timeline};
@@ -53,6 +54,7 @@ use crate::tabs::Tab;
 use crate::timestamp::format_unix_utc;
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
+use crate::traffic_tab::TrafficState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
 
@@ -238,6 +240,12 @@ pub enum Message {
     LatencyCopySummary,
     LatencySaveLog,
     LatencyLogPathChosen(Option<PathBuf>),
+    TrafficTargetChanged(String),
+    TrafficStart,
+    TrafficStop,
+    TrafficDiscovered(u64, Result<Vec<Interface>, SnmpError>),
+    TrafficPolled(u64, Result<Poll, SnmpError>),
+    TrafficShowAllToggled(bool),
     TlsTargetChanged(String),
     TlsServerNameChanged(String),
     TlsCheck,
@@ -279,6 +287,7 @@ pub struct LanPing {
     pub latency: LatencyState,
     pub dns: DnsState,
     pub tls: TlsState,
+    pub traffic: TrafficState,
     pub speed: SpeedState,
     pub modal: Option<Modal>,
     pub label_draft: String,
@@ -408,6 +417,7 @@ impl LanPing {
             latency: LatencyState::default(),
             dns: DnsState::new(),
             tls: TlsState::new(),
+            traffic: TrafficState::new(),
             speed: SpeedState::new(measurements_directory().as_deref()),
             modal: None,
             label_draft: String::new(),
@@ -640,6 +650,18 @@ impl LanPing {
             }
             Message::SpeedServerFailed(message) => self.speed.server_failed(message),
             Message::SpeedServed(stream) => self.speed.served(stream),
+            Message::TrafficTargetChanged(target) => self.traffic.target = target,
+            Message::TrafficStart => {
+                return self.traffic.start(&self.settings.snmp_community);
+            }
+            Message::TrafficStop => self.traffic.stop(),
+            Message::TrafficDiscovered(generation, result) => {
+                return self.traffic.discovered(generation, result);
+            }
+            Message::TrafficPolled(generation, result) => {
+                return self.traffic.polled(generation, result);
+            }
+            Message::TrafficShowAllToggled(show_all) => self.traffic.show_all = show_all,
             Message::TlsTargetChanged(target) => self.tls.set_target(target),
             Message::TlsServerNameChanged(name) => self.tls.set_server_name(name),
             Message::TlsCheck => return self.tls.start(),

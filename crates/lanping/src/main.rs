@@ -36,6 +36,8 @@ mod theme;
 mod timestamp;
 mod tls_tab;
 mod trace_tab;
+mod traffic_tab;
+mod traffic_view;
 mod view;
 mod whois_page;
 mod wifi_channels;
