@@ -53,6 +53,21 @@ pub fn app_theme() -> Theme {
     )
 }
 
+const LOSS_WARN_PERCENT: f64 = 1.0;
+const LOSS_BAD_PERCENT: f64 = 10.0;
+/// Smallest scale of a latency graph, so a 1 ms host does not fill the whole chart.
+pub const MIN_GRAPH_SCALE_MS: f64 = 10.0;
+
+pub fn loss_color(percent: f64) -> Color {
+    if percent >= LOSS_BAD_PERCENT {
+        BAD
+    } else if percent >= LOSS_WARN_PERCENT {
+        WARN
+    } else {
+        GOOD
+    }
+}
+
 pub fn latency_color(milliseconds: f64) -> Color {
     if milliseconds < FAST_LATENCY_MS {
         GOOD
@@ -335,5 +350,17 @@ pub fn tab_button(selected: bool) -> impl Fn(&Theme, button::Status) -> button::
             return primary_button(theme, button::Status::Active);
         }
         quiet_button(theme, status)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loss_is_graded_by_size() {
+        assert_eq!(loss_color(0.0), GOOD);
+        assert_eq!(loss_color(5.0), WARN);
+        assert_eq!(loss_color(50.0), BAD);
     }
 }

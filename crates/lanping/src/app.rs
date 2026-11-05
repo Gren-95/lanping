@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use iced::task::Handle;
 use iced::{Subscription, Task, Theme};
@@ -54,7 +54,7 @@ use crate::storage::{
 };
 use crate::subnet_tab::SubnetState;
 use crate::tabs::Tab;
-use crate::timestamp::format_unix_utc;
+use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
@@ -1226,12 +1226,6 @@ fn load_notes() -> (DeviceNotes, Option<String>) {
 
 fn load_labels() -> (DeviceLabels, Option<String>) {
     load_or_default(labels_path(), "your device names", DeviceLabels::load)
-}
-
-fn unix_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 #[cfg(test)]

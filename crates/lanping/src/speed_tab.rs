@@ -2,7 +2,7 @@
 
 use std::net::IpAddr;
 use std::path::PathBuf;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use iced::Task;
 use iced::futures::SinkExt;
@@ -20,6 +20,7 @@ use tokio::task::JoinHandle;
 
 use crate::app::Message;
 use crate::speed_locations::LocationChoice;
+use crate::timestamp::unix_now;
 
 const STREAM_BUFFER: usize = 64;
 /// Served streams of one test arrive together; ones this close are shown as one test.
@@ -212,7 +213,7 @@ impl Report {
 
     /// One record per finished step, for the history.
     fn records(&self) -> Vec<Measurement> {
-        let finished_at_unix = unix_seconds();
+        let finished_at_unix = unix_now();
         self.results
             .iter()
             .map(|result| {
@@ -292,12 +293,6 @@ impl<T> Drop for StopOnDrop<T> {
     fn drop(&mut self) {
         self.0.abort();
     }
-}
-
-fn unix_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 /// `host` or `host:port` of a machine that runs the test server.

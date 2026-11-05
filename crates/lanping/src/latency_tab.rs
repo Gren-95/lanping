@@ -1,7 +1,7 @@
 //! The Latency tab: probe one host on an interval and keep a graph and a log.
 
 use std::fmt;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use iced::widget::{
     Row as LayoutRow, button, column, container, pick_list, space, text, text_input,
@@ -17,18 +17,16 @@ use crate::job::Job;
 use crate::results::pill;
 use crate::sparkline::{Bar, chart};
 use crate::theme::{
-    self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SECTION_SPACING, WARN, latency_color,
+    self, BAD, BOLD, Edge, MIN_GRAPH_SCALE_MS, MUTED, NO_VALUE, SECTION_SPACING, WARN,
+    latency_color, loss_color,
 };
+use crate::timestamp::unix_now;
 use crate::ui::{empty_state, panel};
 use crate::view::input_group;
 
 const CHART_HEIGHT: f32 = 120.0;
 const TILE_PADDING: f32 = 12.0;
 const TILE_WIDTH: f32 = 120.0;
-const LOSS_WARN_PERCENT: f64 = 1.0;
-const LOSS_BAD_PERCENT: f64 = 10.0;
-/// Smallest scale of the graph, so a 1 ms host does not fill the whole chart.
-const MIN_GRAPH_SCALE_MS: f64 = 10.0;
 
 /// Time between two probes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -133,7 +131,7 @@ impl LatencyState {
         if !self.job.is_current(generation) || !self.running {
             return Task::none();
         }
-        self.series.record(unix_seconds(), rtt_ms);
+        self.series.record(unix_now(), rtt_ms);
         self.next_probe(self.interval.duration())
     }
 
@@ -160,7 +158,7 @@ impl LatencyState {
         Some(Measurement::Latency(LatencyRecord::new(
             &self.target,
             method,
-            unix_seconds(),
+            unix_now(),
             &self.series,
         )))
     }
@@ -192,14 +190,8 @@ impl LatencyState {
     }
 
     pub fn default_log_name(&self) -> String {
-        format!("latency-{}.csv", unix_seconds())
+        format!("latency-{}.csv", unix_now())
     }
-}
-
-fn unix_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| elapsed.as_secs())
 }
 
 pub fn latency_panel(app: &LanPing) -> Element<'_, Message> {
@@ -369,16 +361,6 @@ fn tile<'a>(label: &'static str, value: String, color: iced::Color) -> Element<'
     .into()
 }
 
-fn loss_color(percent: f64) -> iced::Color {
-    if percent >= LOSS_BAD_PERCENT {
-        BAD
-    } else if percent >= LOSS_WARN_PERCENT {
-        WARN
-    } else {
-        GOOD
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,13 +371,6 @@ mod tests {
             target: "example.com".to_owned(),
             ..LatencyState::default()
         }
-    }
-
-    #[test]
-    fn loss_is_graded_by_size() {
-        assert_eq!(loss_color(0.0), GOOD);
-        assert_eq!(loss_color(5.0), WARN);
-        assert_eq!(loss_color(50.0), BAD);
     }
 
     #[test]

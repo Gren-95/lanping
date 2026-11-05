@@ -17,19 +17,15 @@ use crate::results::pill;
 use crate::sparkline::{Bar, sparkline, width_of};
 use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{
-    self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SCROLLBAR_GAP, SECTION_SPACING, WARN,
-    latency_color,
+    self, BAD, BOLD, Edge, MIN_GRAPH_SCALE_MS, MUTED, NO_VALUE, SCROLLBAR_GAP, SECTION_SPACING,
+    WARN, latency_color, loss_color,
 };
 use crate::ui::{empty_state, panel};
 use crate::view::input_group;
 
 /// Rest between two rounds, so a nearby target does not start a process every few milliseconds.
 const ROUND_PAUSE: Duration = Duration::from_secs(1);
-const LOSS_WARN_PERCENT: f64 = 1.0;
-const LOSS_BAD_PERCENT: f64 = 10.0;
 const UNKNOWN_ADDRESS: &str = "???";
-/// Smallest scale of the graph, so a 1 ms hop does not fill the whole bar.
-const MIN_GRAPH_SCALE_MS: f64 = 10.0;
 
 /// One round after a rest.
 async fn round(target: String, pause: Duration) -> Result<Vec<HopSample>, TraceError> {
@@ -340,16 +336,6 @@ fn latency_graph(hop: &HopStats, scale: f64) -> Element<'_, Message> {
     }))
 }
 
-fn loss_color(percent: f64) -> iced::Color {
-    if percent >= LOSS_BAD_PERCENT {
-        BAD
-    } else if percent >= LOSS_WARN_PERCENT {
-        WARN
-    } else {
-        GOOD
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,13 +354,6 @@ mod tests {
             traced: "example.com".to_owned(),
             ..TraceState::default()
         }
-    }
-
-    #[test]
-    fn loss_is_graded_by_size() {
-        assert_eq!(loss_color(0.0), GOOD);
-        assert_eq!(loss_color(5.0), WARN);
-        assert_eq!(loss_color(50.0), BAD);
     }
 
     #[test]
