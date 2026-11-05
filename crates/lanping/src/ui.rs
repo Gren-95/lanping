@@ -1,6 +1,8 @@
 //! Small widgets that several pages build the same way.
 
-use iced::widget::{Scrollable, column, container, row, scrollable, space, text};
+use iced::widget::{
+    Row as LayoutRow, Scrollable, button, column, container, row, scrollable, space, text,
+};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::app::Message;
@@ -103,4 +105,24 @@ pub fn card<'a>(content: impl Into<Element<'a, Message>>) -> Element<'a, Message
         .width(Length::Fill)
         .style(theme::card)
         .into()
+}
+
+const STRIP_TEXT_SIZE: u32 = 13;
+
+/// The buttons that switch between the pages of a tab, with `selected` highlighted.
+pub fn page_strip<'a, P: Copy + PartialEq + 'a>(
+    pages: &[P],
+    selected: P,
+    title: fn(P) -> &'static str,
+    on_pick: fn(P) -> Message,
+) -> Element<'a, Message> {
+    LayoutRow::with_children(pages.iter().map(|page| {
+        button(text(title(*page)).size(STRIP_TEXT_SIZE))
+            .on_press(on_pick(*page))
+            .padding([5.0, 14.0])
+            .style(theme::tab_button(*page == selected))
+            .into()
+    }))
+    .spacing(8)
+    .into()
 }
