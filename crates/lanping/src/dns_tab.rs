@@ -21,8 +21,10 @@ use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{
     self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SECTION_SPACING, WARN, latency_color,
 };
-use crate::ui::{note, page_strip, panel, scrolling};
+use crate::tls_tab::tls_page;
+use crate::ui::{note, page_strip, scrolling, tabbed_panel};
 use crate::view::input_group;
+use crate::web_view::{email_page, website_page};
 use crate::whois_page::{WhoisState, whois_view};
 
 /// Windows at least this wide keep the lookup controls on one line.
@@ -69,15 +71,27 @@ pub enum DnsPage {
     #[default]
     Lookup,
     Whois,
+    Website,
+    Email,
+    Tls,
 }
 
 impl DnsPage {
-    pub(crate) const ALL: [Self; 2] = [Self::Lookup, Self::Whois];
+    pub(crate) const ALL: [Self; 5] = [
+        Self::Lookup,
+        Self::Whois,
+        Self::Website,
+        Self::Email,
+        Self::Tls,
+    ];
 
     pub(crate) fn title(self) -> &'static str {
         match self {
             Self::Lookup => "Lookup",
             Self::Whois => "WHOIS",
+            Self::Website => "Website",
+            Self::Email => "Email records",
+            Self::Tls => "TLS",
         }
     }
 }
@@ -202,27 +216,28 @@ impl DnsState {
 
 pub fn dns_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
     let dns = &app.dns;
-    let body = match dns.page {
-        DnsPage::Lookup => column![
-            lookup_controls(dns, width >= WIDE_WIDTH),
-            lookup_result(dns),
-            comparison_section(dns),
-        ]
-        .spacing(SECTION_SPACING * 1.5),
-        DnsPage::Whois => column![whois_view(&dns.whois)],
+    let strip = page_strip(
+        &DnsPage::ALL,
+        dns.page,
+        DnsPage::title,
+        Message::DnsPagePicked,
+    );
+    let page = match dns.page {
+        DnsPage::Lookup => scrolling(
+            column![
+                lookup_controls(dns, width >= WIDE_WIDTH),
+                lookup_result(dns),
+                comparison_section(dns),
+            ]
+            .spacing(SECTION_SPACING * 1.5),
+        )
+        .into(),
+        DnsPage::Whois => scrolling(whois_view(&dns.whois)).into(),
+        DnsPage::Website => website_page(app),
+        DnsPage::Email => email_page(app),
+        DnsPage::Tls => tls_page(app, width),
     };
-    let body = column![
-        page_strip(
-            &DnsPage::ALL,
-            dns.page,
-            DnsPage::title,
-            Message::DnsPagePicked
-        ),
-        body
-    ]
-    .spacing(SECTION_SPACING);
-    let page = scrolling(body);
-    panel(page)
+    tabbed_panel(strip, page)
 }
 
 fn lookup_controls(dns: &DnsState, wide: bool) -> Element<'_, Message> {

@@ -12,7 +12,7 @@ use crate::settings_page::small_button;
 use crate::syslog_tab::{SHOWN_MESSAGES, SeverityChoice, Status, SyslogState};
 use crate::theme::{self, ACCENT, BAD, BOLD, Edge, MUTED, SECTION_SPACING, WARN};
 use crate::timestamp::format_unix_time_utc;
-use crate::ui::{card, empty_state, note, page_header, panel, scrolling};
+use crate::ui::{card, empty_state, note, page_header, scrolling};
 use crate::view::input_group;
 
 const INPUT_TEXT_SIZE: u32 = 13;
@@ -25,7 +25,7 @@ const HOST_WIDTH: f32 = 140.0;
 const APP_WIDTH: f32 = 90.0;
 const ROW_TEXT_SIZE: u32 = 12;
 
-pub fn syslog_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn syslog_page(app: &LanPing) -> Element<'_, Message> {
     let syslog = &app.syslog;
     let header = page_header(
         "Syslog",
@@ -45,7 +45,7 @@ pub fn syslog_panel(app: &LanPing) -> Element<'_, Message> {
         page = page.push(text(reason.as_str()).color(BAD));
     }
     page = page.push(filter_row(syslog));
-    panel(page.push(messages_view(syslog)).height(Length::Fill))
+    page.push(messages_view(syslog)).height(Length::Fill).into()
 }
 
 fn start_stop(syslog: &SyslogState) -> Element<'_, Message> {

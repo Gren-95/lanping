@@ -3,7 +3,9 @@
 
 mod actions;
 mod app;
+mod computer_tab;
 mod copy_text;
+mod devices_tab;
 mod dns_tab;
 mod export_format;
 mod filter_bar;
@@ -22,8 +24,10 @@ mod network_tab;
 mod notify;
 mod ntp_tab;
 mod opener;
+mod path_tab;
 mod presets;
 mod results;
+mod router_tab;
 mod row_list;
 mod scan_flow;
 mod services_tab;

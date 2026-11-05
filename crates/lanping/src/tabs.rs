@@ -18,43 +18,25 @@ pub enum Tab {
     #[default]
     Scan,
     Wifi,
-    Trace,
-    Latency,
+    Path,
     Speed,
     Dns,
-    Tls,
-    Snmp,
-    Subnet,
-    Ntp,
-    Upnp,
-    Services,
-    Mtu,
+    Router,
     Network,
-    Web,
-    Syslog,
     /// Not part of the bar's list: it has its own button on the right and cannot be hidden.
     Settings,
 }
 
 impl Tab {
     /// The tabs that can be shown, hidden and reordered, in their default order.
-    pub const CONFIGURABLE: [Tab; 16] = [
+    pub const CONFIGURABLE: [Tab; 7] = [
         Tab::Scan,
         Tab::Wifi,
-        Tab::Trace,
-        Tab::Latency,
+        Tab::Path,
         Tab::Speed,
         Tab::Dns,
-        Tab::Tls,
-        Tab::Snmp,
-        Tab::Subnet,
-        Tab::Ntp,
-        Tab::Upnp,
-        Tab::Services,
-        Tab::Mtu,
+        Tab::Router,
         Tab::Network,
-        Tab::Web,
-        Tab::Syslog,
     ];
 
     /// Whether the tab shows until the user turns it on or off. The six main tabs do; every
@@ -62,28 +44,31 @@ impl Tab {
     pub fn shown_by_default(self) -> bool {
         matches!(
             self,
-            Self::Scan | Self::Wifi | Self::Trace | Self::Latency | Self::Speed | Self::Dns
+            Self::Scan | Self::Wifi | Self::Path | Self::Speed | Self::Dns
         )
+    }
+
+    /// The tab that took over the page of a tab an older version had, by its saved name.
+    pub fn folded_into(saved_name: &str) -> Option<Self> {
+        match saved_name {
+            "Trace" | "Latency" => Some(Self::Path),
+            "Snmp" | "Upnp" | "Syslog" => Some(Self::Router),
+            "Tls" => Some(Self::Dns),
+            "Subnet" | "Ntp" => Some(Self::Network),
+            "Services" => Some(Self::Scan),
+            _ => None,
+        }
     }
 
     pub fn title(self) -> &'static str {
         match self {
             Self::Scan => "Devices",
             Self::Wifi => "Wi-Fi",
-            Self::Trace => "Trace",
-            Self::Latency => "Latency",
+            Self::Path => "Path",
             Self::Speed => "Speed",
             Self::Dns => "DNS",
-            Self::Tls => "TLS",
-            Self::Snmp => "SNMP",
-            Self::Subnet => "Subnet",
-            Self::Ntp => "Clock",
-            Self::Upnp => "UPnP",
-            Self::Services => "Services",
-            Self::Mtu => "MTU",
-            Self::Network => "My network",
-            Self::Web => "Web",
-            Self::Syslog => "Syslog",
+            Self::Router => "Router",
+            Self::Network => "This computer",
             Self::Settings => "Settings",
         }
     }
@@ -92,20 +77,11 @@ impl Tab {
         match self {
             Self::Scan => lucide::scan_search(),
             Self::Wifi => lucide::wifi(),
-            Self::Trace => lucide::activity(),
-            Self::Latency => lucide::gauge(),
+            Self::Path => lucide::activity(),
             Self::Speed => lucide::zap(),
             Self::Dns => lucide::globe(),
-            Self::Tls => lucide::shield_check(),
-            Self::Snmp => lucide::arrow_down_up(),
-            Self::Subnet => lucide::calculator(),
-            Self::Ntp => lucide::alarm_clock_check(),
-            Self::Upnp => lucide::network(),
-            Self::Services => lucide::radio(),
-            Self::Mtu => lucide::ruler(),
+            Self::Router => lucide::router(),
             Self::Network => lucide::house(),
-            Self::Web => lucide::globe_lock(),
-            Self::Syslog => lucide::scroll_text(),
             Self::Settings => lucide::settings(),
         }
     }

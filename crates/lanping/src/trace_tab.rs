@@ -20,7 +20,7 @@ use crate::theme::{
     self, BAD, BOLD, Edge, MIN_GRAPH_SCALE_MS, MUTED, NO_VALUE, SCROLLBAR_GAP, SECTION_SPACING,
     WARN, latency_color, loss_color,
 };
-use crate::ui::{empty_state, panel};
+use crate::ui::empty_state;
 use crate::view::input_group;
 
 /// Rest between two rounds, so a nearby target does not start a process every few milliseconds.
@@ -105,7 +105,7 @@ impl TraceState {
     }
 }
 
-pub fn trace_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn trace_page(app: &LanPing) -> Element<'_, Message> {
     let trace = &app.trace;
     let content: Element<'_, Message> = match (&trace.error, trace.stats.hops().is_empty()) {
         (Some(error), _) => empty_state("Cannot trace", error.to_string()),
@@ -121,7 +121,7 @@ pub fn trace_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![toolbar(trace), content]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    panel(page)
+    page.into()
 }
 
 fn toolbar(trace: &TraceState) -> Element<'_, Message> {

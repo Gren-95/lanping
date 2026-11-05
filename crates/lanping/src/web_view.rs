@@ -10,60 +10,59 @@ use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, lucide, with_tooltip};
 use crate::results::pill;
 use crate::theme::{self, BAD, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
-use crate::ui::{card, empty_state, fact_row, note, page_header, page_strip, panel, scrolling};
+use crate::ui::{card, empty_state, fact_row, note, page_header, scrolling};
 use crate::view::input_group;
-use crate::web_tab::{Lookup, WebPage, WebState};
+use crate::web_tab::{Lookup, WebState};
 
 const INPUT_TEXT_SIZE: u32 = 13;
 const SECTION_TITLE_SIZE: u32 = 15;
 const HEADLINE_SIZE: u32 = 20;
 const MILLISECONDS: f64 = 1000.0;
 
-pub fn web_panel(app: &LanPing) -> Element<'_, Message> {
+/// The Website page of the DNS tab.
+pub fn website_page(app: &LanPing) -> Element<'_, Message> {
     let web = &app.web;
-    let (header, controls, content) = match web.page {
-        WebPage::Website => (
-            page_header(
-                "Website check",
-                "How a site answers: redirects, where the time goes, the TLS version and its security headers.",
-                None,
-            ),
-            controls(
-                "Web address, such as example.com or https://example.com/page",
-                &web.address,
-                web.site.is_running(),
-                Message::WebAddressChanged,
-                Message::WebCheck,
-            ),
-            site_content(web),
+    column![
+        page_header(
+            "Website check",
+            "How a site answers: redirects, where the time goes, the TLS version and its security headers.",
+            None,
         ),
-        WebPage::Email => (
-            page_header(
-                "Email records",
-                "Where a domain's mail goes and whether SPF, DMARC and DKIM protect it from forgery.",
-                None,
-            ),
-            controls(
-                "Domain, such as example.com",
-                &web.domain,
-                web.email.is_running(),
-                Message::EmailDomainChanged,
-                Message::EmailCheck,
-            ),
-            email_content(web),
+        controls(
+            "Web address, such as example.com or https://example.com/page",
+            &web.address,
+            web.site.is_running(),
+            Message::WebAddressChanged,
+            Message::WebCheck,
         ),
-    };
-    let strip = page_strip(
-        &WebPage::ALL,
-        web.page,
-        WebPage::title,
-        Message::WebPagePicked,
-    );
-    panel(
-        column![strip, header, controls, content]
-            .spacing(SECTION_SPACING)
-            .height(Length::Fill),
-    )
+        site_content(web),
+    ]
+    .spacing(SECTION_SPACING)
+    .height(Length::Fill)
+    .into()
+}
+
+/// The Email records page of the DNS tab.
+pub fn email_page(app: &LanPing) -> Element<'_, Message> {
+    let web = &app.web;
+    column![
+        page_header(
+            "Email records",
+            "Where a domain's mail goes and whether SPF, DMARC and DKIM protect it from forgery.",
+            None,
+        ),
+        controls(
+            "Domain, such as example.com",
+            &web.domain,
+            web.email.is_running(),
+            Message::EmailDomainChanged,
+            Message::EmailCheck,
+        ),
+        email_content(web),
+    ]
+    .spacing(SECTION_SPACING)
+    .height(Length::Fill)
+    .into()
 }
 
 fn controls<'a>(

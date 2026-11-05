@@ -7,7 +7,6 @@ use lanping_core::subnet::{Subnet, SubnetError, describe};
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
 use crate::theme::{self, BAD, BOLD, Edge, MUTED, SECTION_SPACING};
-use crate::ui::panel;
 
 const LABEL_WIDTH: f32 = 150.0;
 const ROW_PADDING: [f32; 2] = [8.0, 12.0];
@@ -24,7 +23,7 @@ impl SubnetState {
     }
 }
 
-pub fn subnet_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn subnet_page(app: &LanPing) -> Element<'_, Message> {
     let input = text_input(
         "192.168.1.10/24 or 10.0.0.1 255.255.255.0",
         &app.subnet.input,
@@ -42,7 +41,7 @@ pub fn subnet_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![input, result]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    panel(page)
+    page.into()
 }
 
 fn hint(message: String, color: iced::Color) -> Element<'static, Message> {

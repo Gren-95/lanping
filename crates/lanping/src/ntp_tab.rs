@@ -10,7 +10,7 @@ use crate::job::Job;
 use crate::results::pill;
 use crate::settings_page::small_button;
 use crate::theme::{self, BOLD, Edge, GOOD, SECTION_SPACING, WARN};
-use crate::ui::{card, empty_state, fact_row, note, page_header, panel, scrolling};
+use crate::ui::{card, empty_state, fact_row, note, page_header, scrolling};
 use crate::view::input_group;
 
 const HEADLINE_SIZE: u32 = 22;
@@ -67,7 +67,7 @@ impl NtpState {
     }
 }
 
-pub fn ntp_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn ntp_page(app: &LanPing) -> Element<'_, Message> {
     let ntp = &app.ntp;
     let busy = matches!(ntp.lookup, Lookup::Running);
     let mut server = text_input("Time server, such as pool.ntp.org", &ntp.server)
@@ -111,11 +111,10 @@ pub fn ntp_panel(app: &LanPing) -> Element<'_, Message> {
         Lookup::Done(report) => scrolling(report_view(report)).into(),
     };
     let controls = column![input_group(vec![server.into(), go]), suggestions].spacing(8);
-    panel(
-        column![header, controls, content]
-            .spacing(SECTION_SPACING)
-            .height(Length::Fill),
-    )
+    column![header, controls, content]
+        .spacing(SECTION_SPACING)
+        .height(Length::Fill)
+        .into()
 }
 
 fn report_view(report: &NtpReport) -> Element<'_, Message> {

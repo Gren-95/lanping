@@ -12,8 +12,7 @@ use crate::job::Job;
 use crate::results::pill;
 use crate::theme::{self, BAD, BOLD, GOOD, MUTED, SECTION_SPACING, WARN};
 use crate::ui::{
-    FACT_LABEL_WIDTH, card, empty_state, fact_row, fact_row_copying, note, page_header, panel,
-    scrolling,
+    FACT_LABEL_WIDTH, card, empty_state, fact_row, fact_row_copying, note, page_header, scrolling,
 };
 
 const SECTION_TITLE_SIZE: u32 = 15;
@@ -73,7 +72,7 @@ impl NetworkState {
     }
 }
 
-pub fn network_panel(app: &LanPing) -> Element<'_, Message> {
+pub fn network_page(app: &LanPing) -> Element<'_, Message> {
     let network = &app.network;
     let refresh = with_tooltip(
         button(
@@ -101,11 +100,10 @@ pub fn network_panel(app: &LanPing) -> Element<'_, Message> {
         )
         .into(),
     };
-    panel(
-        column![header, content]
-            .spacing(SECTION_SPACING)
-            .height(Length::Fill),
-    )
+    column![header, content]
+        .spacing(SECTION_SPACING)
+        .height(Length::Fill)
+        .into()
 }
 
 fn local_card(local: &LocalFacts) -> Element<'_, Message> {

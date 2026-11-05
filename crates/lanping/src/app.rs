@@ -40,7 +40,9 @@ use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
 
 use crate::actions::{Effect, HostAction};
+use crate::computer_tab::ComputerPage;
 use crate::copy_text::rows_as_text;
+use crate::devices_tab::DevicesPage;
 use crate::dns_tab::{DnsPage, DnsState, ResolverChoice};
 use crate::export_format::{ExportFormat, ask_save_path};
 use crate::host_filter::{FilterChange, HostFilter, RowStatus};
@@ -52,7 +54,9 @@ use crate::mtu_tab::MtuState;
 use crate::network_tab::NetworkState;
 use crate::ntp_tab::NtpState;
 use crate::opener::open_target;
+use crate::path_tab::PathPage;
 use crate::presets::{PresetChoice, upsert_preset};
+use crate::router_tab::RouterPage;
 use crate::row_list::{RowInputs, RowList};
 use crate::services_tab::ServicesState;
 use crate::settings::{Column, Settings, SettingsTab};
@@ -71,7 +75,7 @@ use crate::timestamp::{format_unix_utc, unix_now};
 use crate::tls_tab::TlsState;
 use crate::trace_tab::TraceState;
 use crate::upnp_tab::UpnpState;
-use crate::web_tab::{WebPage, WebState};
+use crate::web_tab::WebState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::WifiState;
 
@@ -103,6 +107,10 @@ pub struct LanPing {
     pub subnet: SubnetState,
     pub latency: LatencyState,
     pub dns: DnsState,
+    pub path_page: PathPage,
+    pub devices_page: DevicesPage,
+    pub computer_page: ComputerPage,
+    pub router_page: RouterPage,
     pub tls: TlsState,
     pub ntp: NtpState,
     pub mtu: MtuState,
@@ -191,6 +199,10 @@ impl LanPing {
             subnet: SubnetState::default(),
             latency: LatencyState::default(),
             dns: DnsState::new(),
+            path_page: PathPage::default(),
+            devices_page: DevicesPage::default(),
+            computer_page: ComputerPage::default(),
+            router_page: RouterPage::default(),
             tls: TlsState::new(),
             ntp: NtpState::new(),
             mtu: MtuState::new(),
@@ -516,7 +528,6 @@ impl LanPing {
                 self.set_notice(Notice::Info, format!("Copied {count} messages"));
                 return iced::clipboard::write(text);
             }
-            Message::WebPagePicked(page) => self.web.page = page,
             Message::WebAddressChanged(address) => self.web.address = address,
             Message::WebCheck => return self.web.check_site(),
             Message::WebDone(generation, result) => self.web.finish_site(generation, result),
@@ -539,6 +550,10 @@ impl LanPing {
             Message::ServicesDone(generation, entries) => self.services.finish(generation, entries),
             Message::UpnpDone(generation, result) => self.upnp.finish(generation, result),
             Message::DnsPagePicked(page) => self.dns.set_page(page),
+            Message::PathPagePicked(page) => self.path_page = page,
+            Message::DevicesPagePicked(page) => self.devices_page = page,
+            Message::ComputerPagePicked(page) => self.computer_page = page,
+            Message::RouterPagePicked(page) => self.router_page = page,
             Message::WhoisQueryChanged(query) => self.dns.whois.set_query(query),
             Message::WhoisLookup => return self.dns.whois.start(),
             Message::WhoisDone(generation, result) => self.dns.whois.finish(generation, result),
