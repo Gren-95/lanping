@@ -39,6 +39,7 @@ pub enum Tab {
     #[default]
     Scan,
     Wifi,
+    Trace,
     Settings,
 }
 
@@ -134,6 +135,7 @@ pub fn tab_bar(app: &LanPing) -> Element<'_, Message> {
     let tabs = [
         (Tab::Scan, lucide::scan_search(), "Devices"),
         (Tab::Wifi, lucide::wifi(), "Wi-Fi"),
+        (Tab::Trace, lucide::activity(), "Trace"),
     ];
     LayoutRow::with_children(tabs.into_iter().map(|(tab, icon, label)| {
         button(

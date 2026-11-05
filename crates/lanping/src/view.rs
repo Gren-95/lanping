@@ -16,6 +16,7 @@ use crate::results::{pill, results};
 use crate::settings_page::settings_panel;
 use crate::theme::Edge;
 use crate::theme::{self, ACCENT, BAD, GOOD, MUTED, TEXT};
+use crate::trace_tab::trace_panel;
 use crate::wifi_tab::{Tab, tab_bar, wifi_panel};
 use lanping_core::ScanStage;
 use lanping_core::diff::HostStatus;
@@ -55,6 +56,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
     let (top, content) = match app.tab {
         Tab::Scan => (scan_top(app, width), results_panel(app, width)),
         Tab::Wifi => (header(app), wifi_panel(app, width)),
+        Tab::Trace => (header(app), trace_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
     column![top, tab_bar(app), content, status_line(app)]

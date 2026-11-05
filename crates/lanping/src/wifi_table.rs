@@ -1,14 +1,16 @@
 //! The sortable access point table on the Wi-Fi tab.
 
 use iced::font::Weight;
-use iced::widget::{Row as LayoutRow, button, column, container, row, scrollable, space, text};
-use iced::{Alignment, Background, Color, Element, Font, Length, Theme, border};
+use iced::widget::{button, column, container, row, scrollable, text};
+use iced::{Alignment, Color, Element, Font, Length};
 use lanping_core::vendor::lookup_vendor;
 use lanping_core::wifi::{AccessPoint, SignalHistory};
 
 use crate::app::Message;
 use crate::icons::copy_button;
 use crate::results::pill;
+use crate::sparkline::{Bar, sparkline, width_of};
+use crate::table_grid::{cell_width, grid_line};
 use crate::theme::{self, BAD, GOOD, MUTED, WARN};
 use crate::wifi_list::WifiSortKey;
 
@@ -16,8 +18,6 @@ const BOLD: Font = Font {
     weight: Weight::Bold,
     ..Font::DEFAULT
 };
-const CELL_PADDING: f32 = 8.0;
-const CELL_SIDE_PADDING: f32 = 12.0;
 /// Keeps the scrollbar clear of the last row.
 const SCROLLBAR_GAP: f32 = 12.0;
 const STRONG_SIGNAL: u8 = 67;
@@ -26,12 +26,10 @@ const NO_VALUE: &str = "-";
 const TREND_TITLE: &str = "Trend";
 /// The trend column sits right after Signal.
 const TREND_POSITION: usize = 6;
-const TREND_WIDTH: f32 = 230.0;
-const TREND_HEIGHT: f32 = 24.0;
-const TREND_BAR_WIDTH: f32 = 4.0;
-const TREND_BAR_SPACING: f32 = 1.0;
-/// Height of the dash that stands in for a scan that did not see the access point.
-const TREND_GAP_HEIGHT: f32 = 2.0;
+
+fn trend_width() -> f32 {
+    cell_width(width_of(SignalHistory::LENGTH))
+}
 
 fn column_width(key: WifiSortKey) -> f32 {
     match key {
@@ -59,7 +57,7 @@ pub fn access_point_table<'a>(
         .collect();
     header_cells.insert(
         TREND_POSITION,
-        (TREND_WIDTH, text(TREND_TITLE).size(13).into()),
+        (trend_width(), text(TREND_TITLE).size(13).into()),
     );
     let header = grid_line(header_cells);
     let lines = rows
@@ -150,39 +148,23 @@ fn cells<'a>(
     ];
     cells.insert(
         TREND_POSITION,
-        (TREND_WIDTH, trend(&history.samples(&access_point.bssid))),
+        (trend_width(), trend(&history.samples(&access_point.bssid))),
     );
     cells
 }
 
 /// One bar per recent scan, as tall as the signal was. A dash marks a scan that missed it.
 fn trend<'a>(samples: &[Option<u8>]) -> Element<'a, Message> {
-    let bars = samples.iter().map(|sample| {
-        let (height, color) = match sample {
-            Some(percent) => (
-                (TREND_HEIGHT * f32::from(*percent) / 100.0).max(TREND_GAP_HEIGHT),
-                signal_color(*percent),
-            ),
-            None => (TREND_GAP_HEIGHT, MUTED),
-        };
-        container(space::horizontal())
-            .width(TREND_BAR_WIDTH)
-            .height(height)
-            .style(bar_style(color))
-            .into()
-    });
-    let bars = LayoutRow::with_children(bars)
-        .spacing(TREND_BAR_SPACING)
-        .align_y(Alignment::End);
-    container(bars).align_bottom(TREND_HEIGHT).into()
-}
-
-fn bar_style(color: Color) -> impl Fn(&Theme) -> container::Style {
-    move |_theme| container::Style {
-        background: Some(Background::Color(color)),
-        border: border::rounded(1),
-        ..container::Style::default()
-    }
+    sparkline(samples.iter().map(|sample| match sample {
+        Some(percent) => Bar {
+            fraction: Some(f32::from(*percent) / 100.0),
+            color: signal_color(*percent),
+        },
+        None => Bar {
+            fraction: None,
+            color: MUTED,
+        },
+    }))
 }
 
 /// `content` followed by a button that copies `value`.
@@ -203,16 +185,6 @@ fn signal_color(percent: u8) -> Color {
         FAIR_SIGNAL.. => WARN,
         _ => BAD,
     }
-}
-
-fn grid_line<'a>(cells: Vec<(f32, Element<'a, Message>)>) -> LayoutRow<'a, Message> {
-    LayoutRow::with_children(cells.into_iter().map(|(width, cell)| {
-        container(cell)
-            .width(Length::Fixed(width))
-            .padding([CELL_PADDING, CELL_SIDE_PADDING])
-            .into()
-    }))
-    .align_y(Alignment::Center)
 }
 
 #[cfg(test)]

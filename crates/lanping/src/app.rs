@@ -16,6 +16,7 @@ use lanping_core::range::{LocalNetwork, NetworkKind, detect_local_networks};
 use lanping_core::report::ReportInput;
 use lanping_core::summary::{Summary, summarize};
 use lanping_core::timeline::{TimelineEntry, device_timeline};
+use lanping_core::trace::{HopSample, TraceError};
 use lanping_core::wifi::{AccessPoint, WifiError};
 use lanping_core::wol::send_wake_packet;
 use lanping_core::{Host, ScanEvent, ScanStage};
@@ -35,6 +36,7 @@ use crate::storage::{
     settings_path,
 };
 use crate::timestamp::format_unix_utc;
+use crate::trace_tab::TraceState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
 use crate::wifi_tab::{Tab, WifiState};
 
@@ -187,6 +189,11 @@ pub enum Message {
     WifiSortBy(WifiSortKey),
     WifiFilter(WifiFilterChange),
     WifiCopyRows,
+    TraceTargetChanged(String),
+    TraceStart,
+    TraceStop,
+    TraceRound(u64, Result<Vec<HopSample>, TraceError>),
+    TraceCopyRows,
     WifiScanned(Result<Vec<AccessPoint>, WifiError>),
 }
 
@@ -204,6 +211,7 @@ pub struct LanPing {
     pub tab: Tab,
     pub settings_tab: SettingsTab,
     pub wifi: WifiState,
+    pub trace: TraceState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -327,6 +335,7 @@ impl LanPing {
             tab: Tab::default(),
             settings_tab: SettingsTab::default(),
             wifi: WifiState::default(),
+            trace: TraceState::default(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -497,6 +506,17 @@ impl LanPing {
             Message::WifiAutoRefreshToggled(on) => self.wifi.set_auto_refresh(on),
             Message::WifiSortBy(key) => self.wifi.sort_by(key),
             Message::WifiFilter(change) => self.wifi.apply_filter(change),
+            Message::TraceTargetChanged(target) => self.trace.set_target(target),
+            Message::TraceStart => return self.trace.start(),
+            Message::TraceStop => self.trace.stop(),
+            Message::TraceRound(generation, result) => {
+                return self.trace.finish_round(generation, result);
+            }
+            Message::TraceCopyRows => {
+                let (text, count) = self.trace.stats_as_text();
+                self.set_notice(Notice::Info, format!("Copied {count} hops"));
+                return iced::clipboard::write(text);
+            }
             Message::WifiCopyRows => {
                 let (text, count) = self.wifi.rows_as_text();
                 self.set_notice(Notice::Info, format!("Copied {count} networks"));
