@@ -24,6 +24,7 @@ pub mod scan;
 pub mod snmp;
 pub mod socket_budget;
 pub mod ssdp;
+pub mod subnet;
 pub mod summary;
 pub mod tailnet;
 pub mod timeline;

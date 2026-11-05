@@ -71,6 +71,10 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 - A Trace tab repeats a traceroute to any host name or IP address and shows loss, latency, jitter and a latency graph for every hop, like MTR
 - Runs the system `traceroute` (or `tracepath`, `tracert` on Windows) once per round, so no root is needed and nothing extra is installed
 
+**Subnet**
+
+- A Subnet tab turns an address with a prefix length or netmask into network, broadcast, host range and host count, for IPv4 and IPv6, and can start a scan of the range
+
 **Actions**
 
 - Open in a browser or browse an SMB share

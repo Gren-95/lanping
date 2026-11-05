@@ -35,10 +35,12 @@ use crate::storage::{
     device_notes_path, export_directory, history_directory, labels_path, migrate_legacy_data,
     settings_path,
 };
+use crate::subnet_tab::SubnetState;
+use crate::tabs::Tab;
 use crate::timestamp::format_unix_utc;
 use crate::trace_tab::TraceState;
 use crate::wifi_list::{WifiFilterChange, WifiSortKey};
-use crate::wifi_tab::{Tab, WifiState};
+use crate::wifi_tab::WifiState;
 
 /// How often the interface list is read while "scan when the network changes" is on.
 const NETWORK_CHECK_INTERVAL: Duration = Duration::from_secs(10);
@@ -194,6 +196,8 @@ pub enum Message {
     TraceStop,
     TraceRound(u64, Result<Vec<HopSample>, TraceError>),
     TraceCopyRows,
+    SubnetInputChanged(String),
+    SubnetScanRange(String),
     WifiScanned(Result<Vec<AccessPoint>, WifiError>),
 }
 
@@ -212,6 +216,7 @@ pub struct LanPing {
     pub settings_tab: SettingsTab,
     pub wifi: WifiState,
     pub trace: TraceState,
+    pub subnet: SubnetState,
     pub modal: Option<Modal>,
     pub label_draft: String,
     pub notes: DeviceNotes,
@@ -336,6 +341,7 @@ impl LanPing {
             settings_tab: SettingsTab::default(),
             wifi: WifiState::default(),
             trace: TraceState::default(),
+            subnet: SubnetState::default(),
             modal: None,
             label_draft: String::new(),
             notes,
@@ -506,6 +512,11 @@ impl LanPing {
             Message::WifiAutoRefreshToggled(on) => self.wifi.set_auto_refresh(on),
             Message::WifiSortBy(key) => self.wifi.sort_by(key),
             Message::WifiFilter(change) => self.wifi.apply_filter(change),
+            Message::SubnetInputChanged(input) => self.subnet.set_input(input),
+            Message::SubnetScanRange(target) => {
+                self.target = target;
+                self.tab = Tab::Scan;
+            }
             Message::TraceTargetChanged(target) => self.trace.set_target(target),
             Message::TraceStart => return self.trace.start(),
             Message::TraceStop => self.trace.stop(),
