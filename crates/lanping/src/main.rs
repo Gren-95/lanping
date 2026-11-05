@@ -18,6 +18,7 @@ mod map_dialog;
 mod modal;
 mod monitor;
 mod mtu_tab;
+mod network_tab;
 mod notify;
 mod ntp_tab;
 mod opener;

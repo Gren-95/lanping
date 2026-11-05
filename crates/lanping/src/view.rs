@@ -14,6 +14,7 @@ use crate::latency_tab::latency_panel;
 use crate::modal::overlay;
 use crate::monitor::AutoInterval;
 use crate::mtu_tab::mtu_panel;
+use crate::network_tab::network_panel;
 use crate::ntp_tab::ntp_panel;
 use crate::results::{pill, results};
 use crate::services_tab::services_panel;
@@ -72,6 +73,7 @@ fn layout(app: &LanPing, width: f32) -> Element<'_, Message> {
         Tab::Upnp => (header(app), upnp_panel(app)),
         Tab::Services => (header(app), services_panel(app)),
         Tab::Mtu => (header(app), mtu_panel(app)),
+        Tab::Network => (header(app), network_panel(app)),
         Tab::Settings => (header(app), settings_panel(app)),
     };
     column![top, tab_bar(app), content, status_line(app)]

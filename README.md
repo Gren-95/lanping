@@ -113,12 +113,16 @@ Get the latest build from [Releases](https://github.com/Gren-95/lanping/releases
 
 - An MTU tab finds the largest packet that reaches a host without being split, which explains connections that stall or crawl over a VPN or PPPoE link. It uses the system `tracepath` where there is one, which also says at which hop the size dropped, and `ping` with the do-not-fragment flag elsewhere. It compares the result with the usual values (1500, 1492, 1480, 1420, 1400) and says what it means. No raw sockets
 
+**My network**
+
+- A My network tab shows what people look up constantly: this computer's addresses per interface (IPv4 and IPv6, with link-local ones marked), the gateway, the DNS servers and the Wi-Fi name, each with a copy button. Those are read from this computer only. A separate button checks the public address, whether IPv6 works and whether a sign-in page is in the way; it says up front that it contacts Cloudflare and sends nothing unless pressed
+
 **Actions**
 
 - Open in a browser or browse an SMB share
 - Ping, traceroute and Wake-on-LAN
 - Copy the SSH command, IP, MAC or hostname
-- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services and MTU start hidden
+- Choose which tabs show, and in what order, in Settings under Tabs (Devices always stays). TLS, SNMP, Subnet, Clock, UPnP, Services, MTU and My network start hidden
 - Keyboard shortcuts: Ctrl+F to search, Enter to scan, Esc to clear filters or close a dialog
 
 ## Build and run

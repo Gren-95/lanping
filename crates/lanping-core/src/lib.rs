@@ -1,6 +1,7 @@
 //! UI-free LAN scanning engine.
 
 pub mod banner;
+mod command;
 pub mod device_notes;
 pub mod device_type;
 pub mod diagnostics;
@@ -18,10 +19,12 @@ pub mod latency;
 mod local_http;
 pub mod mdns;
 pub mod measurements;
+pub mod my_network;
 pub mod ndt7;
 pub mod neighbors;
 pub mod netbios;
 pub mod ntp;
+pub mod online_checks;
 pub mod os_guess;
 pub mod path_mtu;
 pub mod ping;

@@ -16,8 +16,10 @@ use lanping_core::history::{
 use lanping_core::labels::DeviceLabels;
 use lanping_core::latency::{LatencyError, Prober};
 use lanping_core::measurements::{Measurement, save as save_measurement};
+use lanping_core::my_network::LocalFacts;
 use lanping_core::ndt7::Server;
 use lanping_core::ntp::{NtpError, NtpReport};
+use lanping_core::online_checks::OnlineFacts;
 use lanping_core::path_mtu::{MtuError, MtuReport};
 use lanping_core::range::{LocalNetwork, detect_local_networks};
 use lanping_core::report::ReportInput;
@@ -44,6 +46,7 @@ use crate::host_rows::Row;
 use crate::latency_tab::{Interval, LatencyState};
 use crate::monitor::AutoInterval;
 use crate::mtu_tab::MtuState;
+use crate::network_tab::NetworkState;
 use crate::ntp_tab::NtpState;
 use crate::opener::open_target;
 use crate::presets::{PresetChoice, upsert_preset};
@@ -98,6 +101,7 @@ pub struct LanPing {
     pub tls: TlsState,
     pub ntp: NtpState,
     pub mtu: MtuState,
+    pub network: NetworkState,
     pub upnp: UpnpState,
     pub services: ServicesState,
     pub snmp: SnmpState,
@@ -183,6 +187,7 @@ impl LanPing {
             tls: TlsState::new(),
             ntp: NtpState::new(),
             mtu: MtuState::new(),
+            network: NetworkState::new(),
             upnp: UpnpState::new(),
             services: ServicesState::new(),
             snmp: SnmpState::new(),
@@ -395,6 +400,9 @@ impl LanPing {
                 if tab == Tab::Wifi && !self.wifi.has_scanned() {
                     return self.wifi.start();
                 }
+                if tab == Tab::Network && !self.network.has_read_local() {
+                    return self.network.read_local();
+                }
             }
             Message::WifiRefresh => return self.wifi.start(),
             Message::WifiAutoRefreshToggled(on) => self.wifi.set_auto_refresh(on),
@@ -481,6 +489,14 @@ impl LanPing {
             Message::NtpCheck => return self.ntp.start(),
             Message::NtpDone(generation, result) => self.ntp.finish(generation, result),
             Message::UpnpRead => return self.upnp.start(),
+            Message::NetworkRefresh => return self.network.read_local(),
+            Message::NetworkLocalDone(generation, facts) => {
+                self.network.finish_local(generation, facts)
+            }
+            Message::NetworkCheckOnline => return self.network.check_online(),
+            Message::NetworkOnlineDone(generation, facts) => {
+                self.network.finish_online(generation, facts)
+            }
             Message::MtuTargetChanged(target) => self.mtu.set_target(target),
             Message::MtuCheck => return self.mtu.start(),
             Message::MtuDone(generation, result) => self.mtu.finish(generation, result),

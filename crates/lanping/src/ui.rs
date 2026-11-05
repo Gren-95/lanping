@@ -4,6 +4,7 @@ use iced::widget::{Scrollable, column, container, row, scrollable, space, text};
 use iced::{Alignment, Element, Length, Padding};
 
 use crate::app::Message;
+use crate::icons::copy_button;
 use crate::theme::{self, BOLD, MUTED, PANEL_PADDING, SCROLLBAR_GAP};
 
 const EMPTY_STATE_TITLE_SIZE: u32 = 20;
@@ -69,4 +70,37 @@ pub fn page_header<'a>(
         header = header.push(action);
     }
     header.into()
+}
+
+pub const FACT_LABEL_WIDTH: f32 = 130.0;
+const CARD_PADDING: f32 = 14.0;
+
+/// A label, its value and a button that copies the value.
+pub fn fact_row<'a>(label: &'static str, value: String) -> Element<'a, Message> {
+    fact_row_copying(label, value.clone(), value)
+}
+
+/// Like [`fact_row`], for a value shown with a note that should not be copied with it.
+pub fn fact_row_copying<'a>(
+    label: &'static str,
+    shown: String,
+    copied: String,
+) -> Element<'a, Message> {
+    row![
+        text(label).color(MUTED).width(FACT_LABEL_WIDTH),
+        text(shown).width(Length::Fill),
+        copy_button(copied, label),
+    ]
+    .spacing(8)
+    .align_y(Alignment::Start)
+    .into()
+}
+
+/// A block of facts on a raised background.
+pub fn card<'a>(content: impl Into<Element<'a, Message>>) -> Element<'a, Message> {
+    container(content)
+        .padding(CARD_PADDING)
+        .width(Length::Fill)
+        .style(theme::card)
+        .into()
 }
