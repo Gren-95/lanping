@@ -216,6 +216,7 @@ pub enum Message {
     SpeedCountriesFound(Result<Vec<String>, String>),
     SpeedServersFound(u64, Result<Vec<Server>, String>),
     SpeedServerPicked(Server),
+    SpeedServersSearchAgain,
     SpeedLanTargetChanged(String),
     SpeedLengthPicked(TestLength),
     SpeedKindPicked(TestKind),
@@ -618,6 +619,7 @@ impl LanPing {
                 self.speed.servers_found(generation, result);
             }
             Message::SpeedServerPicked(server) => self.speed.set_server(server),
+            Message::SpeedServersSearchAgain => return self.speed.search_again(),
             Message::SpeedLanTargetChanged(target) => self.speed.lan_target = target,
             Message::SpeedLengthPicked(length) => self.speed.length = length,
             Message::SpeedKindPicked(kind) => self.speed.kind = kind,

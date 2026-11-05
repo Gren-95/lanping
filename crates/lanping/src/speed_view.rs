@@ -134,7 +134,17 @@ fn mlab_servers(speed: &SpeedState) -> Element<'_, Message> {
     .style(theme::pick_at(Edge::Last));
     let mut section = column![input_group(vec![location.into(), server.into()])].spacing(6);
     if let Some(error) = &speed.locate_error {
-        section = section.push(text(error.as_str()).size(13).color(BAD));
+        section = section.push(
+            row![
+                text(error.as_str()).size(13).color(BAD),
+                button(text("Search again").size(12))
+                    .on_press_maybe((!speed.locating).then_some(Message::SpeedServersSearchAgain))
+                    .padding([3.0, 10.0])
+                    .style(theme::quiet_button),
+            ]
+            .spacing(10)
+            .align_y(Alignment::Center),
+        );
     }
     section.into()
 }

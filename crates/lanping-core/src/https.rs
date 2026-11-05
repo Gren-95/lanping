@@ -107,9 +107,17 @@ pub(crate) async fn connect(
     })
 }
 
-/// Fetches `https://host{path}` and returns the body. Anything but a 200 is an error.
+/// An answer to a GET, whatever its status.
+pub(crate) struct Response {
+    pub status: u16,
+    /// How long the server asked to wait before asking again, from `Retry-After`.
+    pub retry_after: Option<Duration>,
+    pub body: Vec<u8>,
+}
+
+/// Fetches `https://host{path}` and returns the status, `Retry-After` and body.
 /// HTTP/1.0 is used so the body is never chunked.
-pub(crate) async fn get(host: &str, path: &str) -> Result<Vec<u8>, String> {
+pub(crate) async fn get_response(host: &str, path: &str) -> Result<Response, String> {
     let connector = connector().await?;
     let work = async {
         let mut connection = connect(&connector, host, HTTPS_PORT).await?;
@@ -132,25 +140,38 @@ pub(crate) async fn get(host: &str, path: &str) -> Result<Vec<u8>, String> {
         {
             return Err(error.to_string());
         }
-        split_response(host, &response)
+        parse_response(host, &response)
     };
     timeout(GET_WAIT, work)
         .await
         .map_err(|_| format!("{host} did not answer in time"))?
 }
 
-/// The body of a 200 response, or an error naming the status line.
-fn split_response(host: &str, response: &[u8]) -> Result<Vec<u8>, String> {
+fn parse_response(host: &str, response: &[u8]) -> Result<Response, String> {
     let end = response
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .ok_or_else(|| format!("{host} sent an unreadable answer"))?;
     let head = String::from_utf8_lossy(&response[..end]);
-    let status = head.lines().next().unwrap_or_default();
-    if status.split_whitespace().nth(1) != Some("200") {
-        return Err(format!("{host} answered: {status}"));
-    }
-    Ok(response[end + 4..].to_vec())
+    let mut lines = head.lines();
+    let status = lines
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|code| code.parse().ok())
+        .ok_or_else(|| format!("{host} sent an unreadable answer"))?;
+    let retry_after = lines.find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.trim()
+            .eq_ignore_ascii_case("retry-after")
+            .then(|| value.trim().parse::<u64>().ok())
+            .flatten()
+            .map(Duration::from_secs)
+    });
+    Ok(Response {
+        status,
+        retry_after,
+        body: response[end + 4..].to_vec(),
+    })
 }
 
 #[cfg(test)]
@@ -158,15 +179,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn returns_the_body_of_a_200_answer() {
-        let body = split_response("h", b"HTTP/1.0 200 OK\r\nX: y\r\n\r\n{\"a\":1}").unwrap();
-        assert_eq!(body, b"{\"a\":1}");
+    fn reads_status_headers_and_body() {
+        let response = parse_response("h", b"HTTP/1.0 200 OK\r\nX: y\r\n\r\n{\"a\":1}").unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.body, b"{\"a\":1}");
+        assert_eq!(response.retry_after, None);
     }
 
     #[test]
-    fn other_statuses_and_garbage_are_errors() {
-        let error = split_response("h", b"HTTP/1.0 503 Busy\r\n\r\n").unwrap_err();
-        assert!(error.contains("503"), "{error}");
-        assert!(split_response("h", b"nonsense").is_err());
+    fn reads_how_long_a_busy_server_asks_to_wait() {
+        let response = parse_response(
+            "h",
+            b"HTTP/1.0 429 Too Many Requests\r\nRetry-After: 7\r\n\r\n",
+        )
+        .unwrap();
+        assert_eq!(response.status, 429);
+        assert_eq!(response.retry_after, Some(Duration::from_secs(7)));
+    }
+
+    #[test]
+    fn garbage_is_an_error() {
+        assert!(parse_response("h", b"nonsense").is_err());
+        assert!(parse_response("h", b"HTTP/1.0 abc\r\n\r\n").is_err());
     }
 }

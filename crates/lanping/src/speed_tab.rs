@@ -85,6 +85,9 @@ impl std::fmt::Display for SpeedService {
 /// Where a started test runs, with what it needs to get there.
 enum Target {
     Cloudflare,
+    /// A server found moments ago, whose address still works.
+    MlabFresh(Server),
+    /// A server to look up again first, because its address may have expired.
     Mlab {
         location: ndt7::Location,
         machine: String,
@@ -266,6 +269,8 @@ pub struct SpeedState {
     pub locating: bool,
     pub locate_error: Option<String>,
     locate_generation: u64,
+    /// When `servers` was fetched: their addresses stop working after about a minute.
+    servers_fetched_at: Option<Instant>,
     pub lan_target: String,
     pub length: TestLength,
     pub kind: TestKind,
@@ -336,6 +341,7 @@ impl SpeedState {
             locating: false,
             locate_error: None,
             locate_generation: 0,
+            servers_fetched_at: None,
             lan_target: String::new(),
             length: TestLength::default(),
             kind: TestKind::default(),
@@ -397,6 +403,14 @@ impl SpeedState {
         self.locate()
     }
 
+    /// Looks for servers again, for example after M-Lab said it was busy.
+    pub fn search_again(&mut self) -> Task<Message> {
+        if self.locating {
+            return Task::none();
+        }
+        self.locate()
+    }
+
     fn locate(&mut self) -> Task<Message> {
         self.locate_generation += 1;
         self.locating = true;
@@ -424,6 +438,7 @@ impl SpeedState {
                 });
                 self.selected_server = kept.or_else(|| servers.first().cloned());
                 self.servers = servers;
+                self.servers_fetched_at = Some(Instant::now());
             }
             Err(message) => {
                 self.servers.clear();
@@ -437,6 +452,12 @@ impl SpeedState {
         self.selected_server = Some(server);
     }
 
+    /// Whether the found servers can be used as they are, which saves asking M-Lab again.
+    fn server_addresses_are_fresh(&self) -> bool {
+        self.servers_fetched_at
+            .is_some_and(|fetched| fetched.elapsed() < ndt7::SERVER_ADDRESS_LIFETIME)
+    }
+
     /// Starts a test of the chosen kind. A missing server or a bad LAN address shows as a failed run.
     pub fn start_test(&mut self, source: Source) -> Task<Message> {
         if self.running() {
@@ -445,13 +466,17 @@ impl SpeedState {
         let (target, place) = match source {
             Source::Cloudflare => (Target::Cloudflare, format!("Internet ({SERVICE_HOST})")),
             Source::Mlab => match &self.selected_server {
-                Some(server) => (
-                    Target::Mlab {
-                        location: self.location.location(),
-                        machine: server.machine.clone(),
-                    },
-                    mlab_place(server),
-                ),
+                Some(server) => {
+                    let target = if self.server_addresses_are_fresh() {
+                        Target::MlabFresh(server.clone())
+                    } else {
+                        Target::Mlab {
+                            location: self.location.location(),
+                            machine: server.machine.clone(),
+                        }
+                    };
+                    (target, mlab_place(server))
+                }
                 None => {
                     self.run = Run::Failed("Pick an M-Lab server first".to_owned());
                     return Task::none();
@@ -634,6 +659,7 @@ async fn prepare(target: Target) -> Result<Prepared, String> {
     match target {
         Target::Cloudflare => Ok(Prepared::Cloudflare),
         Target::Lan { host, port } => Ok(Prepared::Lan { host, port }),
+        Target::MlabFresh(server) => Ok(Prepared::Mlab(server)),
         Target::Mlab { location, machine } => {
             let servers = ndt7::locate(&location).await?;
             servers
@@ -991,6 +1017,26 @@ mod tests {
         state.location = japan;
         state.countries_found(Ok(vec!["BR".to_owned()]));
         assert_eq!(state.location, LocationChoice::nearest());
+    }
+
+    #[test]
+    fn found_servers_are_fresh_only_for_a_short_while() {
+        let mut state = SpeedState::new(None);
+        assert!(!state.server_addresses_are_fresh());
+        state.locate_generation = 1;
+        state.servers_found(1, Ok(vec![server("a.example")]));
+        assert!(state.server_addresses_are_fresh());
+        state.servers_fetched_at = Instant::now().checked_sub(ndt7::SERVER_ADDRESS_LIFETIME);
+        assert!(!state.server_addresses_are_fresh());
+    }
+
+    #[test]
+    fn searching_again_while_a_search_runs_does_nothing() {
+        let mut state = SpeedState::new(None);
+        state.locating = true;
+        let generation = state.locate_generation;
+        let _ = state.search_again();
+        assert_eq!(state.locate_generation, generation);
     }
 
     #[test]

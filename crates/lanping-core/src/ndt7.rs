@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 use crate::https::{self, HTTPS_PORT};
 use crate::throughput::{Direction, ThroughputResult, sample};
@@ -33,6 +33,13 @@ const MAX_SECONDS: u8 = 10;
 /// How long after closing an upload the server's last measurement is waited for.
 const LAST_MEASUREMENT_WAIT: Duration = Duration::from_secs(2);
 const MICROSECONDS_PER_SECOND: f64 = 1_000_000.0;
+/// Tries made when the locate service says it is busy.
+const LOCATE_ATTEMPTS: u32 = 3;
+const MAX_RETRY_WAIT: Duration = Duration::from_secs(10);
+const BUSY_MESSAGE: &str =
+    "M-Lab is limiting requests from this connection. Wait a minute and try again.";
+/// How long the addresses it hands out work. They carry a token that lasts a minute.
+pub const SERVER_ADDRESS_LIFETIME: Duration = Duration::from_secs(45);
 
 /// Which servers to ask for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,12 +137,36 @@ struct Place {
 /// up with the nearest servers of other countries.
 pub async fn locate(location: &Location) -> Result<Vec<Server>, String> {
     let path = format!("{LOCATE_PATH}{}", location.query());
-    let body = https::get(LOCATE_HOST, &path).await?;
+    let body = fetch(&path).await?;
     let servers = parse_servers(&body)?;
     match location {
         Location::Nearest => Ok(servers),
         Location::Country(code) => in_country(servers, code),
     }
+}
+
+/// Gets `path` from the locate service. When it says it is busy (429, or 503), waits as long
+/// as it asks, or a few seconds, and tries again a couple of times.
+async fn fetch(path: &str) -> Result<Vec<u8>, String> {
+    for attempt in 1..=LOCATE_ATTEMPTS {
+        let response = https::get_response(LOCATE_HOST, path).await?;
+        match response.status {
+            200 => return Ok(response.body),
+            429 | 503 if attempt < LOCATE_ATTEMPTS => {
+                sleep(retry_delay(attempt, response.retry_after)).await;
+            }
+            429 | 503 => return Err(BUSY_MESSAGE.to_owned()),
+            status => return Err(format!("{LOCATE_HOST} answered: HTTP {status}")),
+        }
+    }
+    Err(BUSY_MESSAGE.to_owned())
+}
+
+/// How long to wait before attempt number `attempt + 1`.
+fn retry_delay(attempt: u32, retry_after: Option<Duration>) -> Duration {
+    retry_after
+        .unwrap_or_else(|| Duration::from_secs(u64::from(attempt) * 2 + 1))
+        .min(MAX_RETRY_WAIT)
 }
 
 fn in_country(servers: Vec<Server>, code: &str) -> Result<Vec<Server>, String> {
@@ -151,7 +182,7 @@ fn in_country(servers: Vec<Server>, code: &str) -> Result<Vec<Server>, String> {
 
 /// The countries (two letter codes, sorted) that have a working NDT7 test server.
 pub async fn countries() -> Result<Vec<String>, String> {
-    let body = https::get(LOCATE_HOST, REGISTRATIONS_PATH).await?;
+    let body = fetch(REGISTRATIONS_PATH).await?;
     parse_countries(&body)
 }
 
@@ -429,6 +460,25 @@ mod tests {
         assert!(parse_servers(br#"{"results":[]}"#).is_err());
         assert!(parse_servers(br#"{"error":{"title":"x"}}"#).is_err());
         assert!(parse_servers(b"nonsense").is_err());
+    }
+
+    #[test]
+    fn waits_as_long_as_the_server_asks_but_never_too_long() {
+        assert_eq!(
+            retry_delay(1, Some(Duration::from_secs(4))),
+            Duration::from_secs(4)
+        );
+        assert_eq!(
+            retry_delay(1, Some(Duration::from_secs(600))),
+            MAX_RETRY_WAIT
+        );
+        assert_eq!(retry_delay(1, None), Duration::from_secs(3));
+        assert_eq!(retry_delay(2, None), Duration::from_secs(5));
+    }
+
+    #[test]
+    fn found_server_addresses_are_used_for_less_than_the_token_lasts() {
+        assert!(SERVER_ADDRESS_LIFETIME < Duration::from_secs(60));
     }
 
     #[test]
