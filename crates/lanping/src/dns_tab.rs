@@ -3,12 +3,11 @@
 use std::fmt;
 use std::net::IpAddr;
 
-use iced::font::Weight;
 use iced::widget::{
     Row as LayoutRow, button, column, container, pick_list, progress_bar, row, scrollable, space,
     text, text_input,
 };
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::{Alignment, Element, Length, Task};
 use lanping_core::dns::{
     Answer, BENCHMARK_ROUNDS, DnsError, PUBLIC_RESOLVERS, RecordType, ResolverTiming, benchmark,
     lookup, system_resolvers,
@@ -19,16 +18,13 @@ use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::table_grid::{cell_width, grid_line};
-use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
+use crate::theme::{
+    self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SECTION_SPACING, WARN, latency_color,
+};
+use crate::ui::{note, panel, scrolling};
 use crate::view::input_group;
 use crate::whois_page::{WhoisState, whois_view};
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
 /// Windows at least this wide keep the lookup controls on one line.
 const WIDE_WIDTH: f32 = 820.0;
 const CONTROL_TEXT_SIZE: u32 = 13;
@@ -36,8 +32,6 @@ const TYPE_PICK_WIDTH: f32 = 100.0;
 const RESOLVER_PICK_WIDTH: f32 = 240.0;
 const BAR_LENGTH: f32 = 160.0;
 const BAR_GIRTH: f32 = 8.0;
-const SCROLLBAR_GAP: f32 = 12.0;
-const NO_VALUE: &str = "-";
 
 /// A resolver to ask.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -218,14 +212,8 @@ pub fn dns_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
         DnsPage::Whois => column![whois_view(&dns.whois)],
     };
     let body = column![page_strip(dns.page), body].spacing(SECTION_SPACING);
-    let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
-        .width(Length::Fill)
-        .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    let page = scrolling(body);
+    panel(page)
 }
 
 fn page_strip(selected: DnsPage) -> Element<'static, Message> {
@@ -294,10 +282,6 @@ fn lookup_result(dns: &DnsState) -> Element<'_, Message> {
         Lookup::Failed(error) => container(text(error.to_string()).color(BAD)).into(),
         Lookup::Done(answer) => answer_table(dns, answer),
     }
-}
-
-fn note<'a>(message: impl Into<String>) -> Element<'a, Message> {
-    text(message.into()).size(14).color(MUTED).into()
 }
 
 const RECORD_COLUMNS: [(&str, f32); 3] = [("Type", 70.0), ("TTL", 80.0), ("Value", 520.0)];

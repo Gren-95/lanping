@@ -40,6 +40,7 @@ mod theme;
 mod timestamp;
 mod tls_tab;
 mod trace_tab;
+mod ui;
 mod view;
 mod whois_page;
 mod wifi_channels;

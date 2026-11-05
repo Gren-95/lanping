@@ -1,8 +1,9 @@
 //! Colors and widget styles shared by every view.
 
 use crate::host_filter::{FAST_LATENCY_MS, SLOW_LATENCY_MS};
+use iced::font::Weight;
 use iced::widget::{button, container, progress_bar, text_input};
-use iced::{Background, Border, Color, Shadow, Theme, Vector, border, color};
+use iced::{Background, Border, Color, Font, Shadow, Theme, Vector, border, color};
 
 pub const BACKDROP: Color = color!(0x0d1016);
 pub const PANEL: Color = color!(0x151a23);
@@ -17,6 +18,22 @@ pub const ACCENT: Color = color!(0x6c8cff);
 pub const GOOD: Color = color!(0x3fd29a);
 pub const WARN: Color = color!(0xf2b84b);
 pub const BAD: Color = color!(0xf26d6d);
+
+/// The bold weight of the text font, for titles and values that stand out.
+pub const BOLD: Font = Font {
+    weight: Weight::Bold,
+    ..Font::DEFAULT
+};
+/// Space between the items of a list or a form.
+pub const ITEM_SPACING: f32 = 10.0;
+/// Space between the sections of a page.
+pub const SECTION_SPACING: f32 = 14.0;
+/// Padding inside a page panel.
+pub const PANEL_PADDING: f32 = 16.0;
+/// Keeps a scrollbar clear of what scrolls.
+pub const SCROLLBAR_GAP: f32 = 12.0;
+/// What a cell shows when it has no value.
+pub const NO_VALUE: &str = "-";
 
 pub const PANEL_RADIUS: f32 = 14.0;
 const TAB_RADIUS: f32 = 8.0;

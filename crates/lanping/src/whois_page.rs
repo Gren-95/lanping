@@ -1,6 +1,5 @@
 //! The WHOIS page of the DNS tab: who is behind a domain name or an IP address.
 
-use iced::font::Weight;
 use iced::widget::{button, column, container, row, space, text, text_input};
 use iced::{Alignment, Element, Font, Length, Task};
 use lanping_core::whois::{WhoisError, WhoisReport, whois};
@@ -8,14 +7,10 @@ use lanping_core::whois::{WhoisError, WhoisReport, whois};
 use crate::app::Message;
 use crate::icons::{ICON_SIZE, copy_button, icon_button, lucide, with_tooltip};
 use crate::job::Job;
-use crate::theme::{self, BAD, Edge, MUTED};
+use crate::theme::{self, BAD, BOLD, Edge, MUTED, SECTION_SPACING};
+use crate::ui::note;
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const SECTION_SPACING: f32 = 14.0;
 const LABEL_WIDTH: f32 = 130.0;
 const ROW_PADDING: [f32; 2] = [8.0, 12.0];
 const RAW_TEXT_SIZE: f32 = 12.0;
@@ -103,10 +98,6 @@ pub fn whois_view(state: &WhoisState) -> Element<'_, Message> {
     column![input_group(vec![query.into(), go]), result]
         .spacing(SECTION_SPACING)
         .into()
-}
-
-fn note<'a>(message: &'static str) -> Element<'a, Message> {
-    text(message).size(14).color(MUTED).into()
 }
 
 fn report_view(report: &WhoisReport) -> Element<'_, Message> {

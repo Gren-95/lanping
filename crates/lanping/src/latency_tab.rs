@@ -3,11 +3,10 @@
 use std::fmt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use iced::font::Weight;
 use iced::widget::{
     Row as LayoutRow, button, column, container, pick_list, space, text, text_input,
 };
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::{Alignment, Element, Length, Task};
 use lanping_core::latency::{GRAPH_LENGTH, LatencyError, LatencySeries, Prober};
 use lanping_core::measurements::{LatencyRecord, Measurement};
 use lanping_core::trace::validate_target;
@@ -17,21 +16,17 @@ use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
 use crate::sparkline::{Bar, chart};
-use crate::theme::{self, BAD, Edge, GOOD, MUTED, WARN, latency_color};
+use crate::theme::{
+    self, BAD, BOLD, Edge, GOOD, MUTED, NO_VALUE, SECTION_SPACING, WARN, latency_color,
+};
+use crate::ui::{empty_state, panel};
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
 const CHART_HEIGHT: f32 = 120.0;
 const TILE_PADDING: f32 = 12.0;
 const TILE_WIDTH: f32 = 120.0;
 const LOSS_WARN_PERCENT: f64 = 1.0;
 const LOSS_BAD_PERCENT: f64 = 10.0;
-const NO_VALUE: &str = "-";
 /// Smallest scale of the graph, so a 1 ms host does not fill the whole chart.
 const MIN_GRAPH_SCALE_MS: f64 = 10.0;
 
@@ -224,11 +219,7 @@ pub fn latency_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![toolbar(latency), content]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    panel(page)
 }
 
 fn toolbar(latency: &LatencyState) -> Element<'_, Message> {
@@ -304,20 +295,6 @@ fn toolbar(latency: &LatencyState) -> Element<'_, Message> {
             .align_y(Alignment::Center),
     ]
     .spacing(8)
-    .into()
-}
-
-fn empty_state<'a>(title: &'static str, detail: String) -> Element<'a, Message> {
-    container(
-        column![
-            text(title).size(20).font(BOLD),
-            text(detail).size(14).color(MUTED),
-        ]
-        .spacing(6)
-        .align_x(Alignment::Center),
-    )
-    .center(Length::Fill)
-    .padding(24)
     .into()
 }
 

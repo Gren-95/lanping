@@ -1,8 +1,7 @@
 //! The sortable access point table on the Wi-Fi tab.
 
-use iced::font::Weight;
 use iced::widget::{button, column, container, row, scrollable, text};
-use iced::{Alignment, Color, Element, Font, Length};
+use iced::{Alignment, Color, Element, Length};
 use lanping_core::vendor::lookup_vendor;
 use lanping_core::wifi::{AccessPoint, SignalHistory};
 
@@ -11,18 +10,11 @@ use crate::icons::copy_button;
 use crate::results::pill;
 use crate::sparkline::{Bar, sparkline, width_of};
 use crate::table_grid::{cell_width, grid_line};
-use crate::theme::{self, BAD, GOOD, MUTED, WARN};
+use crate::theme::{self, BAD, BOLD, GOOD, MUTED, NO_VALUE, SCROLLBAR_GAP, WARN};
 use crate::wifi_list::WifiSortKey;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-/// Keeps the scrollbar clear of the last row.
-const SCROLLBAR_GAP: f32 = 12.0;
 const STRONG_SIGNAL: u8 = 67;
 const FAIR_SIGNAL: u8 = 34;
-const NO_VALUE: &str = "-";
 const TREND_TITLE: &str = "Trend";
 /// The trend column sits right after Signal.
 const TREND_POSITION: usize = 6;

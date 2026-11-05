@@ -3,7 +3,6 @@
 
 use std::net::Ipv4Addr;
 
-use iced::font::Weight;
 use iced::widget::{Column, Row, button, column, row, scrollable, space, text};
 use iced::{Alignment, Element, Font, Length};
 use lanping_core::Host;
@@ -12,16 +11,11 @@ use lanping_core::device_type::{DeviceType, guess_device_type};
 use crate::app::{LanPing, Message};
 use crate::results::device_type_icon;
 use crate::settings_page::small_button;
-use crate::theme::{self, MUTED};
+use crate::theme::{self, BOLD, ITEM_SPACING, MUTED};
 
-const ITEM_SPACING: f32 = 10.0;
 const TILE_WIDTH: f32 = 170.0;
 const SCROLLBAR_GAP: f32 = 16.0;
 const NO_NAME: &str = "Unknown device";
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 pub fn map_dialog(app: &LanPing, gateway: Option<Ipv4Addr>) -> Element<'_, Message> {
     let is_gateway = |host: &&Host| Some(host.ip) == gateway;

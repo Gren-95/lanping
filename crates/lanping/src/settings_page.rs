@@ -1,11 +1,10 @@
 //! The settings page and its tabs.
 
-use iced::font::Weight;
 use iced::widget::{
     Row, button, checkbox, column, container, mouse_area, pick_list, row, scrollable, space, text,
     text_input,
 };
-use iced::{Alignment, Element, Font, Length, Padding};
+use iced::{Alignment, Element, Length, Padding};
 use lanping_core::ports::{COMMON_SERVICES, PORT_LIST_SOURCE_URL, PortGroup, Service};
 
 use crate::app::{LanPing, Message};
@@ -13,16 +12,11 @@ use crate::icons::lucide;
 use crate::monitor::AutoInterval;
 use crate::settings::{Column, SettingsTab};
 use crate::tabs::Tab;
-use crate::theme::{self, ACCENT, BAD, MUTED};
+use crate::theme::{self, ACCENT, BAD, BOLD, ITEM_SPACING, MUTED};
 
-const ITEM_SPACING: f32 = 10.0;
 const EDGE_PADDING: f32 = 20.0;
 const TAB_INSET: f32 = 10.0;
 const PORT_CELL_WIDTH: f32 = 200.0;
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 
 pub fn settings_panel(app: &LanPing) -> Element<'_, Message> {
     let tab = &app.settings_tab;

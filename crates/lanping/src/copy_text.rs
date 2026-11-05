@@ -5,8 +5,7 @@ use lanping_core::ports::format_ports;
 
 use crate::host_rows::Row;
 use crate::settings::Column;
-
-const NO_VALUE: &str = "-";
+use crate::theme::NO_VALUE;
 
 /// Tab-separated rows with a header line, for the shown columns only.
 /// The "Open with" column has no text and is skipped.

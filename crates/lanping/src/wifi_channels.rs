@@ -1,18 +1,13 @@
 //! The per-band channel chart on the Wi-Fi tab.
 
-use iced::font::Weight;
 use iced::widget::{Row as LayoutRow, column, progress_bar, row, text};
-use iced::{Alignment, Element, Font};
+use iced::{Alignment, Element};
 use lanping_core::wifi::{AccessPoint, Band, ChannelLoad, channel_loads, recommend_channel};
 
 use crate::app::Message;
 use crate::results::pill;
-use crate::theme::{self, GOOD, MUTED};
+use crate::theme::{self, BOLD, GOOD, MUTED};
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
 const BAND_SPACING: f32 = 28.0;
 const BAND_ROW_SPACING: f32 = 14.0;
 const CHANNEL_LABEL_WIDTH: f32 = 64.0;

@@ -1,20 +1,14 @@
 //! The Subnet tab: what an address with a prefix length or netmask covers.
 
-use iced::font::Weight;
 use iced::widget::{button, column, container, row, scrollable, space, text, text_input};
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Length};
 use lanping_core::subnet::{Subnet, SubnetError, describe};
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
-use crate::theme::{self, BAD, Edge, MUTED};
+use crate::theme::{self, BAD, BOLD, Edge, MUTED, SECTION_SPACING};
+use crate::ui::panel;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
 const LABEL_WIDTH: f32 = 150.0;
 const ROW_PADDING: [f32; 2] = [8.0, 12.0];
 
@@ -48,11 +42,7 @@ pub fn subnet_panel(app: &LanPing) -> Element<'_, Message> {
     let page = column![input, result]
         .spacing(SECTION_SPACING)
         .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+    panel(page)
 }
 
 fn hint(message: String, color: iced::Color) -> Element<'static, Message> {

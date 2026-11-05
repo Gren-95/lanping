@@ -11,8 +11,8 @@ use crate::host_filter::{
 use crate::icons::{ICON_SIZE, icon_button, lucide, with_tooltip};
 use crate::presets::{PresetChoice, all_presets};
 use crate::theme;
-use crate::theme::Edge;
-use crate::view::{ITEM_SPACING, input_group};
+use crate::theme::{Edge, ITEM_SPACING};
+use crate::view::input_group;
 
 const TEXT_SIZE: u32 = 13;
 const ROW_SPACING: u32 = 8;

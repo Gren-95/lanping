@@ -3,10 +3,10 @@
 use std::cmp::Ordering;
 use std::fmt;
 
+use crate::theme::NO_VALUE;
 use lanping_core::vendor::lookup_vendor;
 use lanping_core::wifi::{AccessPoint, Band};
 
-const NO_VALUE: &str = "-";
 const OPEN_LABEL: &str = "Open";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

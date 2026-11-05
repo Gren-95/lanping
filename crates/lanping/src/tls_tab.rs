@@ -1,29 +1,20 @@
 //! The TLS tab: the certificate a server presents, and whether the system would trust it.
 
-use iced::font::Weight;
-use iced::widget::{
-    Row as LayoutRow, button, column, container, row, scrollable, text, text_input,
-};
-use iced::{Alignment, Element, Font, Length, Task};
+use iced::widget::{Row as LayoutRow, button, column, container, row, text, text_input};
+use iced::{Alignment, Element, Length, Task};
 use lanping_core::tls::{CertInfo, TlsError, TlsReport, Trust, check};
 
 use crate::app::{LanPing, Message};
 use crate::icons::{ICON_SIZE, copy_button, lucide, with_tooltip};
 use crate::job::Job;
 use crate::results::pill;
-use crate::theme::{self, ACCENT, BAD, Edge, GOOD, MUTED, WARN};
+use crate::theme::{self, ACCENT, BAD, BOLD, Edge, GOOD, MUTED, SECTION_SPACING, WARN};
 use crate::timestamp::format_unix_utc;
+use crate::ui::{note, panel, scrolling};
 use crate::view::input_group;
 
-const BOLD: Font = Font {
-    weight: Weight::Bold,
-    ..Font::DEFAULT
-};
-const PANEL_PADDING: f32 = 16.0;
-const SECTION_SPACING: f32 = 14.0;
 const LABEL_WIDTH: f32 = 130.0;
 const CARD_PADDING: f32 = 14.0;
-const SCROLLBAR_GAP: f32 = 12.0;
 /// A certificate with fewer days left than this is shown in amber.
 const EXPIRY_WARNING_DAYS: i64 = 30;
 
@@ -142,18 +133,8 @@ pub fn tls_panel(app: &LanPing, width: f32) -> Element<'_, Message> {
         Lookup::Done(report) => report_view(report),
     };
     let body = column![inputs, result].spacing(SECTION_SPACING);
-    let page = scrollable(container(body).padding(iced::Padding::ZERO.right(SCROLLBAR_GAP)))
-        .width(Length::Fill)
-        .height(Length::Fill);
-    container(container(page).padding(PANEL_PADDING).height(Length::Fill))
-        .style(theme::panel)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
-}
-
-fn note<'a>(message: impl Into<String>) -> Element<'a, Message> {
-    text(message.into()).size(14).color(MUTED).into()
+    let page = scrolling(body);
+    panel(page)
 }
 
 fn report_view(report: &TlsReport) -> Element<'_, Message> {
